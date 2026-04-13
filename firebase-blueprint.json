@@ -1,0 +1,291 @@
+{
+  "entities": {
+    "Item": {
+      "title": "Item",
+      "description": "An item in the inventory",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Item name" },
+        "unit": { "type": "string", "description": "Unit (e.g., kilo, piece)" },
+        "price": { "type": "number", "description": "Unit price" },
+        "department": { "type": "string", "description": "Department/Stage" },
+        "warehouseId": { "type": "string", "description": "ID of the warehouse" },
+        "openingBalance": { "type": "number", "description": "Opening balance" },
+        "inward": { "type": "number", "description": "Total inward" },
+        "outward": { "type": "number", "description": "Total outward" },
+        "returned": { "type": "number", "description": "Total returned" },
+        "currentBalance": { "type": "number", "description": "Current balance" },
+        "safetyLimit": { "type": "number", "description": "Safety limit" }
+      },
+      "required": ["name", "unit", "warehouseId"]
+    },
+    "Warehouse": {
+      "title": "Warehouse",
+      "description": "A warehouse or storage location",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Warehouse name" }
+      },
+      "required": ["name"]
+    },
+    "Unit": {
+      "title": "Unit",
+      "description": "A unit of measurement",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Unit name" }
+      },
+      "required": ["name"]
+    },
+    "CostCenter": {
+      "title": "CostCenter",
+      "description": "A cost center or production stage",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Cost center name" }
+      },
+      "required": ["name"]
+    },
+    "Supplier": {
+      "title": "Supplier",
+      "description": "A supplier of raw materials",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Supplier name" },
+        "totalPurchases": { "type": "number", "description": "Total purchase amount" },
+        "totalPayments": { "type": "number", "description": "Total paid amount" },
+        "balance": { "type": "number", "description": "Remaining balance" }
+      },
+      "required": ["name"]
+    },
+    "Purchase": {
+      "title": "Purchase",
+      "description": "A purchase transaction",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date-time" },
+        "supplierId": { "type": "string" },
+        "itemId": { "type": "string" },
+        "quantity": { "type": "number" },
+        "unit": { "type": "string" },
+        "unitPrice": { "type": "number" },
+        "total": { "type": "number" },
+        "paidAmount": { "type": "number" },
+        "paymentStatus": { "type": "string", "enum": ["آجل", "نقدي", "شيك"] },
+        "notes": { "type": "string" }
+      },
+      "required": ["date", "supplierId", "itemId", "quantity"]
+    },
+    "Issuance": {
+      "title": "Issuance",
+      "description": "A material issuance transaction",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date-time" },
+        "jobOrderNo": { "type": "string" },
+        "itemId": { "type": "string" },
+        "quantity": { "type": "number" },
+        "unit": { "type": "string" },
+        "price": { "type": "number" },
+        "total": { "type": "number" },
+        "costCenter": { "type": "string" }
+      },
+      "required": ["date", "itemId", "quantity"]
+    },
+    "ProductionJob": {
+      "title": "ProductionJob",
+      "description": "A manufacturing order in the production line",
+      "type": "object",
+      "properties": {
+        "orderNo": { "type": "string" },
+        "clientName": { "type": "string" },
+        "productName": { "type": "string" },
+        "startDate": { "type": "string", "format": "date-time" },
+        "deadline": { "type": "string", "format": "date-time" },
+        "status": { "type": "string" },
+        "priority": { "type": "string", "enum": ["منخفضة", "متوسطة", "عالية"] },
+        "notes": { "type": "string" }
+      },
+      "required": ["orderNo", "productName", "status"]
+    },
+    "LoadingManifest": {
+      "title": "LoadingManifest",
+      "description": "A truck loading manifest",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date-time" },
+        "driverName": { "type": "string" },
+        "carNumber": { "type": "string" },
+        "destinationType": { "type": "string", "enum": ["عميل", "معرض"] },
+        "clientName": { "type": "string" },
+        "orderNumbers": { "type": "string" },
+        "products": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "components": { "type": "string" },
+              "notes": { "type": "string" },
+              "salesPerson": { "type": "string" },
+              "additions": { "type": "string" }
+            }
+          }
+        },
+        "loaderName": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["date", "driverName", "carNumber", "destinationType", "clientName"]
+    },
+    "Waste": {
+      "title": "Waste",
+      "description": "A record of wasted or damaged items",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date-time" },
+        "itemId": { "type": "string" },
+        "quantity": { "type": "number" },
+        "unit": { "type": "string" },
+        "reason": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["date", "itemId", "quantity", "reason"]
+    },
+    "BladeSharpening": {
+      "title": "BladeSharpening",
+      "description": "A record of blade sharpening maintenance",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date-time" },
+        "bladeName": { "type": "string" },
+        "quantity": { "type": "number" },
+        "cost": { "type": "number" },
+        "notes": { "type": "string" }
+      },
+      "required": ["date", "bladeName", "quantity"]
+    },
+    "PlateSharpening": {
+      "title": "PlateSharpening",
+      "description": "A record of plate sharpening maintenance",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date-time" },
+        "plateName": { "type": "string" },
+        "quantity": { "type": "number" },
+        "cost": { "type": "number" },
+        "notes": { "type": "string" }
+      },
+      "required": ["date", "plateName", "quantity"]
+    },
+    "MachineMaintenance": {
+      "title": "MachineMaintenance",
+      "description": "A record of machine and equipment maintenance",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date-time" },
+        "machineName": { "type": "string" },
+        "maintenanceType": { "type": "string" },
+        "cost": { "type": "number" },
+        "notes": { "type": "string" }
+      },
+      "required": ["date", "machineName", "maintenanceType"]
+    },
+    "Employee": {
+      "title": "Employee",
+      "description": "An employee in the company",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "position": { "type": "string" },
+        "dailyRate": { "type": "number" },
+        "hireDate": { "type": "string", "format": "date" },
+        "status": { "type": "string", "enum": ["نشط", "موقوف", "مستقيل"] }
+      },
+      "required": ["name", "dailyRate", "status"]
+    },
+    "Attendance": {
+      "title": "Attendance",
+      "description": "Daily attendance record",
+      "type": "object",
+      "properties": {
+        "employeeId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "checkIn": { "type": "string" },
+        "checkOut": { "type": "string" },
+        "status": { "type": "string", "enum": ["حضور", "غياب", "تأخير", "إجازة"] }
+      },
+      "required": ["employeeId", "date", "status"]
+    },
+    "FinancialTransaction": {
+      "title": "FinancialTransaction",
+      "description": "HR financial transaction",
+      "type": "object",
+      "properties": {
+        "employeeId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "type": { "type": "string", "enum": ["مكافأة", "خصم", "بدل", "إضافي"] },
+        "amount": { "type": "number" },
+        "description": { "type": "string" },
+        "overtimeHours": { "type": "number" },
+        "overtimeRate": { "type": "number", "enum": [1.33, 1.5, 2] }
+      },
+      "required": ["employeeId", "date", "type", "amount"]
+    },
+    "Loan": {
+      "title": "Loan",
+      "description": "Employee loan record",
+      "type": "object",
+      "properties": {
+        "employeeId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "amount": { "type": "number" },
+        "remainingAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["نشط", "مسدد"] }
+      },
+      "required": ["employeeId", "date", "amount", "status"]
+    },
+    "Payroll": {
+      "title": "Payroll",
+      "description": "Weekly payroll record",
+      "type": "object",
+      "properties": {
+        "employeeId": { "type": "string" },
+        "weekNumber": { "type": "number" },
+        "year": { "type": "number" },
+        "startDate": { "type": "string", "format": "date" },
+        "endDate": { "type": "string", "format": "date" },
+        "dailyRate": { "type": "number" },
+        "daysWorked": { "type": "number" },
+        "baseSalary": { "type": "number" },
+        "totalBonuses": { "type": "number" },
+        "totalOvertime": { "type": "number" },
+        "totalDeductions": { "type": "number" },
+        "totalLoans": { "type": "number" },
+        "netSalary": { "type": "number" },
+        "status": { "type": "string", "enum": ["مسودة", "مدفوع"] },
+        "paymentDate": { "type": "string", "format": "date" }
+      },
+      "required": ["employeeId", "weekNumber", "year", "netSalary", "status"]
+    }
+  },
+  "firestore": {
+    "/warehouses/{warehouseId}": { "schema": "Warehouse", "description": "Warehouses" },
+    "/units/{unitId}": { "schema": "Unit", "description": "Units of measurement" },
+    "/costCenters/{costCenterId}": { "schema": "CostCenter", "description": "Cost centers" },
+    "/items/{itemId}": { "schema": "Item", "description": "Inventory items" },
+    "/suppliers/{supplierId}": { "schema": "Supplier", "description": "Suppliers" },
+    "/purchases/{purchaseId}": { "schema": "Purchase", "description": "Purchase records" },
+    "/issuances/{issuanceId}": { "schema": "Issuance", "description": "Issuance records" },
+    "/productionJobs/{jobId}": { "schema": "ProductionJob", "description": "Active production orders" },
+    "/loadingManifests/{manifestId}": { "schema": "LoadingManifest", "description": "Truck loading manifests" },
+    "/waste/{wasteId}": { "schema": "Waste", "description": "Waste records" },
+    "/bladeSharpening/{id}": { "schema": "BladeSharpening", "description": "Blade sharpening records" },
+    "/plateSharpening/{id}": { "schema": "PlateSharpening", "description": "Plate sharpening records" },
+    "/machineMaintenance/{id}": { "schema": "MachineMaintenance", "description": "Machine maintenance records" },
+    "/employees/{id}": { "schema": "Employee", "description": "Employee records" },
+    "/attendance/{id}": { "schema": "Attendance", "description": "Employee attendance records" },
+    "/hrTransactions/{id}": { "schema": "FinancialTransaction", "description": "HR financial transactions (bonuses, deductions)" },
+    "/loans/{id}": { "schema": "Loan", "description": "Employee loans" },
+    "/payrolls/{id}": { "schema": "Payroll", "description": "Payroll records" }
+  }
+}
