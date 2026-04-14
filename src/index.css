@@ -139,7 +139,19 @@
   }
 
   .btn-primary {
-    @apply bg-primary text-primary-foreground shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 transition-all duration-300 rounded-2xl;
+    @apply bg-primary text-primary-foreground shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 hover:-translate-y-0.5 active:scale-95 transition-all duration-300 rounded-2xl font-black;
+  }
+
+  .btn-secondary {
+    @apply bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-slate-50 hover:border-slate-300 hover:-translate-y-0.5 active:scale-95 transition-all duration-300 rounded-2xl font-bold;
+  }
+
+  .btn-ghost {
+    @apply text-slate-600 hover:bg-slate-100/80 hover:text-slate-900 active:scale-95 transition-all duration-300 rounded-2xl font-bold;
+  }
+
+  .btn-danger {
+    @apply bg-red-500 text-white shadow-lg shadow-red-500/20 hover:bg-red-600 hover:shadow-xl hover:shadow-red-500/30 hover:-translate-y-0.5 active:scale-95 transition-all duration-300 rounded-2xl font-black;
   }
 }
 

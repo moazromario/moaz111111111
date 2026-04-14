@@ -83,6 +83,29 @@ export interface ProductionJob {
   status: string; // This will be the CostCenter ID or name
   priority: 'منخفضة' | 'متوسطة' | 'عالية';
   notes: string;
+  totalMaterialCost?: number;
+  totalLaborCost?: number;
+  totalOtherCost?: number;
+}
+
+export interface JobLabor {
+  id: string;
+  jobId: string;
+  employeeId: string;
+  date: string;
+  hours: number;
+  rate: number;
+  total: number;
+  notes: string;
+}
+
+export interface JobOtherCost {
+  id: string;
+  jobId: string;
+  date: string;
+  description: string;
+  amount: number;
+  notes: string;
 }
 
 export interface LoadingManifest {

@@ -280,6 +280,34 @@
         "notes": { "type": "string" }
       },
       "required": ["supplierId", "date", "amount", "paymentMethod"]
+    },
+    "JobLabor": {
+      "title": "JobLabor",
+      "description": "Labor cost record for a production job",
+      "type": "object",
+      "properties": {
+        "jobId": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "hours": { "type": "number" },
+        "rate": { "type": "number" },
+        "total": { "type": "number" },
+        "notes": { "type": "string" }
+      },
+      "required": ["jobId", "employeeId", "date", "hours", "total"]
+    },
+    "JobOtherCost": {
+      "title": "JobOtherCost",
+      "description": "Other cost record for a production job",
+      "type": "object",
+      "properties": {
+        "jobId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "description": { "type": "string" },
+        "amount": { "type": "number" },
+        "notes": { "type": "string" }
+      },
+      "required": ["jobId", "date", "description", "amount"]
     }
   },
   "firestore": {
@@ -301,6 +329,8 @@
     "/hrTransactions/{id}": { "schema": "FinancialTransaction", "description": "HR financial transactions (bonuses, deductions)" },
     "/loans/{id}": { "schema": "Loan", "description": "Employee loans" },
     "/payrolls/{id}": { "schema": "Payroll", "description": "Payroll records" },
-    "/supplierPayments/{id}": { "schema": "SupplierPayment", "description": "Supplier payment records" }
+    "/supplierPayments/{id}": { "schema": "SupplierPayment", "description": "Supplier payment records" },
+    "/jobLabors/{id}": { "schema": "JobLabor", "description": "Job labor cost records" },
+    "/jobOtherCosts/{id}": { "schema": "JobOtherCost", "description": "Job other cost records" }
   }
 }

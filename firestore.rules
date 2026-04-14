@@ -39,6 +39,12 @@ service cloud.firestore {
     // Collection: machineMaintenance
     // Fields: date (string), machineName (string), maintenanceType (string), cost (number), notes (string)
     //
+    // Collection: jobLabors
+    // Fields: jobId (string), employeeId (string), date (string), hours (number), rate (number), total (number), notes (string)
+    //
+    // Collection: jobOtherCosts
+    // Fields: jobId (string), date (string), description (string), amount (number), notes (string)
+    //
     // ===============================================================
 
     // ===============================================================
@@ -153,6 +159,16 @@ service cloud.firestore {
     }
 
     match /supplierPayments/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    match /jobLabors/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    match /jobOtherCosts/{id} {
       allow read: if isAuthenticated();
       allow write: if isAuthenticated();
     }

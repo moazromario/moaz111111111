@@ -73,7 +73,7 @@ import {
 } from 'recharts';
 import { db } from './firebase';
 import { collection, onSnapshot, query, addDoc, updateDoc, deleteDoc, doc, increment, serverTimestamp } from 'firebase/firestore';
-import { Item, Supplier, Purchase, Issuance, Warehouse, Unit, CostCenter, ProductionJob, LoadingManifest, Waste, BladeSharpening, PlateSharpening, MachineMaintenance, Employee, Attendance, FinancialTransaction, Loan, Payroll, SupplierPayment } from './types';
+import { Item, Supplier, Purchase, Issuance, Warehouse, Unit, CostCenter, ProductionJob, LoadingManifest, Waste, BladeSharpening, PlateSharpening, MachineMaintenance, Employee, Attendance, FinancialTransaction, Loan, Payroll, SupplierPayment, JobLabor, JobOtherCost } from './types';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import * as XLSX from 'xlsx';
@@ -111,8 +111,8 @@ function ConfirmDialog({
           <CardDescription className="font-bold text-slate-500">{message}</CardDescription>
         </CardHeader>
         <CardContent className="flex gap-3 pt-4">
-          <Button variant="ghost" className="flex-1 rounded-xl font-bold h-11" onClick={onCancel}>{cancelText}</Button>
-          <Button variant="destructive" className="flex-1 rounded-xl font-black h-11 bg-red-500 hover:bg-red-600 shadow-lg shadow-red-200" onClick={onConfirm}>{confirmText}</Button>
+          <Button className="btn-ghost flex-1 h-11" onClick={onCancel}>{cancelText}</Button>
+          <Button className="btn-danger flex-1 h-11" onClick={onConfirm}>{confirmText}</Button>
         </CardContent>
       </Card>
     </div>
@@ -243,6 +243,8 @@ function MainApp() {
   const [loans, setLoans] = useState<Loan[]>([]);
   const [payrolls, setPayrolls] = useState<Payroll[]>([]);
   const [supplierPayments, setSupplierPayments] = useState<SupplierPayment[]>([]);
+  const [jobLabors, setJobLabors] = useState<JobLabor[]>([]);
+  const [jobOtherCosts, setJobOtherCosts] = useState<JobOtherCost[]>([]);
   const [hrMenuOpen, setHrMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -324,6 +326,14 @@ function MainApp() {
       setSupplierPayments(snap.docs.map(d => ({ id: d.id, ...d.data() } as SupplierPayment)));
     }, (err) => handleFirestoreError(err, 'list', 'supplierPayments'));
 
+    const unsubJobLabors = onSnapshot(collection(db, 'jobLabors'), (snap) => {
+      setJobLabors(snap.docs.map(d => ({ id: d.id, ...d.data() } as JobLabor)));
+    }, (err) => handleFirestoreError(err, 'list', 'jobLabors'));
+
+    const unsubJobOtherCosts = onSnapshot(collection(db, 'jobOtherCosts'), (snap) => {
+      setJobOtherCosts(snap.docs.map(d => ({ id: d.id, ...d.data() } as JobOtherCost)));
+    }, (err) => handleFirestoreError(err, 'list', 'jobOtherCosts'));
+
     return () => {
       unsubWarehouses();
       unsubUnits();
@@ -344,6 +354,8 @@ function MainApp() {
       unsubLoans();
       unsubPayrolls();
       unsubSupplierPayments();
+      unsubJobLabors();
+      unsubJobOtherCosts();
     };
   }, [user]);
 
@@ -646,10 +658,21 @@ function MainApp() {
           loans={loans}
           payrolls={payrolls}
           wasteRecords={wasteRecords}
+          jobLabors={jobLabors}
+          jobOtherCosts={jobOtherCosts}
         />}
         {activeTab === 'inventory' && <Inventory items={items} warehouses={warehouses} purchases={purchases} issuances={issuances} suppliers={suppliers} getItemMovements={getItemMovements} />}
         {activeTab === 'itemCard' && <ItemCardView items={items} suppliers={suppliers} purchases={purchases} issuances={issuances} getItemMovements={getItemMovements} />}
-        {activeTab === 'production' && <ProductionLine costCenters={costCenters} productionJobs={productionJobs} />}
+        {activeTab === 'production' && (
+          <ProductionLine 
+            costCenters={costCenters} 
+            productionJobs={productionJobs} 
+            issuances={issuances} 
+            employees={employees}
+            jobLabors={jobLabors}
+            jobOtherCosts={jobOtherCosts}
+          />
+        )}
         {activeTab === 'loading' && <LoadingManifests manifests={loadingManifests} />}
         {activeTab === 'purchases' && <Purchases items={items} suppliers={suppliers} purchases={purchases} />}
         {activeTab === 'issuances' && <Issuances items={items} issuances={issuances} costCenters={costCenters} />}
@@ -835,7 +858,9 @@ function Dashboard({
   attendance,
   loans,
   payrolls,
-  wasteRecords
+  wasteRecords,
+  jobLabors,
+  jobOtherCosts
 }: { 
   items: Item[], 
   suppliers: Supplier[], 
@@ -852,7 +877,9 @@ function Dashboard({
   attendance: Attendance[],
   loans: Loan[],
   payrolls: Payroll[],
-  wasteRecords: Waste[]
+  wasteRecords: Waste[],
+  jobLabors: JobLabor[],
+  jobOtherCosts: JobOtherCost[]
 }) {
   const totalInventoryValue = items.reduce((acc, item) => acc + (item.currentBalance * item.price), 0);
   const lowStockItems = items.filter(item => item.currentBalance <= item.safetyLimit);
@@ -862,6 +889,13 @@ function Dashboard({
   const totalWasteValue = wasteRecords.reduce((acc, w) => {
     const item = items.find(i => i.id === w.itemId);
     return acc + (w.quantity * (item?.price || 0));
+  }, 0);
+
+  const totalManufacturingCost = productionJobs.reduce((acc, job) => {
+    const materialCost = issuances.filter(i => i.jobOrderNo === job.orderNo).reduce((sum, m) => sum + m.total, 0);
+    const laborCost = jobLabors.filter(l => l.jobId === job.id).reduce((sum, l) => sum + l.total, 0);
+    const otherCost = jobOtherCosts.filter(o => o.jobId === job.id).reduce((sum, o) => sum + o.amount, 0);
+    return acc + materialCost + laborCost + otherCost;
   }, 0);
 
   return (
@@ -877,9 +911,13 @@ function Dashboard({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         <StatCard title="إجمالي قيمة المخزن" value={`${totalInventoryValue.toLocaleString()} ج.م`} icon={<Package className="text-primary" size={24} />} />
         <StatCard title="إجمالي ديون الموردين" value={`${totalSupplierDebt.toLocaleString()} ج.م`} icon={<Users className="text-orange-500" size={24} />} color="text-orange-500" />
+        <StatCard title="تكلفة التصنيع الإجمالية" value={`${totalManufacturingCost.toLocaleString()} ج.م`} icon={<DollarSign className="text-emerald-600" size={24} />} color="text-emerald-600" />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard title="أصناف تحت حد الأمان" value={lowStockItems.length} icon={<AlertTriangle className="text-red-500" size={24} />} color="text-red-500" />
         <StatCard title="إجمالي أوامر الإنتاج" value={productionJobs.length} icon={<Wrench className="text-blue-500" size={24} />} color="text-blue-500" />
         <StatCard title="إجمالي الموظفين" value={activeEmployees.length} icon={<Users className="text-emerald-500" size={24} />} color="text-emerald-500" />
@@ -1581,9 +1619,27 @@ function Inventory({ items, warehouses, purchases, issuances, suppliers, getItem
   );
 }
 
-function ProductionLine({ costCenters, productionJobs }: { costCenters: CostCenter[], productionJobs: ProductionJob[] }) {
+function ProductionLine({ 
+  costCenters, 
+  productionJobs, 
+  issuances, 
+  employees,
+  jobLabors,
+  jobOtherCosts
+}: { 
+  costCenters: CostCenter[], 
+  productionJobs: ProductionJob[],
+  issuances: Issuance[],
+  employees: Employee[],
+  jobLabors: JobLabor[],
+  jobOtherCosts: JobOtherCost[]
+}) {
   const [showAdd, setShowAdd] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  const [editingJob, setEditingJob] = useState<ProductionJob | null>(null);
+  const [selectedJobForCost, setSelectedJobForCost] = useState<ProductionJob | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterPriority, setFilterPriority] = useState<string>('all');
   const [formData, setFormData] = useState({
     orderNo: '',
     clientName: '',
@@ -1592,6 +1648,14 @@ function ProductionLine({ costCenters, productionJobs }: { costCenters: CostCent
     deadline: '',
     priority: 'متوسطة' as const,
     notes: ''
+  });
+
+  const filteredJobs = productionJobs.filter(job => {
+    const matchesSearch = job.productName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          job.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          job.orderNo.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesPriority = filterPriority === 'all' || job.priority === filterPriority;
+    return matchesSearch && matchesPriority;
   });
 
   const onDragEnd = async (result: DropResult) => {
@@ -1641,6 +1705,23 @@ function ProductionLine({ costCenters, productionJobs }: { costCenters: CostCent
     }
   };
 
+  const handleUpdate = async () => {
+    if (!editingJob) return;
+    try {
+      const { id, ...data } = editingJob;
+      await updateDoc(doc(db, 'productionJobs', id), data);
+      setEditingJob(null);
+    } catch (err) {
+      handleFirestoreError(err, 'update', 'productionJobs');
+    }
+  };
+
+  const stats = {
+    total: productionJobs.length,
+    highPriority: productionJobs.filter(j => j.priority === 'عالية').length,
+    completed: productionJobs.filter(j => j.status === costCenters[costCenters.length - 1]?.id).length
+  };
+
   return (
     <div className="space-y-8 h-full flex flex-col">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -1648,10 +1729,45 @@ function ProductionLine({ costCenters, productionJobs }: { costCenters: CostCent
           <h2 className="text-2xl md:text-4xl font-black tracking-tight text-slate-900">خط الإنتاج الذكي</h2>
           <p className="text-slate-500 mt-1 font-medium text-sm md:text-base">تتبع مراحل التصنيع بنظام السحب والإفلات</p>
         </div>
-        <Button onClick={() => setShowAdd(true)} className="btn-primary h-10 md:h-12 px-6 md:px-8 text-sm md:text-base">
-          <Plus size={18} className="ml-2" />
-          أمر إنتاج جديد
-        </Button>
+        <div className="flex items-center gap-3">
+          <div className="hidden md:flex items-center gap-4 ml-4">
+            <div className="flex flex-col items-end">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">إجمالي الطلبات</span>
+              <span className="text-xl font-black text-slate-900">{stats.total}</span>
+            </div>
+            <div className="w-px h-8 bg-slate-200" />
+            <div className="flex flex-col items-end">
+              <span className="text-[10px] font-black text-red-400 uppercase tracking-widest">أولوية عالية</span>
+              <span className="text-xl font-black text-red-500">{stats.highPriority}</span>
+            </div>
+          </div>
+          <Button onClick={() => setShowAdd(true)} className="btn-primary h-10 md:h-12 px-6 md:px-8 text-sm md:text-base">
+            <Plus size={18} className="ml-2" />
+            أمر إنتاج جديد
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex flex-col md:flex-row gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <Input 
+            className="h-12 pr-12 rounded-2xl border-none shadow-sm bg-white font-bold" 
+            placeholder="ابحث برقم الطلب، اسم العميل، أو المنتج..." 
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <select 
+          className="h-12 px-4 rounded-2xl border-none shadow-sm bg-white font-bold text-slate-600 min-w-[150px]"
+          value={filterPriority}
+          onChange={e => setFilterPriority(e.target.value)}
+        >
+          <option value="all">كل الأولويات</option>
+          <option value="عالية">عالية</option>
+          <option value="متوسطة">متوسطة</option>
+          <option value="منخفضة">منخفضة</option>
+        </select>
       </div>
 
       <DragDropContext onDragEnd={onDragEnd}>
@@ -1665,7 +1781,7 @@ function ProductionLine({ costCenters, productionJobs }: { costCenters: CostCent
                     {column.name}
                   </h3>
                   <Badge className="bg-white text-primary border-slate-200 rounded-lg px-2 shadow-sm font-black">
-                    {productionJobs.filter(j => j.status === column.id).length}
+                    {filteredJobs.filter(j => j.status === column.id).length}
                   </Badge>
                 </div>
 
@@ -1676,7 +1792,13 @@ function ProductionLine({ costCenters, productionJobs }: { costCenters: CostCent
                       ref={provided.innerRef}
                       className={`flex-1 p-3 space-y-3 transition-colors ${snapshot.isDraggingOver ? 'bg-zinc-200/50' : ''}`}
                     >
-                      {productionJobs
+                      {filteredJobs.filter(job => job.status === column.id).length === 0 && (
+                        <div className="flex flex-col items-center justify-center py-10 opacity-20 grayscale">
+                          <Package size={40} />
+                          <span className="text-xs font-bold mt-2">لا توجد طلبات</span>
+                        </div>
+                      )}
+                      {filteredJobs
                         .filter(job => job.status === column.id)
                         .map((job, index) => (
                           <Draggable key={job.id} draggableId={job.id} index={index} {...({} as any)}>
@@ -1693,9 +1815,17 @@ function ProductionLine({ costCenters, productionJobs }: { costCenters: CostCent
                                   <CardContent className="p-5 space-y-4">
                                     <div className="flex justify-between items-start">
                                       <Badge variant="outline" className="text-[10px] font-black uppercase tracking-widest border-slate-200 text-slate-400">#{job.orderNo}</Badge>
-                                      <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(job.id); }} className="h-7 w-7 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all">
-                                        <Trash2 size={14} />
-                                      </Button>
+                                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                        <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); setSelectedJobForCost(job); }} className="h-7 w-7 rounded-lg text-slate-300 hover:text-emerald-500 hover:bg-emerald-50">
+                                          <DollarSign size={14} />
+                                        </Button>
+                                        <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); setEditingJob(job); }} className="h-7 w-7 rounded-lg text-slate-300 hover:text-primary hover:bg-blue-50">
+                                          <Edit2 size={14} />
+                                        </Button>
+                                        <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(job.id); }} className="h-7 w-7 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50">
+                                          <Trash2 size={14} />
+                                        </Button>
+                                      </div>
                                     </div>
                                     
                                     <div>
@@ -1703,10 +1833,23 @@ function ProductionLine({ costCenters, productionJobs }: { costCenters: CostCent
                                       <p className="text-xs font-bold text-slate-400 mt-1">{job.clientName}</p>
                                     </div>
 
+                                    <div className="flex items-center justify-between text-[10px] font-black bg-slate-50 p-2 rounded-xl">
+                                      <span className="text-slate-400 uppercase tracking-widest">التكلفة التقديرية</span>
+                                      <span className="text-emerald-600">
+                                        {(
+                                          (issuances.filter(i => i.jobOrderNo === job.orderNo).reduce((sum, m) => sum + m.total, 0)) +
+                                          (jobLabors.filter(l => l.jobId === job.id).reduce((sum, l) => sum + l.total, 0)) +
+                                          (jobOtherCosts.filter(o => o.jobId === job.id).reduce((sum, o) => sum + o.amount, 0))
+                                        ).toLocaleString()} ج.م
+                                      </span>
+                                    </div>
+
                                     <div className="flex items-center justify-between pt-4 border-t border-slate-50">
                                       <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                                        <Calendar size={12} className="text-primary" />
-                                        {job.deadline ? format(new Date(job.deadline), 'MM/dd') : 'بدون موعد'}
+                                        <Calendar size={12} className={job.deadline && new Date(job.deadline) < new Date() ? "text-red-500 animate-pulse" : "text-primary"} />
+                                        <span className={job.deadline && new Date(job.deadline) < new Date() ? "text-red-500 font-black" : ""}>
+                                          {job.deadline ? format(new Date(job.deadline), 'MM/dd') : 'بدون موعد'}
+                                        </span>
                                       </div>
                                       <Badge 
                                         className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-lg border-none ${
@@ -1742,6 +1885,76 @@ function ProductionLine({ costCenters, productionJobs }: { costCenters: CostCent
         onConfirm={() => showDeleteConfirm && handleDelete(showDeleteConfirm)}
         onCancel={() => setShowDeleteConfirm(null)}
       />
+
+      {/* Edit Job Dialog */}
+      {editingJob && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+          <Card className="dribbble-card w-full max-w-md max-h-[90vh] overflow-auto">
+            <CardHeader>
+              <CardTitle className="font-black text-2xl">تعديل أمر إنتاج</CardTitle>
+              <CardDescription className="font-medium">تحديث بيانات الطلب رقم {editingJob.orderNo}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">رقم الطلب</label>
+                  <Input className="rounded-xl h-11" value={editingJob.orderNo} onChange={e => setEditingJob({...editingJob, orderNo: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">الأولوية</label>
+                  <select 
+                    className="w-full h-11 rounded-xl border border-slate-200 px-3 bg-white font-bold"
+                    value={editingJob.priority}
+                    onChange={e => setEditingJob({...editingJob, priority: e.target.value as any})}
+                  >
+                    <option value="منخفضة">منخفضة</option>
+                    <option value="متوسطة">متوسطة</option>
+                    <option value="عالية">عالية</option>
+                  </select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">اسم العميل</label>
+                <Input className="rounded-xl h-11" value={editingJob.clientName} onChange={e => setEditingJob({...editingJob, clientName: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">المنتج / الوصف</label>
+                <Input className="rounded-xl h-11" value={editingJob.productName} onChange={e => setEditingJob({...editingJob, productName: e.target.value})} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">تاريخ البدء</label>
+                  <Input className="rounded-xl h-11" type="date" value={editingJob.startDate} onChange={e => setEditingJob({...editingJob, startDate: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">موعد التسليم</label>
+                  <Input className="rounded-xl h-11" type="date" value={editingJob.deadline} onChange={e => setEditingJob({...editingJob, deadline: e.target.value})} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">ملاحظات</label>
+                <Input className="rounded-xl h-11" value={editingJob.notes} onChange={e => setEditingJob({...editingJob, notes: e.target.value})} />
+              </div>
+              <div className="flex justify-end gap-3 pt-4">
+                <Button variant="ghost" className="btn-ghost" onClick={() => setEditingJob(null)}>إلغاء</Button>
+                <Button onClick={handleUpdate} className="btn-primary px-8 h-11">حفظ التعديلات</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Job Cost Modal */}
+      {selectedJobForCost && (
+        <JobCostModal 
+          job={selectedJobForCost} 
+          onClose={() => setSelectedJobForCost(null)}
+          issuances={issuances}
+          employees={employees}
+          jobLabors={jobLabors}
+          jobOtherCosts={jobOtherCosts}
+        />
+      )}
 
       {/* Add Job Dialog */}
       {showAdd && (
@@ -1793,8 +2006,8 @@ function ProductionLine({ costCenters, productionJobs }: { costCenters: CostCent
                 <Input className="rounded-xl h-11" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} />
               </div>
               <div className="flex justify-end gap-3 pt-4">
-                <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setShowAdd(false)}>إلغاء</Button>
-                <Button onClick={handleAdd} className="btn-primary px-8 h-11 font-black">بدء الإنتاج</Button>
+                <Button variant="ghost" className="btn-ghost" onClick={() => setShowAdd(false)}>إلغاء</Button>
+                <Button onClick={handleAdd} className="btn-primary px-8 h-11">بدء الإنتاج</Button>
               </div>
             </CardContent>
           </Card>
@@ -4125,8 +4338,8 @@ function EmployeesView({ employees }: { employees: Employee[] }) {
                 </select>
               </div>
               <div className="flex justify-end gap-3 pt-6">
-                <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setShowAdd(false)}>إلغاء</Button>
-                <Button onClick={handleAdd} className="btn-primary px-10 h-12 font-black">حفظ البيانات</Button>
+                <Button variant="ghost" className="btn-ghost" onClick={() => setShowAdd(false)}>إلغاء</Button>
+                <Button onClick={handleAdd} className="btn-primary px-10 h-12">حفظ البيانات</Button>
               </div>
             </CardContent>
           </Card>
@@ -4177,8 +4390,8 @@ function EmployeesView({ employees }: { employees: Employee[] }) {
                 </select>
               </div>
               <div className="flex justify-end gap-3 pt-6">
-                <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setEditingEmployee(null)}>إلغاء</Button>
-                <Button onClick={handleUpdate} className="btn-primary px-10 h-12 font-black">حفظ التعديلات</Button>
+                <Button variant="ghost" className="btn-ghost" onClick={() => setEditingEmployee(null)}>إلغاء</Button>
+                <Button onClick={handleUpdate} className="btn-primary px-10 h-12">حفظ التعديلات</Button>
               </div>
             </CardContent>
           </Card>
@@ -4193,8 +4406,8 @@ function EmployeesView({ employees }: { employees: Employee[] }) {
               <CardDescription className="font-bold text-slate-600 text-right">هل أنت متأكد من حذف هذا الموظف نهائياً؟ سيؤدي ذلك لحذف كافة بياناته المرتبطة.</CardDescription>
             </CardHeader>
             <CardFooter className="flex justify-end gap-3">
-              <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setDeletingId(null)}>إلغاء</Button>
-              <Button onClick={handleDelete} className="bg-red-600 hover:bg-red-700 text-white rounded-xl font-black px-8">حذف نهائي</Button>
+              <Button variant="ghost" className="btn-ghost" onClick={() => setDeletingId(null)}>إلغاء</Button>
+              <Button onClick={handleDelete} className="btn-danger px-8 h-12">حذف نهائي</Button>
             </CardFooter>
           </Card>
         </div>
@@ -4399,8 +4612,8 @@ function AttendanceView({ employees, attendance }: { employees: Employee[], atte
               </div>
 
               <div className="flex justify-end gap-3 pt-6">
-                <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setShowAdd(false)}>إلغاء</Button>
-                <Button onClick={handleAdd} className="btn-primary px-10 h-12 font-black">حفظ السجل</Button>
+                <Button variant="ghost" className="btn-ghost" onClick={() => setShowAdd(false)}>إلغاء</Button>
+                <Button onClick={handleAdd} className="btn-primary px-10 h-12">حفظ السجل</Button>
               </div>
             </CardContent>
           </Card>
@@ -4445,8 +4658,8 @@ function AttendanceView({ employees, attendance }: { employees: Employee[], atte
               </div>
 
               <div className="flex justify-end gap-3 pt-6">
-                <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setEditingAttendance(null)}>إلغاء</Button>
-                <Button onClick={handleUpdate} className="btn-primary px-10 h-12 font-black">حفظ التعديلات</Button>
+                <Button variant="ghost" className="btn-ghost" onClick={() => setEditingAttendance(null)}>إلغاء</Button>
+                <Button onClick={handleUpdate} className="btn-primary px-10 h-12">حفظ التعديلات</Button>
               </div>
             </CardContent>
           </Card>
@@ -4626,8 +4839,8 @@ function LoansView({ employees, loans, payrolls }: { employees: Employee[], loan
                 <Input className="rounded-xl h-11" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder="أدخل البيان أو اختر من المقترحات..." />
               </div>
               <div className="flex justify-end gap-3 pt-6">
-                <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setShowAdd(false)}>إلغاء</Button>
-                <Button onClick={handleAdd} className="btn-primary px-10 h-12 font-black">حفظ السلفة</Button>
+                <Button variant="ghost" className="btn-ghost" onClick={() => setShowAdd(false)}>إلغاء</Button>
+                <Button onClick={handleAdd} className="btn-primary px-10 h-12">حفظ السلفة</Button>
               </div>
             </CardContent>
           </Card>
@@ -4967,8 +5180,8 @@ function HRTransactionsView({ employees, transactions }: { employees: Employee[]
                 <Input className="rounded-xl h-11" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="سبب الحركة..." />
               </div>
               <div className="flex justify-end gap-3 pt-6">
-                <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setShowAdd(false)}>إلغاء</Button>
-                <Button onClick={handleAdd} className="btn-primary px-10 h-12 font-black">حفظ الحركة</Button>
+                <Button variant="ghost" className="btn-ghost" onClick={() => setShowAdd(false)}>إلغاء</Button>
+                <Button onClick={handleAdd} className="btn-primary px-10 h-12">حفظ الحركة</Button>
               </div>
             </CardContent>
           </Card>
@@ -5033,8 +5246,8 @@ function HRTransactionsView({ employees, transactions }: { employees: Employee[]
                 <Input className="rounded-xl h-11" value={editingTransaction.description} onChange={e => setEditingTransaction({...editingTransaction, description: e.target.value})} placeholder="سبب الحركة..." />
               </div>
               <div className="flex justify-end gap-3 pt-6">
-                <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setEditingTransaction(null)}>إلغاء</Button>
-                <Button onClick={handleUpdate} className="btn-primary px-10 h-12 font-black">حفظ التعديلات</Button>
+                <Button variant="ghost" className="btn-ghost" onClick={() => setEditingTransaction(null)}>إلغاء</Button>
+                <Button onClick={handleUpdate} className="btn-primary px-10 h-12">حفظ التعديلات</Button>
               </div>
             </CardContent>
           </Card>
@@ -5562,8 +5775,8 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls }: {
                 </div>
               </div>
               <div className="flex justify-end gap-3 pt-6">
-                <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setShowGenerate(false)}>إلغاء</Button>
-                <Button onClick={handleGenerate} className="btn-primary px-10 h-12 font-black">بدء الإصدار</Button>
+                <Button variant="ghost" className="btn-ghost" onClick={() => setShowGenerate(false)}>إلغاء</Button>
+                <Button onClick={handleGenerate} className="btn-primary px-10 h-12">بدء الإصدار</Button>
               </div>
             </CardContent>
           </Card>
@@ -5576,6 +5789,8 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls }: {
 function ArchiveView({ employees, payrolls }: { employees: Employee[], payrolls: Payroll[] }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPayroll, setSelectedPayroll] = useState<Payroll | null>(null);
+  const [editingPayroll, setEditingPayroll] = useState<Payroll | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   
   const archivedPayrolls = payrolls.filter(p => p.status === 'مدفوع');
   const totalArchived = archivedPayrolls.reduce((sum, p) => sum + p.netSalary, 0);
@@ -5584,6 +5799,25 @@ function ArchiveView({ employees, payrolls }: { employees: Employee[], payrolls:
     const emp = employees.find(e => e.id === p.employeeId);
     return emp?.name.toLowerCase().includes(searchTerm.toLowerCase());
   });
+
+  const handleUpdatePayroll = async () => {
+    if (!editingPayroll) return;
+    try {
+      const { id, ...data } = editingPayroll;
+      // Recalculate net salary
+      const netSalary = data.baseSalary + data.totalBonuses + data.totalOvertime - data.totalDeductions - data.totalLoans;
+      await updateDoc(doc(db, 'payrolls', id), { ...data, netSalary });
+      setEditingPayroll(null);
+    } catch (err) { handleFirestoreError(err, 'update', 'payrolls'); }
+  };
+
+  const handleDeletePayroll = async () => {
+    if (!deletingId) return;
+    try {
+      await deleteDoc(doc(db, 'payrolls', deletingId));
+      setDeletingId(null);
+    } catch (err) { handleFirestoreError(err, 'delete', 'payrolls'); }
+  };
 
   return (
     <div className="space-y-8">
@@ -5621,7 +5855,7 @@ function ArchiveView({ employees, payrolls }: { employees: Employee[], payrolls:
               <TableHead className="text-right font-black text-slate-900">تاريخ الأرشفة</TableHead>
               <TableHead className="text-right font-black text-slate-900">الفترة الأسبوعية</TableHead>
               <TableHead className="text-right font-black text-slate-900">الصافي</TableHead>
-              <TableHead className="text-right font-black text-slate-900">عرض</TableHead>
+              <TableHead className="text-right font-black text-slate-900">الإجراءات</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -5641,10 +5875,17 @@ function ArchiveView({ employees, payrolls }: { employees: Employee[], payrolls:
                   </TableCell>
                   <TableCell className="font-black text-primary">{p.netSalary.toLocaleString()} ج.م</TableCell>
                   <TableCell>
-                    <Button onClick={() => setSelectedPayroll(p)} variant="ghost" size="sm" className="rounded-lg font-bold">
-                      <FileText size={16} className="ml-1" />
-                      تفاصيل
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button onClick={() => setSelectedPayroll(p)} variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-slate-400 hover:text-primary hover:bg-blue-50">
+                        <FileText size={16} />
+                      </Button>
+                      <Button onClick={() => setEditingPayroll(p)} variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-slate-400 hover:text-primary hover:bg-blue-50">
+                        <Edit2 size={16} />
+                      </Button>
+                      <Button onClick={() => setDeletingId(p.id)} variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50">
+                        <Trash2 size={16} />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               );
@@ -5716,6 +5957,60 @@ function ArchiveView({ employees, payrolls }: { employees: Employee[], payrolls:
           </Card>
         </div>
       )}
+
+      {editingPayroll && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+          <Card className="dribbble-card w-full max-w-md">
+            <CardHeader>
+              <CardTitle className="font-black text-2xl">تعديل كشف الراتب</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">أيام العمل</label>
+                  <Input type="number" step="0.25" className="rounded-xl h-11" value={editingPayroll.daysWorked} onChange={e => setEditingPayroll({...editingPayroll, daysWorked: parseFloat(e.target.value) || 0})} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">اليومية</label>
+                  <Input type="number" className="rounded-xl h-11" value={editingPayroll.dailyRate} onChange={e => setEditingPayroll({...editingPayroll, dailyRate: parseFloat(e.target.value) || 0})} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">المكافآت</label>
+                  <Input type="number" className="rounded-xl h-11" value={editingPayroll.totalBonuses} onChange={e => setEditingPayroll({...editingPayroll, totalBonuses: parseFloat(e.target.value) || 0})} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">الإضافي</label>
+                  <Input type="number" className="rounded-xl h-11" value={editingPayroll.totalOvertime} onChange={e => setEditingPayroll({...editingPayroll, totalOvertime: parseFloat(e.target.value) || 0})} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">الخصومات</label>
+                  <Input type="number" className="rounded-xl h-11" value={editingPayroll.totalDeductions} onChange={e => setEditingPayroll({...editingPayroll, totalDeductions: parseFloat(e.target.value) || 0})} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">السلف</label>
+                  <Input type="number" className="rounded-xl h-11" value={editingPayroll.totalLoans} onChange={e => setEditingPayroll({...editingPayroll, totalLoans: parseFloat(e.target.value) || 0})} />
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 pt-6">
+                <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setEditingPayroll(null)}>إلغاء</Button>
+                <Button onClick={handleUpdatePayroll} className="btn-primary px-10 h-12 font-black">حفظ التعديلات</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      <ConfirmDialog 
+        isOpen={!!deletingId}
+        title="حذف من الأرشيف"
+        message="هل أنت متأكد من حذف هذا السجل نهائياً من الأرشيف؟ لا يمكن التراجع عن هذا الإجراء."
+        onConfirm={handleDeletePayroll}
+        onCancel={() => setDeletingId(null)}
+      />
     </div>
   );
 }
@@ -6517,8 +6812,8 @@ function SettingsView({ items, suppliers, warehouses, units, costCenters }: { it
                 <Input className="rounded-xl h-11" value={warehouseForm.name} onChange={e => setWarehouseForm({...warehouseForm, name: e.target.value})} placeholder="مثال: مخزن الخامات" />
               </div>
               <div className="flex justify-end gap-3 pt-4">
-                <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setShowWarehouseAdd(false)}>إلغاء</Button>
-                <Button onClick={handleAddWarehouse} className="btn-primary px-8 h-11 font-black">حفظ المخزن</Button>
+                <Button variant="ghost" className="btn-ghost" onClick={() => setShowWarehouseAdd(false)}>إلغاء</Button>
+                <Button onClick={handleAddWarehouse} className="btn-primary px-8 h-11">حفظ المخزن</Button>
               </div>
             </CardContent>
           </Card>
@@ -6536,8 +6831,8 @@ function SettingsView({ items, suppliers, warehouses, units, costCenters }: { it
                 <Input className="rounded-xl h-11" value={unitForm.name} onChange={e => setUnitForm({...unitForm, name: e.target.value})} placeholder="مثال: كيلو، متر، قطعة" />
               </div>
               <div className="flex justify-end gap-3 pt-4">
-                <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setShowUnitAdd(false)}>إلغاء</Button>
-                <Button onClick={handleAddUnit} className="btn-primary px-8 h-11 font-black">حفظ الوحدة</Button>
+                <Button variant="ghost" className="btn-ghost" onClick={() => setShowUnitAdd(false)}>إلغاء</Button>
+                <Button onClick={handleAddUnit} className="btn-primary px-8 h-11">حفظ الوحدة</Button>
               </div>
             </CardContent>
           </Card>
@@ -6555,8 +6850,8 @@ function SettingsView({ items, suppliers, warehouses, units, costCenters }: { it
                 <Input className="rounded-xl h-11" value={costCenterForm.name} onChange={e => setCostCenterForm({...costCenterForm, name: e.target.value})} placeholder="مثال: ورشة النجارة" />
               </div>
               <div className="flex justify-end gap-3 pt-4">
-                <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setShowCostCenterAdd(false)}>إلغاء</Button>
-                <Button onClick={handleAddCostCenter} className="btn-primary px-8 h-11 font-black">حفظ مركز التكلفة</Button>
+                <Button variant="ghost" className="btn-ghost" onClick={() => setShowCostCenterAdd(false)}>إلغاء</Button>
+                <Button onClick={handleAddCostCenter} className="btn-primary px-8 h-11">حفظ مركز التكلفة</Button>
               </div>
             </CardContent>
           </Card>
@@ -6617,8 +6912,8 @@ function SettingsView({ items, suppliers, warehouses, units, costCenters }: { it
                 </div>
               </div>
               <div className="flex justify-end gap-3 pt-4">
-                <Button variant="ghost" className="rounded-xl font-bold h-11 px-6" onClick={() => setShowItemAdd(false)}>إلغاء</Button>
-                <Button onClick={handleAddItem} className="btn-primary px-10 h-11 font-black">حفظ الصنف</Button>
+                <Button variant="ghost" className="btn-ghost h-11 px-6" onClick={() => setShowItemAdd(false)}>إلغاء</Button>
+                <Button onClick={handleAddItem} className="btn-primary px-10 h-11">حفظ الصنف</Button>
               </div>
             </CardContent>
           </Card>
@@ -6662,6 +6957,275 @@ function SettingsView({ items, suppliers, warehouses, units, costCenters }: { it
         onConfirm={handleDeleteEntity}
         onCancel={() => setShowDeleteConfirm(null)}
       />
+    </div>
+  );
+}
+
+function JobCostModal({ 
+  job, 
+  onClose, 
+  issuances, 
+  employees, 
+  jobLabors, 
+  jobOtherCosts 
+}: { 
+  job: ProductionJob, 
+  onClose: () => void,
+  issuances: Issuance[],
+  employees: Employee[],
+  jobLabors: JobLabor[],
+  jobOtherCosts: JobOtherCost[]
+}) {
+  const [activeTab, setActiveTab] = useState('summary');
+  const [showAddLabor, setShowAddLabor] = useState(false);
+  const [showAddOther, setShowAddOther] = useState(false);
+  
+  const [laborForm, setLaborForm] = useState({
+    employeeId: '',
+    date: new Date().toISOString().split('T')[0],
+    hours: 0,
+    notes: ''
+  });
+  
+  const [otherForm, setOtherForm] = useState({
+    date: new Date().toISOString().split('T')[0],
+    description: '',
+    amount: 0,
+    notes: ''
+  });
+
+  const jobMaterials = issuances.filter(i => i.jobOrderNo === job.orderNo);
+  const jobLaborsList = jobLabors.filter(l => l.jobId === job.id);
+  const jobOtherCostsList = jobOtherCosts.filter(o => o.jobId === job.id);
+
+  const materialCost = jobMaterials.reduce((sum, m) => sum + m.total, 0);
+  const laborCost = jobLaborsList.reduce((sum, l) => sum + l.total, 0);
+  const otherCost = jobOtherCostsList.reduce((sum, o) => sum + o.amount, 0);
+  const totalCost = materialCost + laborCost + otherCost;
+
+  const handleAddLabor = async () => {
+    if (!laborForm.employeeId || laborForm.hours <= 0) return;
+    const emp = employees.find(e => e.id === laborForm.employeeId);
+    if (!emp) return;
+    
+    const rate = emp.dailyRate / 8; // Assume 8 hours work day
+    const total = laborForm.hours * rate;
+    
+    try {
+      await addDoc(collection(db, 'jobLabors'), {
+        ...laborForm,
+        jobId: job.id,
+        rate,
+        total,
+        createdAt: serverTimestamp()
+      });
+      setShowAddLabor(false);
+      setLaborForm({ employeeId: '', date: new Date().toISOString().split('T')[0], hours: 0, notes: '' });
+    } catch (err) { handleFirestoreError(err, 'write', 'jobLabors'); }
+  };
+
+  const handleAddOther = async () => {
+    if (!otherForm.description || otherForm.amount <= 0) return;
+    try {
+      await addDoc(collection(db, 'jobOtherCosts'), {
+        ...otherForm,
+        jobId: job.id,
+        createdAt: serverTimestamp()
+      });
+      setShowAddOther(false);
+      setOtherForm({ date: new Date().toISOString().split('T')[0], description: '', amount: 0, notes: '' });
+    } catch (err) { handleFirestoreError(err, 'write', 'jobOtherCosts'); }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+      <Card className="dribbble-card w-full max-w-2xl max-h-[90vh] overflow-auto">
+        <CardHeader className="border-b border-slate-100">
+          <div className="flex justify-between items-center">
+            <div>
+              <CardTitle className="font-black text-2xl">تحليل تكاليف الإنتاج</CardTitle>
+              <CardDescription className="font-bold">أمر إنتاج رقم: {job.orderNo} - {job.productName}</CardDescription>
+            </div>
+            <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full">
+              <X size={20} />
+            </Button>
+          </div>
+          
+          <div className="flex gap-2 mt-6">
+            <Button 
+              variant={activeTab === 'summary' ? 'default' : 'ghost'} 
+              className={`rounded-xl font-bold flex-1 ${activeTab === 'summary' ? 'btn-primary' : ''}`}
+              onClick={() => setActiveTab('summary')}
+            >الملخص</Button>
+            <Button 
+              variant={activeTab === 'materials' ? 'default' : 'ghost'} 
+              className={`rounded-xl font-bold flex-1 ${activeTab === 'materials' ? 'btn-primary' : ''}`}
+              onClick={() => setActiveTab('materials')}
+            >الخامات</Button>
+            <Button 
+              variant={activeTab === 'labor' ? 'default' : 'ghost'} 
+              className={`rounded-xl font-bold flex-1 ${activeTab === 'labor' ? 'btn-primary' : ''}`}
+              onClick={() => setActiveTab('labor')}
+            >العمالة</Button>
+            <Button 
+              variant={activeTab === 'other' ? 'default' : 'ghost'} 
+              className={`rounded-xl font-bold flex-1 ${activeTab === 'other' ? 'btn-primary' : ''}`}
+              onClick={() => setActiveTab('other')}
+            >تكاليف أخرى</Button>
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-6">
+          {activeTab === 'summary' && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
+                  <span className="text-xs font-black text-blue-400 uppercase tracking-widest">تكلفة الخامات</span>
+                  <div className="text-2xl font-black text-blue-600 mt-1">{materialCost.toLocaleString()} ج.م</div>
+                </div>
+                <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
+                  <span className="text-xs font-black text-emerald-400 uppercase tracking-widest">تكلفة العمالة</span>
+                  <div className="text-2xl font-black text-emerald-600 mt-1">{laborCost.toLocaleString()} ج.م</div>
+                </div>
+                <div className="p-4 bg-orange-50 rounded-2xl border border-orange-100">
+                  <span className="text-xs font-black text-orange-400 uppercase tracking-widest">تكاليف أخرى</span>
+                  <div className="text-2xl font-black text-orange-600 mt-1">{otherCost.toLocaleString()} ج.م</div>
+                </div>
+              </div>
+
+              <div className="p-8 bg-slate-900 rounded-3xl text-center">
+                <span className="text-sm font-black text-slate-400 uppercase tracking-widest">إجمالي تكلفة الإنتاج</span>
+                <div className="text-5xl font-black text-white mt-2">{totalCost.toLocaleString()} ج.م</div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'materials' && (
+            <div className="space-y-4">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-right">الصنف</TableHead>
+                    <TableHead className="text-right">الكمية</TableHead>
+                    <TableHead className="text-right">السعر</TableHead>
+                    <TableHead className="text-right">الإجمالي</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {jobMaterials.map(m => (
+                    <TableRow key={m.id}>
+                      <TableCell className="font-bold">{m.itemId}</TableCell>
+                      <TableCell className="font-bold">{m.quantity} {m.unit}</TableCell>
+                      <TableCell className="font-bold">{m.price.toLocaleString()} ج.م</TableCell>
+                      <TableCell className="font-black text-primary">{m.total.toLocaleString()} ج.م</TableCell>
+                    </TableRow>
+                  ))}
+                  {jobMaterials.length === 0 && (
+                    <TableRow><TableCell colSpan={4} className="text-center py-8 text-slate-400">لا توجد خامات منصرفة لهذا الطلب</TableCell></TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+
+          {activeTab === 'labor' && (
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <h4 className="font-black text-slate-900">سجلات العمالة</h4>
+                <Button size="sm" onClick={() => setShowAddLabor(true)} className="btn-primary">إضافة سجل</Button>
+              </div>
+              
+              {showAddLabor && (
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold">الموظف</label>
+                      <select className="w-full h-10 rounded-xl border border-slate-200 px-3 bg-white" value={laborForm.employeeId} onChange={e => setLaborForm({...laborForm, employeeId: e.target.value})}>
+                        <option value="">اختر الموظف</option>
+                        {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold">عدد الساعات</label>
+                      <Input type="number" className="h-10 rounded-xl" value={laborForm.hours} onChange={e => setLaborForm({...laborForm, hours: parseFloat(e.target.value) || 0})} />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => setShowAddLabor(false)}>إلغاء</Button>
+                    <Button size="sm" onClick={handleAddLabor} className="btn-primary">حفظ</Button>
+                  </div>
+                </div>
+              )}
+
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-right">الموظف</TableHead>
+                    <TableHead className="text-right">التاريخ</TableHead>
+                    <TableHead className="text-right">الساعات</TableHead>
+                    <TableHead className="text-right">الإجمالي</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {jobLaborsList.map(l => (
+                    <TableRow key={l.id}>
+                      <TableCell className="font-bold">{employees.find(e => e.id === l.employeeId)?.name || 'غير معروف'}</TableCell>
+                      <TableCell className="font-bold">{l.date}</TableCell>
+                      <TableCell className="font-bold">{l.hours} ساعة</TableCell>
+                      <TableCell className="font-black text-emerald-600">{l.total.toLocaleString()} ج.م</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+
+          {activeTab === 'other' && (
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <h4 className="font-black text-slate-900">تكاليف متنوعة</h4>
+                <Button size="sm" onClick={() => setShowAddOther(true)} className="btn-primary">إضافة تكلفة</Button>
+              </div>
+
+              {showAddOther && (
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold">الوصف</label>
+                    <Input className="h-10 rounded-xl" value={otherForm.description} onChange={e => setOtherForm({...otherForm, description: e.target.value})} />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold">المبلغ</label>
+                    <Input type="number" className="h-10 rounded-xl" value={otherForm.amount} onChange={e => setOtherForm({...otherForm, amount: parseFloat(e.target.value) || 0})} />
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => setShowAddOther(false)}>إلغاء</Button>
+                    <Button size="sm" onClick={handleAddOther} className="btn-primary">حفظ</Button>
+                  </div>
+                </div>
+              )}
+
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-right">الوصف</TableHead>
+                    <TableHead className="text-right">التاريخ</TableHead>
+                    <TableHead className="text-right">المبلغ</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {jobOtherCostsList.map(o => (
+                    <TableRow key={o.id}>
+                      <TableCell className="font-bold">{o.description}</TableCell>
+                      <TableCell className="font-bold">{o.date}</TableCell>
+                      <TableCell className="font-black text-orange-600">{o.amount.toLocaleString()} ج.م</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
