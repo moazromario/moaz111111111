@@ -139,6 +139,8 @@ export interface Employee {
   dailyRate: number;
   hireDate: string;
   status: 'نشط' | 'موقوف' | 'مستقيل';
+  shiftStart?: string;
+  shiftEnd?: string;
 }
 
 export interface Attendance {
@@ -190,6 +192,16 @@ export interface Payroll {
   netSalary: number;
   status: 'مسودة' | 'مدفوع';
   paymentDate?: string;
+}
+
+export interface SupplierPayment {
+  id: string;
+  supplierId: string;
+  date: string;
+  amount: number;
+  paymentMethod: 'نقدي' | 'شيك' | 'تحويل بنكي';
+  referenceNumber?: string;
+  notes: string;
 }
 
 export type OperationType = 'create' | 'update' | 'delete' | 'list' | 'get' | 'write';

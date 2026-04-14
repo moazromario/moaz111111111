@@ -266,6 +266,20 @@
         "paymentDate": { "type": "string", "format": "date" }
       },
       "required": ["employeeId", "weekNumber", "year", "netSalary", "status"]
+    },
+    "SupplierPayment": {
+      "title": "SupplierPayment",
+      "description": "Payment made to a supplier",
+      "type": "object",
+      "properties": {
+        "supplierId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "amount": { "type": "number" },
+        "paymentMethod": { "type": "string", "enum": ["نقدي", "شيك", "تحويل بنكي"] },
+        "referenceNumber": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["supplierId", "date", "amount", "paymentMethod"]
     }
   },
   "firestore": {
@@ -286,6 +300,7 @@
     "/attendance/{id}": { "schema": "Attendance", "description": "Employee attendance records" },
     "/hrTransactions/{id}": { "schema": "FinancialTransaction", "description": "HR financial transactions (bonuses, deductions)" },
     "/loans/{id}": { "schema": "Loan", "description": "Employee loans" },
-    "/payrolls/{id}": { "schema": "Payroll", "description": "Payroll records" }
+    "/payrolls/{id}": { "schema": "Payroll", "description": "Payroll records" },
+    "/supplierPayments/{id}": { "schema": "SupplierPayment", "description": "Supplier payment records" }
   }
 }
