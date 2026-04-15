@@ -159,6 +159,7 @@ export interface Employee {
   id: string;
   name: string;
   position: string;
+  department?: string;
   dailyRate: number;
   hireDate: string;
   status: 'نشط' | 'موقوف' | 'مستقيل';
@@ -179,7 +180,7 @@ export interface FinancialTransaction {
   id: string;
   employeeId: string;
   date: string;
-  type: 'مكافأة' | 'خصم' | 'بدل' | 'إضافي';
+  type: 'مكافأة' | 'خصم' | 'بدل' | 'إضافي' | 'مصروف';
   amount: number;
   description: string;
   overtimeHours?: number;

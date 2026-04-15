@@ -197,6 +197,7 @@
       "properties": {
         "name": { "type": "string" },
         "position": { "type": "string" },
+        "department": { "type": "string" },
         "dailyRate": { "type": "number" },
         "hireDate": { "type": "string", "format": "date" },
         "status": { "type": "string", "enum": ["نشط", "موقوف", "مستقيل"] }
