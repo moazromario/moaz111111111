@@ -68,6 +68,7 @@ import {
   Pie, 
   Cell,
   LineChart,
+  ComposedChart,
   Line,
   Legend
 } from 'recharts';
@@ -78,6 +79,7 @@ import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import * as XLSX from 'xlsx';
 import { handleFirestoreError } from './lib/firestore-utils';
+import { ProductionCostsView } from './components/ProductionCostsView';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 
 // --- Components ---
@@ -246,6 +248,12 @@ function MainApp() {
   const [jobLabors, setJobLabors] = useState<JobLabor[]>([]);
   const [jobOtherCosts, setJobOtherCosts] = useState<JobOtherCost[]>([]);
   const [hrMenuOpen, setHrMenuOpen] = useState(false);
+  const [companyInfo, setCompanyInfo] = useState({
+    name: 'شركة المصطفى للتجارة والصناعة',
+    address: 'المنطقة الصناعية، القاهرة',
+    phone: '01000000000',
+    taxId: '123-456-789'
+  });
 
   useEffect(() => {
     if (!user) return;
@@ -554,6 +562,7 @@ function MainApp() {
             <div className={`overflow-hidden transition-all duration-300 ease-in-out ${productionMenuOpen ? 'max-h-48 opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
               <div className="mr-4 pr-4 border-r-2 border-slate-100 space-y-1.5">
                 <SubNavButton active={activeTab === 'production'} onClick={() => handleNavClick('production')} label="أوامر الإنتاج" />
+                <SubNavButton active={activeTab === 'productionCosts'} onClick={() => handleNavClick('productionCosts')} label="تكاليف الإنتاج" />
                 <SubNavButton active={activeTab === 'loading'} onClick={() => handleNavClick('loading')} label="حمولة العربية" />
               </div>
             </div>
@@ -671,9 +680,21 @@ function MainApp() {
             employees={employees}
             jobLabors={jobLabors}
             jobOtherCosts={jobOtherCosts}
+            companyInfo={companyInfo}
           />
         )}
-        {activeTab === 'loading' && <LoadingManifests manifests={loadingManifests} />}
+        {activeTab === 'productionCosts' && (
+          <ProductionCostsView 
+            productionJobs={productionJobs}
+            costCenters={costCenters}
+            issuances={issuances}
+            employees={employees}
+            jobLabors={jobLabors}
+            jobOtherCosts={jobOtherCosts}
+            items={items}
+          />
+        )}
+        {activeTab === 'loading' && <LoadingManifests manifests={loadingManifests} companyInfo={companyInfo} />}
         {activeTab === 'purchases' && <Purchases items={items} suppliers={suppliers} purchases={purchases} />}
         {activeTab === 'issuances' && <Issuances items={items} issuances={issuances} costCenters={costCenters} />}
         {activeTab === 'returns' && <Returns items={items} suppliers={suppliers} costCenters={costCenters} />}
@@ -688,8 +709,8 @@ function MainApp() {
         {activeTab === 'payroll' && <PayrollView employees={employees} attendance={attendance} transactions={hrTransactions} loans={loans} payrolls={payrolls} />}
         {activeTab === 'archive' && <ArchiveView employees={employees} payrolls={payrolls} />}
         {activeTab === 'suppliers' && <Suppliers suppliers={suppliers} purchases={purchases} items={items} supplierPayments={supplierPayments} />}
-        {activeTab === 'reports' && <ReportsView items={items} suppliers={suppliers} purchases={purchases} issuances={issuances} warehouses={warehouses} />}
-        {activeTab === 'settings' && <SettingsView items={items} suppliers={suppliers} warehouses={warehouses} units={units} costCenters={costCenters} />}
+        {activeTab === 'reports' && <ReportsView items={items} suppliers={suppliers} purchases={purchases} issuances={issuances} warehouses={warehouses} productionJobs={productionJobs} jobLabors={jobLabors} jobOtherCosts={jobOtherCosts} />}
+        {activeTab === 'settings' && <SettingsView items={items} suppliers={suppliers} warehouses={warehouses} units={units} costCenters={costCenters} companyInfo={companyInfo} setCompanyInfo={setCompanyInfo} />}
       </main>
     </div>
   );
@@ -1619,31 +1640,252 @@ function Inventory({ items, warehouses, purchases, issuances, suppliers, getItem
   );
 }
 
+function PrintJobCard({ job, companyInfo }: { job: ProductionJob, companyInfo: any }) {
+  return (
+    <div className="hidden print:block p-8 bg-white text-slate-900 font-sans dir-rtl">
+      <div className="flex justify-between items-start border-b-4 border-slate-900 pb-6 mb-8">
+        <div>
+          <h1 className="text-4xl font-black uppercase tracking-tighter">{companyInfo.name}</h1>
+          <p className="text-lg font-bold text-slate-500 mt-1">أمر إنتاج رقم: <span className="text-slate-900">#{job.orderNo}</span></p>
+        </div>
+        <div className="text-left">
+          <p className="font-black text-xl">بطاقة تشغيل منتج</p>
+          <p className="text-sm font-bold text-slate-400 mt-1">{new Date().toLocaleDateString('ar-EG')}</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-12 mb-10">
+        <div className="space-y-4">
+          <div className="border-b border-slate-100 pb-2">
+            <span className="text-xs font-black text-slate-400 uppercase tracking-widest block mb-1">العميل</span>
+            <span className="text-xl font-black">{job.clientName}</span>
+          </div>
+          <div className="border-b border-slate-100 pb-2">
+            <span className="text-xs font-black text-slate-400 uppercase tracking-widest block mb-1">المنتج</span>
+            <span className="text-xl font-black">{job.productName}</span>
+          </div>
+          <div className="border-b border-slate-100 pb-2">
+            <span className="text-xs font-black text-slate-400 uppercase tracking-widest block mb-1">السيلز</span>
+            <span className="text-lg font-bold">{job.salesPerson || '---'}</span>
+          </div>
+        </div>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="border-b border-slate-100 pb-2">
+              <span className="text-xs font-black text-slate-400 uppercase tracking-widest block mb-1">تاريخ التعاقد</span>
+              <span className="text-lg font-bold">{job.contractDate || '---'}</span>
+            </div>
+            <div className="border-b border-slate-100 pb-2">
+              <span className="text-xs font-black text-slate-400 uppercase tracking-widest block mb-1">موعد التسليم</span>
+              <span className="text-lg font-black text-red-600">{job.deadline || '---'}</span>
+            </div>
+          </div>
+          <div className="border-b border-slate-100 pb-2">
+            <span className="text-xs font-black text-slate-400 uppercase tracking-widest block mb-1">الأولوية</span>
+            <span className="text-lg font-black">{job.priority}</span>
+          </div>
+          {job.isCustom && (
+            <div className="bg-orange-50 p-3 rounded-xl border-2 border-orange-200 text-center">
+              <span className="text-orange-700 font-black text-xl">طلب مخصوص / تصميم خاص</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-6 mb-10">
+        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+          <span className="text-xs font-black text-slate-400 uppercase tracking-widest block mb-2">المواصفات الفنية</span>
+          <div className="space-y-2 text-sm">
+            <p><span className="font-bold">نوع الخشب:</span> {job.woodType || '---'}</p>
+            <p><span className="font-bold">المقاسات:</span> {job.dimensions || '---'}</p>
+            <p><span className="font-bold">لون الدهان:</span> {job.paintColor || '---'}</p>
+          </div>
+        </div>
+        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+          <span className="text-xs font-black text-slate-400 uppercase tracking-widest block mb-2">التنجيد والقماش</span>
+          <div className="space-y-2 text-sm">
+            <p><span className="font-bold">نوع القماش:</span> {job.fabricType || '---'}</p>
+            <p><span className="font-bold">التفاصيل:</span> {job.upholsteryDetails || '---'}</p>
+          </div>
+        </div>
+        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+          <span className="text-xs font-black text-slate-400 uppercase tracking-widest block mb-2">المكونات</span>
+          <p className="text-sm font-bold leading-relaxed">{job.components || '---'}</p>
+        </div>
+      </div>
+
+      {job.referenceImage && (
+        <div className="mb-10">
+          <span className="text-xs font-black text-slate-400 uppercase tracking-widest block mb-3">صورة المرجع</span>
+          <div className="border-4 border-slate-100 rounded-3xl overflow-hidden max-h-[400px]">
+            <img src={job.referenceImage} alt="Reference" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+          </div>
+        </div>
+      )}
+
+      <div className="mb-10">
+        <span className="text-xs font-black text-slate-400 uppercase tracking-widest block mb-3">ملاحظات إضافية</span>
+        <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100 min-h-[100px] font-bold">
+          {job.notes || 'لا توجد ملاحظات إضافية'}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-4 gap-4 mt-auto pt-12 border-t-2 border-slate-100">
+        <div className="text-center">
+          <div className="w-full h-16 border-b border-slate-200 mb-2"></div>
+          <span className="text-xs font-black text-slate-400 uppercase tracking-widest">توقيع المدير</span>
+        </div>
+        <div className="text-center">
+          <div className="w-full h-16 border-b border-slate-200 mb-2"></div>
+          <span className="text-xs font-black text-slate-400 uppercase tracking-widest">توقيع السيلز</span>
+        </div>
+        <div className="text-center">
+          <div className="w-full h-16 border-b border-slate-200 mb-2"></div>
+          <span className="text-xs font-black text-slate-400 uppercase tracking-widest">توقيع المخازن</span>
+        </div>
+        <div className="text-center">
+          <div className="w-full h-16 border-b border-slate-200 mb-2"></div>
+          <span className="text-xs font-black text-slate-400 uppercase tracking-widest">توقيع الإنتاج</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PrintManifest({ manifest, companyInfo }: { manifest: LoadingManifest, companyInfo: any }) {
+  return (
+    <div className="hidden print:block p-10 bg-white text-slate-900 font-sans dir-rtl min-h-screen">
+      <div className="flex justify-between items-start border-b-4 border-slate-900 pb-6 mb-8">
+        <div>
+          <h1 className="text-4xl font-black uppercase tracking-tighter">{companyInfo.name}</h1>
+          <p className="text-lg font-bold text-slate-500 mt-1">{companyInfo.address}</p>
+          <p className="text-sm font-bold text-slate-400">ت: {companyInfo.phone}</p>
+          <p className="text-[10px] font-bold text-slate-400">الرقم الضريبي: {companyInfo.taxId}</p>
+        </div>
+        <div className="text-left">
+          <h2 className="text-3xl font-black">كشف حمولة سيارة</h2>
+          <p className="text-lg font-bold text-slate-500 mt-1">التاريخ: <span className="text-slate-900">{manifest.date}</span></p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-12 mb-10 border border-slate-200 p-6 rounded-2xl">
+        <div className="space-y-4">
+          <div className="flex justify-between border-b border-slate-100 pb-2">
+            <span className="font-black text-slate-500">اسم السائق:</span>
+            <span className="font-black text-xl">{manifest.driverName}</span>
+          </div>
+          <div className="flex justify-between border-b border-slate-100 pb-2">
+            <span className="font-black text-slate-500">رقم السيارة:</span>
+            <span className="font-black text-xl">{manifest.carNumber}</span>
+          </div>
+        </div>
+        <div className="space-y-4">
+          <div className="flex justify-between border-b border-slate-100 pb-2">
+            <span className="font-black text-slate-500">الوجهة:</span>
+            <span className="font-black text-xl">{manifest.clientName}</span>
+          </div>
+          <div className="flex justify-between border-b border-slate-100 pb-2">
+            <span className="font-black text-slate-500">أرقام الأوردرات:</span>
+            <span className="font-black text-xl">{manifest.orderNumbers || '---'}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-10">
+        <h3 className="text-xl font-black mb-4 border-r-4 border-primary pr-4">تفاصيل المنتجات</h3>
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="bg-slate-900 text-white">
+              <th className="border border-slate-900 p-3 text-right">المنتج</th>
+              <th className="border border-slate-900 p-3 text-right">المكونات</th>
+              <th className="border border-slate-900 p-3 text-right">السيلز</th>
+              <th className="border border-slate-900 p-3 text-right">إضافات</th>
+              <th className="border border-slate-900 p-3 text-right">ملاحظات</th>
+            </tr>
+          </thead>
+          <tbody>
+            {manifest.products.map((p, i) => (
+              <tr key={i}>
+                <td className="border border-slate-300 p-3 font-black">{p.name}</td>
+                <td className="border border-slate-300 p-3">{p.components}</td>
+                <td className="border border-slate-300 p-3">{p.salesPerson}</td>
+                <td className="border border-slate-300 p-3">{p.additions}</td>
+                <td className="border border-slate-300 p-3">{p.notes}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {manifest.notes && (
+        <div className="mb-10 p-4 border border-slate-200 rounded-xl">
+          <p className="font-black text-slate-500 mb-2">ملاحظات عامة:</p>
+          <p className="font-bold">{manifest.notes}</p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-3 gap-12 pt-20">
+        <div className="text-center">
+          <p className="font-black mb-16">توقيع السائق</p>
+          <div className="border-t-2 border-slate-900 w-full"></div>
+        </div>
+        <div className="text-center">
+          <p className="font-black mb-16">توقيع القائم بالتحميل</p>
+          <div className="border-t-2 border-slate-900 w-full"></div>
+        </div>
+        <div className="text-center">
+          <p className="font-black mb-16">اعتماد الإدارة</p>
+          <div className="border-t-2 border-slate-900 w-full"></div>
+        </div>
+      </div>
+
+      <div className="fixed bottom-10 left-10 right-10 text-center text-[10px] font-bold text-slate-400 border-t pt-4">
+        طبع بواسطة نظام إدارة المصنع - {new Date().toLocaleString('ar-EG')}
+      </div>
+    </div>
+  );
+}
+
 function ProductionLine({ 
   costCenters, 
   productionJobs, 
   issuances, 
   employees,
   jobLabors,
-  jobOtherCosts
+  jobOtherCosts,
+  companyInfo
 }: { 
   costCenters: CostCenter[], 
   productionJobs: ProductionJob[],
   issuances: Issuance[],
   employees: Employee[],
   jobLabors: JobLabor[],
-  jobOtherCosts: JobOtherCost[]
+  jobOtherCosts: JobOtherCost[],
+  companyInfo: any
 }) {
   const [showAdd, setShowAdd] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [editingJob, setEditingJob] = useState<ProductionJob | null>(null);
-  const [selectedJobForCost, setSelectedJobForCost] = useState<ProductionJob | null>(null);
+  const [printingJob, setPrintingJob] = useState<ProductionJob | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const [formData, setFormData] = useState({
     orderNo: '',
     clientName: '',
     productName: '',
+    salesPerson: '',
+    isCustom: false,
+    components: '',
+    referenceImage: '',
+    woodType: '',
+    dimensions: '',
+    paintColor: '',
+    fabricType: '',
+    upholsteryDetails: '',
+    sellingPrice: 0,
+    estimatedCost: 0,
+    workflowStep: 0,
+    contractDate: new Date().toISOString().split('T')[0],
     startDate: new Date().toISOString().split('T')[0],
     deadline: '',
     priority: 'متوسطة' as const,
@@ -1665,8 +1907,10 @@ function ProductionLine({
     if (destination.droppableId === source.droppableId && destination.index === source.index) return;
 
     try {
+      const newStatusIndex = costCenters.findIndex(c => c.id === destination.droppableId);
       await updateDoc(doc(db, 'productionJobs', draggableId), {
-        status: destination.droppableId
+        status: destination.droppableId,
+        workflowStep: newStatusIndex >= 0 ? newStatusIndex + 1 : 0
       });
     } catch (err) {
       handleFirestoreError(err, 'write', 'productionJobs');
@@ -1679,6 +1923,7 @@ function ProductionLine({
       await addDoc(collection(db, 'productionJobs'), {
         ...formData,
         status: costCenters[0]?.id || 'waiting',
+        workflowStep: costCenters.length > 0 ? 1 : 0,
         createdAt: serverTimestamp()
       });
       setShowAdd(false);
@@ -1686,6 +1931,19 @@ function ProductionLine({
         orderNo: '',
         clientName: '',
         productName: '',
+        salesPerson: '',
+        isCustom: false,
+        components: '',
+        referenceImage: '',
+        woodType: '',
+        dimensions: '',
+        paintColor: '',
+        fabricType: '',
+        upholsteryDetails: '',
+        sellingPrice: 0,
+        estimatedCost: 0,
+        workflowStep: 0,
+        contractDate: new Date().toISOString().split('T')[0],
         startDate: new Date().toISOString().split('T')[0],
         deadline: '',
         priority: 'متوسطة',
@@ -1814,10 +2072,15 @@ function ProductionLine({
                                 >
                                   <CardContent className="p-5 space-y-4">
                                     <div className="flex justify-between items-start">
-                                      <Badge variant="outline" className="text-[10px] font-black uppercase tracking-widest border-slate-200 text-slate-400">#{job.orderNo}</Badge>
+                                      <div className="flex flex-col gap-1">
+                                        <Badge variant="outline" className="text-[10px] font-black uppercase tracking-widest border-slate-200 text-slate-400 w-fit">#{job.orderNo}</Badge>
+                                        {job.isCustom && (
+                                          <Badge className="bg-orange-500 text-white text-[9px] font-black uppercase tracking-widest border-none px-1.5 py-0.5 rounded-md w-fit">مخصوص</Badge>
+                                        )}
+                                      </div>
                                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                                        <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); setSelectedJobForCost(job); }} className="h-7 w-7 rounded-lg text-slate-300 hover:text-emerald-500 hover:bg-emerald-50">
-                                          <DollarSign size={14} />
+                                        <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); setPrintingJob(job); setTimeout(() => window.print(), 100); }} className="h-7 w-7 rounded-lg text-slate-300 hover:text-primary hover:bg-blue-50">
+                                          <Printer size={14} />
                                         </Button>
                                         <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); setEditingJob(job); }} className="h-7 w-7 rounded-lg text-slate-300 hover:text-primary hover:bg-blue-50">
                                           <Edit2 size={14} />
@@ -1830,18 +2093,59 @@ function ProductionLine({
                                     
                                     <div>
                                       <h4 className="font-black text-slate-900 leading-tight">{job.productName}</h4>
-                                      <p className="text-xs font-bold text-slate-400 mt-1">{job.clientName}</p>
+                                      <div className="flex justify-between items-center mt-1">
+                                        <p className="text-xs font-bold text-slate-400">{job.clientName}</p>
+                                        {job.salesPerson && <span className="text-[10px] font-black text-primary bg-primary/5 px-1.5 py-0.5 rounded-md">سيلز: {job.salesPerson}</span>}
+                                      </div>
                                     </div>
 
-                                    <div className="flex items-center justify-between text-[10px] font-black bg-slate-50 p-2 rounded-xl">
-                                      <span className="text-slate-400 uppercase tracking-widest">التكلفة التقديرية</span>
-                                      <span className="text-emerald-600">
-                                        {(
-                                          (issuances.filter(i => i.jobOrderNo === job.orderNo).reduce((sum, m) => sum + m.total, 0)) +
-                                          (jobLabors.filter(l => l.jobId === job.id).reduce((sum, l) => sum + l.total, 0)) +
-                                          (jobOtherCosts.filter(o => o.jobId === job.id).reduce((sum, o) => sum + o.amount, 0))
-                                        ).toLocaleString()} ج.م
-                                      </span>
+                                    {job.referenceImage && (
+                                      <div className="relative aspect-video rounded-xl overflow-hidden border border-slate-100 bg-slate-50">
+                                        <img 
+                                          src={job.referenceImage} 
+                                          alt="Reference" 
+                                          className="w-full h-full object-cover"
+                                          referrerPolicy="no-referrer"
+                                        />
+                                      </div>
+                                    )}
+
+                                    {job.components && (
+                                      <div className="p-2 bg-zinc-50 rounded-xl border border-zinc-100">
+                                        <p className="text-[10px] font-bold text-slate-500 leading-relaxed line-clamp-2">
+                                          <span className="font-black text-slate-700">المكونات:</span> {job.components}
+                                        </p>
+                                      </div>
+                                    )}
+
+                                    {(job.woodType || job.dimensions || job.paintColor || job.fabricType) && (
+                                      <div className="grid grid-cols-2 gap-2 text-[10px] bg-slate-50 p-2 rounded-xl border border-slate-100">
+                                        {job.woodType && <div><span className="text-slate-400 font-bold">الخشب:</span> <span className="font-black text-slate-700">{job.woodType}</span></div>}
+                                        {job.dimensions && <div><span className="text-slate-400 font-bold">المقاس:</span> <span className="font-black text-slate-700">{job.dimensions}</span></div>}
+                                        {job.paintColor && <div><span className="text-slate-400 font-bold">الدهان:</span> <span className="font-black text-slate-700">{job.paintColor}</span></div>}
+                                        {job.fabricType && <div><span className="text-slate-400 font-bold">القماش:</span> <span className="font-black text-slate-700">{job.fabricType}</span></div>}
+                                      </div>
+                                    )}
+
+                                    <div className="space-y-1 bg-slate-50 p-2 rounded-xl border border-slate-100">
+                                      <div className="flex items-center justify-between text-[10px] font-black">
+                                        <span className="text-slate-400">خامات</span>
+                                        <span className="text-slate-700">{(issuances.filter(i => i.jobOrderNo === job.orderNo).reduce((sum, m) => sum + m.total, 0)).toLocaleString()} ج.م</span>
+                                      </div>
+                                      <div className="flex items-center justify-between text-[10px] font-black">
+                                        <span className="text-slate-400">مصنعيات</span>
+                                        <span className="text-slate-700">{(jobLabors.filter(l => l.jobId === job.id).reduce((sum, l) => sum + l.total, 0)).toLocaleString()} ج.م</span>
+                                      </div>
+                                      <div className="flex items-center justify-between text-[10px] font-black pt-1 border-t border-slate-200">
+                                        <span className="text-slate-500">الإجمالي</span>
+                                        <span className="text-emerald-600">
+                                          {(
+                                            (issuances.filter(i => i.jobOrderNo === job.orderNo).reduce((sum, m) => sum + m.total, 0)) +
+                                            (jobLabors.filter(l => l.jobId === job.id).reduce((sum, l) => sum + l.total, 0)) +
+                                            (jobOtherCosts.filter(o => o.jobId === job.id).reduce((sum, o) => sum + o.amount, 0))
+                                          ).toLocaleString()} ج.م
+                                        </span>
+                                      </div>
                                     </div>
 
                                     <div className="flex items-center justify-between pt-4 border-t border-slate-50">
@@ -1860,6 +2164,18 @@ function ProductionLine({
                                       >
                                         {job.priority}
                                       </Badge>
+                                    </div>
+                                    <div className="pt-2 border-t border-slate-50">
+                                      <div className="flex justify-between text-[10px] font-bold text-slate-400 mb-1">
+                                        <span>مرحلة العمل</span>
+                                        <span>{job.workflowStep || 0} / {costCenters.length}</span>
+                                      </div>
+                                      <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                        <div 
+                                          className="h-full bg-primary transition-all duration-500"
+                                          style={{ width: `${((job.workflowStep || 0) / Math.max(1, costCenters.length)) * 100}%` }}
+                                        />
+                                      </div>
                                     </div>
                                   </CardContent>
                                 </Card>
@@ -1885,6 +2201,9 @@ function ProductionLine({
         onConfirm={() => showDeleteConfirm && handleDelete(showDeleteConfirm)}
         onCancel={() => setShowDeleteConfirm(null)}
       />
+
+      {/* Print Job Card */}
+      {printingJob && <PrintJobCard job={printingJob} companyInfo={companyInfo} />}
 
       {/* Edit Job Dialog */}
       {editingJob && (
@@ -1913,15 +2232,44 @@ function ProductionLine({
                   </select>
                 </div>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-slate-700">اسم العميل</label>
-                <Input className="rounded-xl h-11" value={editingJob.clientName} onChange={e => setEditingJob({...editingJob, clientName: e.target.value})} />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">اسم العميل</label>
+                  <Input className="rounded-xl h-11" value={editingJob.clientName} onChange={e => setEditingJob({...editingJob, clientName: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">اسم السيلز</label>
+                  <Input className="rounded-xl h-11" value={editingJob.salesPerson || ''} onChange={e => setEditingJob({...editingJob, salesPerson: e.target.value})} />
+                </div>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-bold text-slate-700">المنتج / الوصف</label>
                 <Input className="rounded-xl h-11" value={editingJob.productName} onChange={e => setEditingJob({...editingJob, productName: e.target.value})} />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">المكونات (سرير، دولاب، إلخ)</label>
+                <textarea 
+                  className="w-full p-3 rounded-xl border border-slate-200 font-bold text-sm min-h-[80px]" 
+                  value={editingJob.components || ''} 
+                  onChange={e => setEditingJob({...editingJob, components: e.target.value})}
+                  placeholder="مثلاً: سرير 180سم، 2 كومود، دولاب 260سم، تسريحة"
+                />
+              </div>
+              <div className="flex items-center gap-2 p-3 bg-orange-50 rounded-xl border border-orange-100">
+                <input 
+                  type="checkbox" 
+                  id="edit-isCustom"
+                  checked={editingJob.isCustom || false} 
+                  onChange={e => setEditingJob({...editingJob, isCustom: e.target.checked})}
+                  className="w-4 h-4 accent-orange-500"
+                />
+                <label htmlFor="edit-isCustom" className="text-sm font-black text-orange-700">طلب مخصوص (تصميم خاص)</label>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">تاريخ التعاقد</label>
+                  <Input className="rounded-xl h-11" type="date" value={editingJob.contractDate || ''} onChange={e => setEditingJob({...editingJob, contractDate: e.target.value})} />
+                </div>
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-slate-700">تاريخ البدء</label>
                   <Input className="rounded-xl h-11" type="date" value={editingJob.startDate} onChange={e => setEditingJob({...editingJob, startDate: e.target.value})} />
@@ -1930,6 +2278,44 @@ function ProductionLine({
                   <label className="text-sm font-bold text-slate-700">موعد التسليم</label>
                   <Input className="rounded-xl h-11" type="date" value={editingJob.deadline} onChange={e => setEditingJob({...editingJob, deadline: e.target.value})} />
                 </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">سعر البيع</label>
+                  <Input type="number" className="rounded-xl h-11" value={editingJob.sellingPrice || 0} onChange={e => setEditingJob({...editingJob, sellingPrice: Number(e.target.value)})} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">التكلفة التقديرية</label>
+                  <Input type="number" className="rounded-xl h-11" value={editingJob.estimatedCost || 0} onChange={e => setEditingJob({...editingJob, estimatedCost: Number(e.target.value)})} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">نوع الخشب</label>
+                  <Input className="rounded-xl h-11" value={editingJob.woodType || ''} onChange={e => setEditingJob({...editingJob, woodType: e.target.value})} placeholder="مثلاً: زان أحمر" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">المقاسات</label>
+                  <Input className="rounded-xl h-11" value={editingJob.dimensions || ''} onChange={e => setEditingJob({...editingJob, dimensions: e.target.value})} placeholder="مثلاً: 200x180 سم" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">لون الدهان</label>
+                  <Input className="rounded-xl h-11" value={editingJob.paintColor || ''} onChange={e => setEditingJob({...editingJob, paintColor: e.target.value})} placeholder="مثلاً: أستر بني غامق" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">نوع القماش</label>
+                  <Input className="rounded-xl h-11" value={editingJob.fabricType || ''} onChange={e => setEditingJob({...editingJob, fabricType: e.target.value})} placeholder="مثلاً: قطيفة تركي" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">تفاصيل التنجيد</label>
+                <Input className="rounded-xl h-11" value={editingJob.upholsteryDetails || ''} onChange={e => setEditingJob({...editingJob, upholsteryDetails: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">رابط صورة المرجع</label>
+                <Input className="rounded-xl h-11" value={editingJob.referenceImage || ''} onChange={e => setEditingJob({...editingJob, referenceImage: e.target.value})} placeholder="رابط الصورة (Pinterest/WhatsApp)" />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-bold text-slate-700">ملاحظات</label>
@@ -1942,18 +2328,6 @@ function ProductionLine({
             </CardContent>
           </Card>
         </div>
-      )}
-
-      {/* Job Cost Modal */}
-      {selectedJobForCost && (
-        <JobCostModal 
-          job={selectedJobForCost} 
-          onClose={() => setSelectedJobForCost(null)}
-          issuances={issuances}
-          employees={employees}
-          jobLabors={jobLabors}
-          jobOtherCosts={jobOtherCosts}
-        />
       )}
 
       {/* Add Job Dialog */}
@@ -1983,15 +2357,44 @@ function ProductionLine({
                   </select>
                 </div>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-slate-700">اسم العميل</label>
-                <Input className="rounded-xl h-11" value={formData.clientName} onChange={e => setFormData({...formData, clientName: e.target.value})} />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">اسم العميل</label>
+                  <Input className="rounded-xl h-11" value={formData.clientName} onChange={e => setFormData({...formData, clientName: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">اسم السيلز</label>
+                  <Input className="rounded-xl h-11" value={formData.salesPerson} onChange={e => setFormData({...formData, salesPerson: e.target.value})} />
+                </div>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-bold text-slate-700">المنتج / الوصف</label>
                 <Input className="rounded-xl h-11" value={formData.productName} onChange={e => setFormData({...formData, productName: e.target.value})} placeholder="مثلاً: طقم صالون كلاسيك" />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">المكونات (سرير، دولاب، إلخ)</label>
+                <textarea 
+                  className="w-full p-3 rounded-xl border border-slate-200 font-bold text-sm min-h-[80px]" 
+                  value={formData.components} 
+                  onChange={e => setFormData({...formData, components: e.target.value})}
+                  placeholder="مثلاً: سرير 180سم، 2 كومود، دولاب 260سم، تسريحة"
+                />
+              </div>
+              <div className="flex items-center gap-2 p-3 bg-orange-50 rounded-xl border border-orange-100">
+                <input 
+                  type="checkbox" 
+                  id="isCustom"
+                  checked={formData.isCustom} 
+                  onChange={e => setFormData({...formData, isCustom: e.target.checked})}
+                  className="w-4 h-4 accent-orange-500"
+                />
+                <label htmlFor="isCustom" className="text-sm font-black text-orange-700">طلب مخصوص (تصميم خاص)</label>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">تاريخ التعاقد</label>
+                  <Input className="rounded-xl h-11" type="date" value={formData.contractDate} onChange={e => setFormData({...formData, contractDate: e.target.value})} />
+                </div>
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-slate-700">تاريخ البدء</label>
                   <Input className="rounded-xl h-11" type="date" value={formData.startDate} onChange={e => setFormData({...formData, startDate: e.target.value})} />
@@ -2000,6 +2403,44 @@ function ProductionLine({
                   <label className="text-sm font-bold text-slate-700">موعد التسليم</label>
                   <Input className="rounded-xl h-11" type="date" value={formData.deadline} onChange={e => setFormData({...formData, deadline: e.target.value})} />
                 </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">سعر البيع</label>
+                  <Input type="number" className="rounded-xl h-11" value={formData.sellingPrice} onChange={e => setFormData({...formData, sellingPrice: Number(e.target.value)})} placeholder="سعر البيع للعميل" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">التكلفة التقديرية</label>
+                  <Input type="number" className="rounded-xl h-11" value={formData.estimatedCost} onChange={e => setFormData({...formData, estimatedCost: Number(e.target.value)})} placeholder="المقايسة المبدئية" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">نوع الخشب</label>
+                  <Input className="rounded-xl h-11" value={formData.woodType} onChange={e => setFormData({...formData, woodType: e.target.value})} placeholder="مثلاً: زان أحمر" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">المقاسات</label>
+                  <Input className="rounded-xl h-11" value={formData.dimensions} onChange={e => setFormData({...formData, dimensions: e.target.value})} placeholder="مثلاً: 200x180 سم" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">لون الدهان</label>
+                  <Input className="rounded-xl h-11" value={formData.paintColor} onChange={e => setFormData({...formData, paintColor: e.target.value})} placeholder="مثلاً: أستر بني غامق" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">نوع القماش</label>
+                  <Input className="rounded-xl h-11" value={formData.fabricType} onChange={e => setFormData({...formData, fabricType: e.target.value})} placeholder="مثلاً: قطيفة تركي" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">تفاصيل التنجيد</label>
+                <Input className="rounded-xl h-11" value={formData.upholsteryDetails} onChange={e => setFormData({...formData, upholsteryDetails: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">رابط صورة المرجع</label>
+                <Input className="rounded-xl h-11" value={formData.referenceImage} onChange={e => setFormData({...formData, referenceImage: e.target.value})} placeholder="رابط الصورة (Pinterest/WhatsApp)" />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-bold text-slate-700">ملاحظات</label>
@@ -2017,7 +2458,7 @@ function ProductionLine({
   );
 }
 
-function LoadingManifests({ manifests }: { manifests: LoadingManifest[] }) {
+function LoadingManifests({ manifests, companyInfo }: { manifests: LoadingManifest[], companyInfo: any }) {
   const [showAdd, setShowAdd] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -2326,110 +2767,96 @@ function LoadingManifests({ manifests }: { manifests: LoadingManifest[] }) {
 
       {/* Print Manifest Dialog */}
       {selectedManifest && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
-          <Card className="dribbble-card w-full max-w-4xl my-8 bg-white print:shadow-none print:border-none print:m-0 print:w-full overflow-hidden">
-            <CardHeader className="border-b border-slate-100 flex flex-row justify-between items-center print:border-slate-300 bg-slate-50/50">
-              <div className="text-right">
-                <CardTitle className="text-3xl font-black text-slate-900">كشف حمولة سيارة</CardTitle>
-                <CardDescription className="font-bold text-primary">شركة النجار للأثاث الفاخر</CardDescription>
-              </div>
-              <div className="flex gap-3 print:hidden">
-                <Button onClick={() => window.print()} className="btn-primary rounded-xl font-black px-6">
-                  <Printer size={18} className="ml-2" />
-                  طباعة
-                </Button>
-                <Button variant="ghost" onClick={() => setSelectedManifest(null)} className="rounded-xl font-bold text-slate-400">إغلاق</Button>
-              </div>
-            </CardHeader>
-            <CardContent className="p-10 space-y-10">
-              <div className="grid grid-cols-2 gap-10 border border-slate-100 p-8 rounded-3xl bg-slate-50/30 print:bg-transparent print:border-slate-300">
-                <div className="space-y-4">
-                  <div className="flex justify-between border-b border-slate-100 pb-2">
-                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest">التاريخ</span>
-                    <span className="font-black text-slate-900">{selectedManifest.date}</span>
+        <>
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto print:hidden">
+            <Card className="dribbble-card w-full max-w-4xl my-8 bg-white overflow-hidden">
+              <CardHeader className="border-b border-slate-100 flex flex-row justify-between items-center bg-slate-50/50">
+                <div className="text-right">
+                  <CardTitle className="text-3xl font-black text-slate-900">كشف حمولة سيارة</CardTitle>
+                  <CardDescription className="font-bold text-primary text-lg">{companyInfo.name}</CardDescription>
+                </div>
+                <div className="flex gap-3">
+                  <Button onClick={() => window.print()} className="btn-primary rounded-xl font-black px-6">
+                    <Printer size={18} className="ml-2" />
+                    طباعة
+                  </Button>
+                  <Button variant="ghost" onClick={() => setSelectedManifest(null)} className="rounded-xl font-bold text-slate-400">إغلاق</Button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-10 space-y-10">
+                <div className="grid grid-cols-2 gap-10 border border-slate-100 p-8 rounded-3xl bg-slate-50/30">
+                  <div className="space-y-4">
+                    <div className="flex justify-between border-b border-slate-100 pb-2">
+                      <span className="text-xs font-black text-slate-400 uppercase tracking-widest">التاريخ</span>
+                      <span className="font-black text-slate-900">{selectedManifest.date}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-slate-100 pb-2">
+                      <span className="text-xs font-black text-slate-400 uppercase tracking-widest">اسم السائق</span>
+                      <span className="font-black text-slate-900">{selectedManifest.driverName}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-slate-100 pb-2">
+                      <span className="text-xs font-black text-slate-400 uppercase tracking-widest">رقم السيارة</span>
+                      <span className="font-black text-slate-900">{selectedManifest.carNumber}</span>
+                    </div>
                   </div>
-                  <div className="flex justify-between border-b border-slate-100 pb-2">
-                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest">اسم السائق</span>
-                    <span className="font-black text-slate-900">{selectedManifest.driverName}</span>
-                  </div>
-                  <div className="flex justify-between border-b border-slate-100 pb-2">
-                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest">رقم السيارة</span>
-                    <span className="font-black text-slate-900">{selectedManifest.carNumber}</span>
+                  <div className="space-y-4">
+                    <div className="flex justify-between border-b border-slate-100 pb-2">
+                      <span className="text-xs font-black text-slate-400 uppercase tracking-widest">الوجهة</span>
+                      <span className="font-black text-slate-900">{selectedManifest.clientName}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-slate-100 pb-2">
+                      <span className="text-xs font-black text-slate-400 uppercase tracking-widest">أرقام الأوردرات</span>
+                      <span className="font-black text-slate-900">{selectedManifest.orderNumbers || '---'}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-slate-100 pb-2">
+                      <span className="text-xs font-black text-slate-400 uppercase tracking-widest">القائم بالتحميل</span>
+                      <span className="font-black text-slate-900">{selectedManifest.loaderName}</span>
+                    </div>
                   </div>
                 </div>
-                <div className="space-y-4">
-                  <div className="flex justify-between border-b border-slate-100 pb-2">
-                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest">الوجهة</span>
-                    <span className="font-black text-slate-900">{selectedManifest.clientName}</span>
-                  </div>
-                  <div className="flex justify-between border-b border-slate-100 pb-2">
-                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest">أرقام الأوردرات</span>
-                    <span className="font-black text-slate-900">{selectedManifest.orderNumbers || '---'}</span>
-                  </div>
-                  <div className="flex justify-between border-b border-slate-100 pb-2">
-                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest">القائم بالتحميل</span>
-                    <span className="font-black text-slate-900">{selectedManifest.loaderName}</span>
-                  </div>
-                </div>
-              </div>
 
-              <div className="space-y-6">
-                <h3 className="font-black text-xl text-slate-900 flex items-center gap-3">
-                  <div className="w-2 h-6 bg-primary rounded-full" />
-                  تفاصيل المنتجات
-                </h3>
-                <div className="rounded-3xl border border-slate-100 overflow-hidden">
-                  <Table>
-                    <TableHeader className="bg-slate-50">
-                      <TableRow>
-                        <TableHead className="text-right font-black text-slate-900 py-4">المنتج</TableHead>
-                        <TableHead className="text-right font-black text-slate-900 py-4">المكونات</TableHead>
-                        <TableHead className="text-right font-black text-slate-900 py-4">السيلز</TableHead>
-                        <TableHead className="text-right font-black text-slate-900 py-4">إضافات</TableHead>
-                        <TableHead className="text-right font-black text-slate-900 py-4">ملاحظات</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {selectedManifest.products.map((p, i) => (
-                        <TableRow key={i} className="hover:bg-slate-50/50 transition-colors">
-                          <TableCell className="font-black text-slate-700 py-4">{p.name}</TableCell>
-                          <TableCell className="font-medium text-slate-600 py-4">{p.components}</TableCell>
-                          <TableCell className="font-medium text-slate-600 py-4">{p.salesPerson}</TableCell>
-                          <TableCell className="font-medium text-slate-600 py-4">{p.additions}</TableCell>
-                          <TableCell className="font-medium text-slate-600 py-4">{p.notes}</TableCell>
+                <div className="space-y-6">
+                  <h3 className="font-black text-xl text-slate-900 flex items-center gap-3">
+                    <div className="w-2 h-6 bg-primary rounded-full" />
+                    تفاصيل المنتجات
+                  </h3>
+                  <div className="rounded-3xl border border-slate-100 overflow-hidden">
+                    <Table>
+                      <TableHeader className="bg-slate-50">
+                        <TableRow>
+                          <TableHead className="text-right font-black text-slate-900 py-4">المنتج</TableHead>
+                          <TableHead className="text-right font-black text-slate-900 py-4">المكونات</TableHead>
+                          <TableHead className="text-right font-black text-slate-900 py-4">السيلز</TableHead>
+                          <TableHead className="text-right font-black text-slate-900 py-4">إضافات</TableHead>
+                          <TableHead className="text-right font-black text-slate-900 py-4">ملاحظات</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {selectedManifest.products.map((p, i) => (
+                          <TableRow key={i} className="hover:bg-slate-50/50 transition-colors">
+                            <TableCell className="font-black text-slate-700 py-4">{p.name}</TableCell>
+                            <TableCell className="font-medium text-slate-600 py-4">{p.components}</TableCell>
+                            <TableCell className="font-medium text-slate-600 py-4">{p.salesPerson}</TableCell>
+                            <TableCell className="font-medium text-slate-600 py-4">{p.additions}</TableCell>
+                            <TableCell className="font-medium text-slate-600 py-4">{p.notes}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </div>
-              </div>
 
-              {selectedManifest.notes && (
-                <div className="p-6 bg-blue-50/30 border border-blue-100 rounded-3xl print:bg-transparent print:border-slate-300">
-                  <p className="text-xs font-black text-primary uppercase tracking-widest mb-2">ملاحظات عامة</p>
-                  <p className="font-medium text-slate-700">{selectedManifest.notes}</p>
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-20 pt-16">
-                <div className="text-center space-y-10">
-                  <p className="font-black text-slate-900 border-b-2 border-slate-100 pb-4">توقيع السائق</p>
-                  <div className="h-24"></div>
-                  <div className="w-full border-t border-dashed border-slate-200" />
-                </div>
-                <div className="text-center space-y-10">
-                  <p className="font-black text-slate-900 border-b-2 border-slate-100 pb-4">توقيع القائم بالتحميل</p>
-                  <div className="h-24"></div>
-                  <div className="w-full border-t border-dashed border-slate-200" />
-                </div>
-              </div>
-
-              <div className="text-center text-[10px] font-black text-slate-300 pt-10 border-t border-slate-50 print:block hidden uppercase tracking-widest">
-                طبع بواسطة نظام النجار لإدارة الأثاث - {new Date().toLocaleString('ar-EG')}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                {selectedManifest.notes && (
+                  <div className="p-6 bg-blue-50/30 border border-blue-100 rounded-3xl">
+                    <p className="text-xs font-black text-primary uppercase tracking-widest mb-2">ملاحظات عامة</p>
+                    <p className="font-medium text-slate-700">{selectedManifest.notes}</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+          <PrintManifest manifest={selectedManifest} companyInfo={companyInfo} />
+        </>
       )}
     </div>
   );
@@ -3643,7 +4070,25 @@ function WastedItemsView({ items, wasteRecords }: { items: Item[], wasteRecords:
   );
 }
 
-function ReportsView({ items, suppliers, purchases, issuances, warehouses }: { items: Item[], suppliers: Supplier[], purchases: Purchase[], issuances: Issuance[], warehouses: Warehouse[] }) {
+function ReportsView({ 
+  items, 
+  suppliers, 
+  purchases, 
+  issuances, 
+  warehouses, 
+  productionJobs, 
+  jobLabors, 
+  jobOtherCosts 
+}: { 
+  items: Item[], 
+  suppliers: Supplier[], 
+  purchases: Purchase[], 
+  issuances: Issuance[], 
+  warehouses: Warehouse[],
+  productionJobs: ProductionJob[],
+  jobLabors: JobLabor[],
+  jobOtherCosts: JobOtherCost[]
+}) {
   // 1. Data for Warehouse Value Chart
   const warehouseData = warehouses.map(w => {
     const value = items
@@ -3663,7 +4108,28 @@ function ReportsView({ items, suppliers, purchases, issuances, warehouses }: { i
     return acc;
   }, []);
 
-  // 3. Monthly Trends (Last 6 months)
+  // 3. Production Profitability Data
+  const productionProfitData = productionJobs.map(job => {
+    const jobMaterials = issuances.filter(i => i.jobOrderNo === job.orderNo);
+    const jobLaborsList = jobLabors.filter(l => l.jobId === job.id);
+    const jobOtherCostsList = jobOtherCosts.filter(o => o.jobId === job.id);
+
+    const materialCost = jobMaterials.reduce((sum, m) => sum + m.total, 0);
+    const laborCost = jobLaborsList.reduce((sum, l) => sum + l.total, 0);
+    const otherCost = jobOtherCostsList.reduce((sum, o) => sum + o.amount, 0);
+    const totalCost = materialCost + laborCost + otherCost;
+    const profit = (job.sellingPrice || 0) - totalCost;
+
+    return {
+      name: job.productName,
+      orderNo: job.orderNo,
+      cost: totalCost,
+      sellingPrice: job.sellingPrice || 0,
+      profit: profit
+    };
+  });
+
+  // 4. Monthly Trends (Last 6 months)
   const monthlyTrends = Array.from({ length: 6 }).map((_, i) => {
     const date = new Date();
     date.setMonth(date.getMonth() - i);
@@ -3768,7 +4234,74 @@ function ReportsView({ items, suppliers, purchases, issuances, warehouses }: { i
           </CardContent>
         </Card>
 
-        {/* Chart 3: Purchase vs Issuance Trends */}
+        {/* Chart 3: Production Profitability */}
+        <Card className="dribbble-card border-none lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="text-xl font-black text-slate-900">تحليل ربحية أوامر الإنتاج</CardTitle>
+            <CardDescription className="font-medium">مقارنة التكلفة الفعلية بسعر البيع لكل طلب</CardDescription>
+          </CardHeader>
+          <CardContent className="h-[400px] pt-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={productionProfitData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="orderNo" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }} />
+                <Tooltip 
+                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px' }}
+                />
+                <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ paddingBottom: '20px', fontWeight: 600 }} />
+                <Bar dataKey="cost" name="التكلفة" fill="#60a5fa" radius={[8, 8, 0, 0]} barSize={30} />
+                <Bar dataKey="sellingPrice" name="سعر البيع" fill="#34d399" radius={[8, 8, 0, 0]} barSize={30} />
+                <Line type="monotone" dataKey="profit" name="الربح" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4, fill: '#f59e0b', strokeWidth: 2 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* Detailed Job Costing Report */}
+        <Card className="dribbble-card border-none lg:col-span-2">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-xl font-black text-slate-900">تقرير تكاليف وربحية الأوامر (تفصيلي)</CardTitle>
+              <CardDescription className="font-medium">بيانات مالية كاملة لكل أمر إنتاج</CardDescription>
+            </div>
+            <Button variant="outline" size="sm" className="rounded-xl font-bold" onClick={() => exportToExcel(productionProfitData, 'تقرير_ربحية_الإنتاج')}>
+              تصدير إكسيل
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-right font-black">رقم الأمر</TableHead>
+                  <TableHead className="text-right font-black">المنتج</TableHead>
+                  <TableHead className="text-right font-black">التكلفة الفعلية</TableHead>
+                  <TableHead className="text-right font-black">سعر البيع</TableHead>
+                  <TableHead className="text-right font-black">الربح / الخسارة</TableHead>
+                  <TableHead className="text-right font-black">النسبة</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {productionProfitData.map(job => (
+                  <TableRow key={job.orderNo}>
+                    <TableCell className="font-black">#{job.orderNo}</TableCell>
+                    <TableCell className="font-bold">{job.name}</TableCell>
+                    <TableCell className="font-bold">{job.cost.toLocaleString()} ج.م</TableCell>
+                    <TableCell className="font-bold">{job.sellingPrice.toLocaleString()} ج.م</TableCell>
+                    <TableCell className={`font-black ${job.profit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                      {job.profit.toLocaleString()} ج.م
+                    </TableCell>
+                    <TableCell className="font-bold">
+                      {job.sellingPrice > 0 ? ((job.profit / job.sellingPrice) * 100).toFixed(1) : 0}%
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        {/* Chart 4: Purchase vs Issuance Trends */}
         <Card className="dribbble-card border-none lg:col-span-2">
           <CardHeader>
             <CardTitle className="text-xl font-black text-slate-900">حركة المشتريات مقابل المنصرف</CardTitle>
@@ -6304,14 +6837,24 @@ function ArchiveView({ employees, payrolls }: { employees: Employee[], payrolls:
   );
 }
 
-function SettingsView({ items, suppliers, warehouses, units, costCenters }: { items: Item[], suppliers: Supplier[], warehouses: Warehouse[], units: Unit[], costCenters: CostCenter[] }) {
+function SettingsView({ 
+  items, 
+  suppliers, 
+  warehouses, 
+  units, 
+  costCenters,
+  companyInfo,
+  setCompanyInfo
+}: { 
+  items: Item[], 
+  suppliers: Supplier[], 
+  warehouses: Warehouse[], 
+  units: Unit[], 
+  costCenters: CostCenter[],
+  companyInfo: any,
+  setCompanyInfo: (info: any) => void
+}) {
   const [activeSettingTab, setActiveSettingTab] = useState('general');
-  const [companyInfo, setCompanyInfo] = useState({
-    name: 'شركة المصطفى للتجارة والصناعة',
-    address: 'المنطقة الصناعية، القاهرة',
-    phone: '01000000000',
-    taxId: '123-456-789'
-  });
 
   const [showItemAdd, setShowItemAdd] = useState(false);
   const [showSupplierAdd, setShowSupplierAdd] = useState(false);
@@ -6868,9 +7411,40 @@ function SettingsView({ items, suppliers, warehouses, units, costCenters }: { it
                   <CardTitle className="text-xl font-black text-slate-900">مراكز التكلفة</CardTitle>
                   <CardDescription className="font-medium">تعريف مراحل الإنتاج</CardDescription>
                 </div>
-                <Button size="icon" onClick={() => setShowCostCenterAdd(true)} className="btn-primary h-10 w-10 rounded-xl">
-                  <Plus size={20} />
-                </Button>
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={async () => {
+                      const stages = [
+                        'النجارة',
+                        'الخدمة والصنفرة والتجهيز',
+                        'كابينة الدهان (دوكو/استر)',
+                        'التنجيد',
+                        'التشطيب والكهرباء',
+                        'التغليف والتحميل',
+                        'المراجعة النهائية',
+                        'تم التسليم'
+                      ];
+                      try {
+                        for (const stage of stages) {
+                          if (!costCenters.some(c => c.name === stage)) {
+                            await addDoc(collection(db, 'costCenters'), { name: stage });
+                          }
+                        }
+                        alert('تم إضافة مراحل الإنتاج الافتراضية بنجاح');
+                      } catch (err) {
+                        handleFirestoreError(err, 'write', 'costCenters');
+                      }
+                    }} 
+                    className="h-10 rounded-xl font-bold text-xs border-primary/20 text-primary hover:bg-primary/5"
+                  >
+                    تهيئة المراحل
+                  </Button>
+                  <Button size="icon" onClick={() => setShowCostCenterAdd(true)} className="btn-primary h-10 w-10 rounded-xl">
+                    <Plus size={20} />
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
@@ -7250,272 +7824,5 @@ function SettingsView({ items, suppliers, warehouses, units, costCenters }: { it
   );
 }
 
-function JobCostModal({ 
-  job, 
-  onClose, 
-  issuances, 
-  employees, 
-  jobLabors, 
-  jobOtherCosts 
-}: { 
-  job: ProductionJob, 
-  onClose: () => void,
-  issuances: Issuance[],
-  employees: Employee[],
-  jobLabors: JobLabor[],
-  jobOtherCosts: JobOtherCost[]
-}) {
-  const [activeTab, setActiveTab] = useState('summary');
-  const [showAddLabor, setShowAddLabor] = useState(false);
-  const [showAddOther, setShowAddOther] = useState(false);
-  
-  const [laborForm, setLaborForm] = useState({
-    employeeId: '',
-    date: new Date().toISOString().split('T')[0],
-    hours: 0,
-    notes: ''
-  });
-  
-  const [otherForm, setOtherForm] = useState({
-    date: new Date().toISOString().split('T')[0],
-    description: '',
-    amount: 0,
-    notes: ''
-  });
 
-  const jobMaterials = issuances.filter(i => i.jobOrderNo === job.orderNo);
-  const jobLaborsList = jobLabors.filter(l => l.jobId === job.id);
-  const jobOtherCostsList = jobOtherCosts.filter(o => o.jobId === job.id);
-
-  const materialCost = jobMaterials.reduce((sum, m) => sum + m.total, 0);
-  const laborCost = jobLaborsList.reduce((sum, l) => sum + l.total, 0);
-  const otherCost = jobOtherCostsList.reduce((sum, o) => sum + o.amount, 0);
-  const totalCost = materialCost + laborCost + otherCost;
-
-  const handleAddLabor = async () => {
-    if (!laborForm.employeeId || laborForm.hours <= 0) return;
-    const emp = employees.find(e => e.id === laborForm.employeeId);
-    if (!emp) return;
-    
-    const rate = emp.dailyRate / 8; // Assume 8 hours work day
-    const total = laborForm.hours * rate;
-    
-    try {
-      await addDoc(collection(db, 'jobLabors'), {
-        ...laborForm,
-        jobId: job.id,
-        rate,
-        total,
-        createdAt: serverTimestamp()
-      });
-      setShowAddLabor(false);
-      setLaborForm({ employeeId: '', date: new Date().toISOString().split('T')[0], hours: 0, notes: '' });
-    } catch (err) { handleFirestoreError(err, 'write', 'jobLabors'); }
-  };
-
-  const handleAddOther = async () => {
-    if (!otherForm.description || otherForm.amount <= 0) return;
-    try {
-      await addDoc(collection(db, 'jobOtherCosts'), {
-        ...otherForm,
-        jobId: job.id,
-        createdAt: serverTimestamp()
-      });
-      setShowAddOther(false);
-      setOtherForm({ date: new Date().toISOString().split('T')[0], description: '', amount: 0, notes: '' });
-    } catch (err) { handleFirestoreError(err, 'write', 'jobOtherCosts'); }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
-      <Card className="dribbble-card w-full max-w-2xl max-h-[90vh] overflow-auto">
-        <CardHeader className="border-b border-slate-100">
-          <div className="flex justify-between items-center">
-            <div>
-              <CardTitle className="font-black text-2xl">تحليل تكاليف الإنتاج</CardTitle>
-              <CardDescription className="font-bold">أمر إنتاج رقم: {job.orderNo} - {job.productName}</CardDescription>
-            </div>
-            <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full">
-              <X size={20} />
-            </Button>
-          </div>
-          
-          <div className="flex gap-2 mt-6">
-            <Button 
-              variant={activeTab === 'summary' ? 'default' : 'ghost'} 
-              className={`rounded-xl font-bold flex-1 ${activeTab === 'summary' ? 'btn-primary' : ''}`}
-              onClick={() => setActiveTab('summary')}
-            >الملخص</Button>
-            <Button 
-              variant={activeTab === 'materials' ? 'default' : 'ghost'} 
-              className={`rounded-xl font-bold flex-1 ${activeTab === 'materials' ? 'btn-primary' : ''}`}
-              onClick={() => setActiveTab('materials')}
-            >الخامات</Button>
-            <Button 
-              variant={activeTab === 'labor' ? 'default' : 'ghost'} 
-              className={`rounded-xl font-bold flex-1 ${activeTab === 'labor' ? 'btn-primary' : ''}`}
-              onClick={() => setActiveTab('labor')}
-            >العمالة</Button>
-            <Button 
-              variant={activeTab === 'other' ? 'default' : 'ghost'} 
-              className={`rounded-xl font-bold flex-1 ${activeTab === 'other' ? 'btn-primary' : ''}`}
-              onClick={() => setActiveTab('other')}
-            >تكاليف أخرى</Button>
-          </div>
-        </CardHeader>
-
-        <CardContent className="p-6">
-          {activeTab === 'summary' && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
-                  <span className="text-xs font-black text-blue-400 uppercase tracking-widest">تكلفة الخامات</span>
-                  <div className="text-2xl font-black text-blue-600 mt-1">{materialCost.toLocaleString()} ج.م</div>
-                </div>
-                <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
-                  <span className="text-xs font-black text-emerald-400 uppercase tracking-widest">تكلفة العمالة</span>
-                  <div className="text-2xl font-black text-emerald-600 mt-1">{laborCost.toLocaleString()} ج.م</div>
-                </div>
-                <div className="p-4 bg-orange-50 rounded-2xl border border-orange-100">
-                  <span className="text-xs font-black text-orange-400 uppercase tracking-widest">تكاليف أخرى</span>
-                  <div className="text-2xl font-black text-orange-600 mt-1">{otherCost.toLocaleString()} ج.م</div>
-                </div>
-              </div>
-
-              <div className="p-8 bg-slate-900 rounded-3xl text-center">
-                <span className="text-sm font-black text-slate-400 uppercase tracking-widest">إجمالي تكلفة الإنتاج</span>
-                <div className="text-5xl font-black text-white mt-2">{totalCost.toLocaleString()} ج.م</div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'materials' && (
-            <div className="space-y-4">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-right">الصنف</TableHead>
-                    <TableHead className="text-right">الكمية</TableHead>
-                    <TableHead className="text-right">السعر</TableHead>
-                    <TableHead className="text-right">الإجمالي</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {jobMaterials.map(m => (
-                    <TableRow key={m.id}>
-                      <TableCell className="font-bold">{m.itemId}</TableCell>
-                      <TableCell className="font-bold">{m.quantity} {m.unit}</TableCell>
-                      <TableCell className="font-bold">{m.price.toLocaleString()} ج.م</TableCell>
-                      <TableCell className="font-black text-primary">{m.total.toLocaleString()} ج.م</TableCell>
-                    </TableRow>
-                  ))}
-                  {jobMaterials.length === 0 && (
-                    <TableRow><TableCell colSpan={4} className="text-center py-8 text-slate-400">لا توجد خامات منصرفة لهذا الطلب</TableCell></TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-
-          {activeTab === 'labor' && (
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <h4 className="font-black text-slate-900">سجلات العمالة</h4>
-                <Button size="sm" onClick={() => setShowAddLabor(true)} className="btn-primary">إضافة سجل</Button>
-              </div>
-              
-              {showAddLabor && (
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold">الموظف</label>
-                      <select className="w-full h-10 rounded-xl border border-slate-200 px-3 bg-white" value={laborForm.employeeId} onChange={e => setLaborForm({...laborForm, employeeId: e.target.value})}>
-                        <option value="">اختر الموظف</option>
-                        {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold">عدد الساعات</label>
-                      <Input type="number" className="h-10 rounded-xl" value={laborForm.hours} onChange={e => setLaborForm({...laborForm, hours: parseFloat(e.target.value) || 0})} />
-                    </div>
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <Button variant="ghost" size="sm" onClick={() => setShowAddLabor(false)}>إلغاء</Button>
-                    <Button size="sm" onClick={handleAddLabor} className="btn-primary">حفظ</Button>
-                  </div>
-                </div>
-              )}
-
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-right">الموظف</TableHead>
-                    <TableHead className="text-right">التاريخ</TableHead>
-                    <TableHead className="text-right">الساعات</TableHead>
-                    <TableHead className="text-right">الإجمالي</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {jobLaborsList.map(l => (
-                    <TableRow key={l.id}>
-                      <TableCell className="font-bold">{employees.find(e => e.id === l.employeeId)?.name || 'غير معروف'}</TableCell>
-                      <TableCell className="font-bold">{l.date}</TableCell>
-                      <TableCell className="font-bold">{l.hours} ساعة</TableCell>
-                      <TableCell className="font-black text-emerald-600">{l.total.toLocaleString()} ج.م</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-
-          {activeTab === 'other' && (
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <h4 className="font-black text-slate-900">تكاليف متنوعة</h4>
-                <Button size="sm" onClick={() => setShowAddOther(true)} className="btn-primary">إضافة تكلفة</Button>
-              </div>
-
-              {showAddOther && (
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold">الوصف</label>
-                    <Input className="h-10 rounded-xl" value={otherForm.description} onChange={e => setOtherForm({...otherForm, description: e.target.value})} />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold">المبلغ</label>
-                    <Input type="number" className="h-10 rounded-xl" value={otherForm.amount} onChange={e => setOtherForm({...otherForm, amount: parseFloat(e.target.value) || 0})} />
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <Button variant="ghost" size="sm" onClick={() => setShowAddOther(false)}>إلغاء</Button>
-                    <Button size="sm" onClick={handleAddOther} className="btn-primary">حفظ</Button>
-                  </div>
-                </div>
-              )}
-
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-right">الوصف</TableHead>
-                    <TableHead className="text-right">التاريخ</TableHead>
-                    <TableHead className="text-right">المبلغ</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {jobOtherCostsList.map(o => (
-                    <TableRow key={o.id}>
-                      <TableCell className="font-bold">{o.description}</TableCell>
-                      <TableCell className="font-bold">{o.date}</TableCell>
-                      <TableCell className="font-black text-orange-600">{o.amount.toLocaleString()} ج.م</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
 

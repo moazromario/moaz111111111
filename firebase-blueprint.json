@@ -100,9 +100,22 @@
         "orderNo": { "type": "string" },
         "clientName": { "type": "string" },
         "productName": { "type": "string" },
-        "startDate": { "type": "string", "format": "date-time" },
-        "deadline": { "type": "string", "format": "date-time" },
+        "salesPerson": { "type": "string" },
+        "isCustom": { "type": "boolean" },
+        "components": { "type": "string" },
+        "referenceImage": { "type": "string" },
+        "woodType": { "type": "string" },
+        "dimensions": { "type": "string" },
+        "paintColor": { "type": "string" },
+        "fabricType": { "type": "string" },
+        "upholsteryDetails": { "type": "string" },
+        "sellingPrice": { "type": "number" },
+        "estimatedCost": { "type": "number" },
+        "contractDate": { "type": "string", "format": "date" },
+        "startDate": { "type": "string", "format": "date" },
+        "deadline": { "type": "string", "format": "date" },
         "status": { "type": "string" },
+        "workflowStep": { "type": "number" },
         "priority": { "type": "string", "enum": ["منخفضة", "متوسطة", "عالية"] },
         "notes": { "type": "string" }
       },
@@ -289,13 +302,14 @@
       "properties": {
         "jobId": { "type": "string" },
         "employeeId": { "type": "string" },
+        "stage": { "type": "string" },
         "date": { "type": "string", "format": "date" },
         "hours": { "type": "number" },
         "rate": { "type": "number" },
         "total": { "type": "number" },
         "notes": { "type": "string" }
       },
-      "required": ["jobId", "employeeId", "date", "hours", "total"]
+      "required": ["jobId", "employeeId", "stage", "date", "hours", "total"]
     },
     "JobOtherCost": {
       "title": "JobOtherCost",
@@ -303,12 +317,13 @@
       "type": "object",
       "properties": {
         "jobId": { "type": "string" },
+        "stage": { "type": "string" },
         "date": { "type": "string", "format": "date" },
         "description": { "type": "string" },
         "amount": { "type": "number" },
         "notes": { "type": "string" }
       },
-      "required": ["jobId", "date", "description", "amount"]
+      "required": ["jobId", "stage", "date", "description", "amount"]
     }
   },
   "firestore": {

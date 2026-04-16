@@ -78,9 +78,22 @@ export interface ProductionJob {
   orderNo: string;
   clientName: string;
   productName: string;
+  salesPerson?: string; // اسم السيلز
+  isCustom?: boolean; // طلب مخصوص
+  components?: string; // مكونات الغرفة
+  referenceImage?: string; // صورة المرجع
+  woodType?: string; // نوع الخشب
+  dimensions?: string; // المقاسات
+  paintColor?: string; // لون الدهان
+  fabricType?: string; // نوع القماش
+  upholsteryDetails?: string; // تفاصيل التنجيد
+  sellingPrice?: number; // سعر البيع
+  estimatedCost?: number; // التكلفة التقديرية (المقايسة)
+  contractDate?: string; // تاريخ التعاقد
   startDate: string;
   deadline: string;
   status: string; // This will be the CostCenter ID or name
+  workflowStep?: number; // مسار العمل
   priority: 'منخفضة' | 'متوسطة' | 'عالية';
   notes: string;
   totalMaterialCost?: number;
@@ -92,6 +105,7 @@ export interface JobLabor {
   id: string;
   jobId: string;
   employeeId: string;
+  stage: string;
   date: string;
   hours: number;
   rate: number;
@@ -102,6 +116,7 @@ export interface JobLabor {
 export interface JobOtherCost {
   id: string;
   jobId: string;
+  stage: string;
   date: string;
   description: string;
   amount: number;
