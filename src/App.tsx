@@ -74,7 +74,7 @@ import {
 } from 'recharts';
 import { db } from './firebase';
 import { collection, onSnapshot, query, addDoc, updateDoc, deleteDoc, doc, increment, serverTimestamp } from 'firebase/firestore';
-import { Item, Supplier, Purchase, Issuance, Warehouse, Unit, CostCenter, ProductionJob, LoadingManifest, Waste, BladeSharpening, PlateSharpening, MachineMaintenance, Employee, Attendance, FinancialTransaction, Loan, Payroll, SupplierPayment, JobLabor, JobOtherCost } from './types';
+import { Item, Supplier, Purchase, Issuance, Warehouse, Unit, CostCenter, ProductionJob, LoadingManifest, DeliveryReceipt, Waste, BladeSharpening, PlateSharpening, MachineMaintenance, Employee, Attendance, FinancialTransaction, Loan, Payroll, SupplierPayment, JobLabor, JobOtherCost } from './types';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import * as XLSX from 'xlsx';
@@ -247,6 +247,7 @@ function MainApp() {
   const [supplierPayments, setSupplierPayments] = useState<SupplierPayment[]>([]);
   const [jobLabors, setJobLabors] = useState<JobLabor[]>([]);
   const [jobOtherCosts, setJobOtherCosts] = useState<JobOtherCost[]>([]);
+  const [deliveryReceipts, setDeliveryReceipts] = useState<DeliveryReceipt[]>([]);
   const [hrMenuOpen, setHrMenuOpen] = useState(false);
   const [companyInfo, setCompanyInfo] = useState({
     name: 'شركة المصطفى للتجارة والصناعة',
@@ -342,6 +343,10 @@ function MainApp() {
       setJobOtherCosts(snap.docs.map(d => ({ id: d.id, ...d.data() } as JobOtherCost)));
     }, (err) => handleFirestoreError(err, 'list', 'jobOtherCosts'));
 
+    const unsubDeliveryReceipts = onSnapshot(collection(db, 'deliveryReceipts'), (snap) => {
+      setDeliveryReceipts(snap.docs.map(d => ({ id: d.id, ...d.data() } as DeliveryReceipt)));
+    }, (err) => handleFirestoreError(err, 'list', 'deliveryReceipts'));
+
     return () => {
       unsubWarehouses();
       unsubUnits();
@@ -364,6 +369,7 @@ function MainApp() {
       unsubSupplierPayments();
       unsubJobLabors();
       unsubJobOtherCosts();
+      unsubDeliveryReceipts();
     };
   }, [user]);
 
@@ -559,11 +565,12 @@ function MainApp() {
               <ChevronDown size={16} className={`transition-transform duration-300 ${productionMenuOpen ? 'rotate-180' : ''}`} />
             </button>
             
-            <div className={`overflow-hidden transition-all duration-300 ease-in-out ${productionMenuOpen ? 'max-h-48 opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
+            <div className={`overflow-hidden transition-all duration-300 ease-in-out ${productionMenuOpen ? 'max-h-60 opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
               <div className="mr-4 pr-4 border-r-2 border-slate-100 space-y-1.5">
                 <SubNavButton active={activeTab === 'production'} onClick={() => handleNavClick('production')} label="أوامر الإنتاج" />
                 <SubNavButton active={activeTab === 'productionCosts'} onClick={() => handleNavClick('productionCosts')} label="تكاليف الإنتاج" />
                 <SubNavButton active={activeTab === 'loading'} onClick={() => handleNavClick('loading')} label="حمولة العربية" />
+                <SubNavButton active={activeTab === 'deliveryReceipts'} onClick={() => handleNavClick('deliveryReceipts')} label="محاضر الاستلام" />
               </div>
             </div>
           </div>
@@ -695,6 +702,7 @@ function MainApp() {
           />
         )}
         {activeTab === 'loading' && <LoadingManifests manifests={loadingManifests} companyInfo={companyInfo} />}
+        {activeTab === 'deliveryReceipts' && <DeliveryReceipts receipts={deliveryReceipts} companyInfo={companyInfo} />}
         {activeTab === 'purchases' && <Purchases items={items} suppliers={suppliers} purchases={purchases} />}
         {activeTab === 'issuances' && <Issuances items={items} issuances={issuances} costCenters={costCenters} />}
         {activeTab === 'returns' && <Returns items={items} suppliers={suppliers} costCenters={costCenters} />}
@@ -1746,6 +1754,175 @@ function PrintJobCard({ job, companyInfo }: { job: ProductionJob, companyInfo: a
         <div className="text-center">
           <div className="w-full h-16 border-b border-slate-200 mb-2"></div>
           <span className="text-xs font-black text-slate-400 uppercase tracking-widest">توقيع الإنتاج</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PrintDeliveryReceipt({ receipt, companyInfo }: { receipt: DeliveryReceipt, companyInfo: any }) {
+  return (
+    <div className="hidden print:block p-8 bg-white text-slate-900 font-sans dir-rtl min-h-screen relative border-[12px] border-slate-900">
+      {/* Header Section */}
+      <div className="flex justify-between items-center border-b-4 border-slate-900 pb-6 mb-6">
+        <div className="flex items-center gap-6">
+          <div className="w-20 h-20 bg-slate-900 flex items-center justify-center rounded-3xl rotate-3 shadow-xl">
+            <Building2 className="text-white -rotate-3" size={40} />
+          </div>
+          <div>
+            <h1 className="text-5xl font-black uppercase tracking-tighter leading-none">{companyInfo.name}</h1>
+            <p className="text-xs font-black text-red-600 mt-2 tracking-[0.3em]">PREMIUM FURNITURE & DESIGN STUDIO</p>
+          </div>
+        </div>
+        <div className="text-left">
+          <div className="bg-red-600 text-white px-8 py-3 rounded-2xl mb-3 shadow-lg shadow-red-200">
+            <h2 className="text-3xl font-black">تقرير استلام منتج</h2>
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            <p className="text-xl font-black text-slate-900">التاريخ: {receipt.date}</p>
+            <p className="text-sm font-black text-slate-400">رقم المسلسل: {receipt.receiptNumber}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Info Grid - Fixed Layout */}
+      <div className="grid grid-cols-12 gap-0 border-2 border-slate-900 mb-8 rounded-3xl overflow-hidden">
+        <div className="col-span-8 border-l-2 border-slate-900">
+          <div className="grid grid-cols-2">
+            <div className="p-4 border-b-2 border-l-2 border-slate-900 bg-slate-50">
+              <span className="text-[10px] font-black text-slate-400 uppercase block mb-1">اسم العميل</span>
+              <span className="text-xl font-black">{receipt.clientName}</span>
+            </div>
+            <div className="p-4 border-b-2 border-slate-900">
+              <span className="text-[10px] font-black text-slate-400 uppercase block mb-1">رقم العقد</span>
+              <span className="text-xl font-black">{receipt.orderNumber}</span>
+            </div>
+            <div className="p-4 border-l-2 border-slate-900">
+              <span className="text-[10px] font-black text-slate-400 uppercase block mb-1">العنوان بالتفصيل</span>
+              <span className="text-lg font-bold leading-tight">{receipt.address || '---'}</span>
+            </div>
+            <div className="p-4">
+              <span className="text-[10px] font-black text-slate-400 uppercase block mb-1">رقم الهاتف</span>
+              <span className="text-xl font-black">{receipt.phone || '---'}</span>
+            </div>
+          </div>
+        </div>
+        <div className="col-span-4 bg-slate-900 text-white p-6 flex flex-col justify-center gap-4">
+          <div>
+            <span className="text-[10px] font-black text-slate-400 uppercase block mb-1">الفرع</span>
+            <span className="text-2xl font-black">{receipt.branch}</span>
+          </div>
+          <div>
+            <span className="text-[10px] font-black text-slate-400 uppercase block mb-1">المسؤول / البائع</span>
+            <span className="text-xl font-bold">{receipt.salesPerson}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Products Table - Fixed Height Area */}
+      <div className="mb-8 border-2 border-slate-900 rounded-3xl overflow-hidden">
+        <div className="bg-slate-900 text-white p-4 flex justify-between items-center">
+          <h3 className="text-xl font-black">المنتجات المستلمة</h3>
+          <span className="text-xs font-bold opacity-60">يرجى مراجعة الكميات والمواصفات عند الاستلام</span>
+        </div>
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="bg-slate-100 border-b-2 border-slate-900">
+              <th className="p-4 text-right font-black text-slate-500 w-16">م</th>
+              <th className="p-4 text-right font-black text-slate-900 text-lg">بيان المنتج</th>
+              <th className="p-4 text-center font-black text-slate-900 text-lg w-32">العدد</th>
+              <th className="p-4 text-right font-black text-slate-900 text-lg">ملاحظات فنية</th>
+            </tr>
+          </thead>
+          <tbody>
+            {receipt.products.map((p, i) => (
+              <tr key={i} className="border-b border-slate-200">
+                <td className="p-4 text-slate-400 font-black text-center">{i + 1}</td>
+                <td className="p-4 font-black text-2xl">{p.name}</td>
+                <td className="p-4 text-center font-black text-3xl">{p.quantity}</td>
+                <td className="p-4 font-bold text-slate-600">{p.notes || '---'}</td>
+              </tr>
+            ))}
+            {/* Fill empty rows to maintain fixed height if needed */}
+            {Array.from({ length: Math.max(0, 5 - receipt.products.length) }).map((_, i) => (
+              <tr key={`empty-${i}`} className="border-b border-slate-100 h-16">
+                <td className="p-4"></td>
+                <td className="p-4"></td>
+                <td className="p-4"></td>
+                <td className="p-4"></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Ratings Section */}
+      <div className="grid grid-cols-2 gap-6 mb-8">
+        <div className="p-6 border-2 border-slate-900 rounded-3xl bg-slate-50">
+          <p className="font-black text-slate-900 mb-4 text-lg border-b-2 border-slate-200 pb-2">تقييم جودة المنتج</p>
+          <div className="flex justify-between px-2">
+            {['ممتاز', 'جيد جداً', 'جيد', 'مقبول'].map(rating => (
+              <div key={rating} className="flex flex-col items-center gap-2">
+                <div className={`w-8 h-8 border-4 border-slate-300 rounded-xl flex items-center justify-center ${receipt.productRating === rating ? 'bg-red-600 border-red-600 text-white shadow-lg' : 'bg-white'}`}>
+                  {receipt.productRating === rating && <CheckCircle2 size={16} />}
+                </div>
+                <span className="text-xs font-black text-slate-600">{rating}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="p-6 border-2 border-slate-900 rounded-3xl bg-slate-50">
+          <p className="font-black text-slate-900 mb-4 text-lg border-b-2 border-slate-200 pb-2">تقييم فريق التوصيل ({receipt.deliveryTeam})</p>
+          <div className="flex justify-between px-2">
+            {['ممتاز', 'جيد جداً', 'جيد', 'مقبول'].map(rating => (
+              <div key={rating} className="flex flex-col items-center gap-2">
+                <div className={`w-8 h-8 border-4 border-slate-300 rounded-xl flex items-center justify-center ${receipt.teamRating === rating ? 'bg-slate-900 border-slate-900 text-white shadow-lg' : 'bg-white'}`}>
+                  {receipt.teamRating === rating && <CheckCircle2 size={16} />}
+                </div>
+                <span className="text-xs font-black text-slate-600">{rating}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Legal Acknowledgment - Fixed Box */}
+      <div className="p-8 border-4 border-red-600 rounded-[40px] mb-8 relative bg-red-50/30">
+        <div className="absolute -top-6 right-12 bg-red-600 text-white px-8 py-2 rounded-full font-black text-xl shadow-lg">إقرار استلام نهائي</div>
+        <p className="font-black text-slate-800 leading-[1.8] text-xl text-justify">
+          أقر أنا الموقع أدناه بأنني قد استلمت كافة المنتجات المذكورة أعلاه من شركة <span className="text-red-600 font-black underline decoration-2 underline-offset-4">{companyInfo.name}</span> وفروعها، 
+          وأنني قد قمت بمعاينة المنتجات معاينة تامة نافية للجهالة ووجدتها مطابقة للمواصفات المتفق عليها وخالية من أي عيوب صناعة ظاهرة. 
+          كما أقر بأنني قد سددت كامل القيمة المستحقة للشركة، وبناءً عليه أخلي طرف الشركة من أي مسؤولية تتعلق بالمنتجات المستلمة بعد التوقيع على هذا الإقرار.
+        </p>
+      </div>
+
+      {/* Signatures Section */}
+      <div className="grid grid-cols-3 gap-8 mt-12">
+        <div className="text-center space-y-8">
+          <p className="font-black text-slate-400 uppercase tracking-widest text-xs">توقيع العميل</p>
+          <div className="h-20 border-b-2 border-slate-900 mx-4" />
+          <p className="font-bold text-slate-900">{receipt.clientName}</p>
+        </div>
+        <div className="flex flex-col items-center justify-center">
+          <div className="w-32 h-32 border-4 border-slate-200 rounded-full flex items-center justify-center text-slate-200 font-black text-[10px] uppercase tracking-tighter text-center p-4 border-dashed">
+            ختم الشركة المعتمد
+          </div>
+        </div>
+        <div className="text-center space-y-8">
+          <p className="font-black text-slate-400 uppercase tracking-widest text-xs">توقيع مسؤول التسليم</p>
+          <div className="h-20 border-b-2 border-slate-900 mx-4" />
+          <p className="font-bold text-slate-900">{receipt.deliveryTeam}</p>
+        </div>
+      </div>
+
+      {/* Footer Info */}
+      <div className="absolute bottom-6 left-8 right-8 flex justify-between items-end border-t border-slate-200 pt-4">
+        <div className="text-[10px] font-black text-slate-400 space-y-1">
+          <p>المركز الرئيسي: 84 جوزيف تيتو - النزهة الجديدة</p>
+          <p>خدمة العملاء: {companyInfo.phone}</p>
+        </div>
+        <div className="text-[10px] font-black text-slate-300">
+          طبع بواسطة نظام {companyInfo.name} لإدارة الموارد - {new Date().toLocaleDateString('ar-EG')}
         </div>
       </div>
     </div>
@@ -2856,6 +3033,396 @@ function LoadingManifests({ manifests, companyInfo }: { manifests: LoadingManife
             </Card>
           </div>
           <PrintManifest manifest={selectedManifest} companyInfo={companyInfo} />
+        </>
+      )}
+    </div>
+  );
+}
+
+function DeliveryReceipts({ receipts, companyInfo }: { receipts: DeliveryReceipt[], companyInfo: any }) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedReceipt, setSelectedReceipt] = useState<DeliveryReceipt | null>(null);
+  const [formData, setFormData] = useState<Omit<DeliveryReceipt, 'id'>>({
+    date: new Date().toISOString().split('T')[0],
+    receiptNumber: `REC-${Math.floor(1000 + Math.random() * 9000)}`,
+    orderNumber: '',
+    clientName: '',
+    salesPerson: '',
+    deliveryTeam: '',
+    branch: '',
+    address: '',
+    phone: '',
+    products: [{ name: '', quantity: 1, notes: '' }],
+    productRating: 'ممتاز',
+    teamRating: 'ممتاز',
+    notes: ''
+  });
+
+  const handleAddProduct = () => {
+    setFormData({
+      ...formData,
+      products: [...formData.products, { name: '', quantity: 1, notes: '' }]
+    });
+  };
+
+  const handleRemoveProduct = (index: number) => {
+    setFormData({
+      ...formData,
+      products: formData.products.filter((_, i) => i !== index)
+    });
+  };
+
+  const handleProductChange = (index: number, field: string, value: any) => {
+    const newProducts = [...formData.products];
+    newProducts[index] = { ...newProducts[index], [field]: value };
+    setFormData({ ...formData, products: newProducts });
+  };
+
+  const handleSave = async () => {
+    try {
+      if (editingId) {
+        await updateDoc(doc(db, 'deliveryReceipts', editingId), {
+          ...formData,
+          updatedAt: serverTimestamp()
+        });
+      } else {
+        await addDoc(collection(db, 'deliveryReceipts'), {
+          ...formData,
+          createdAt: serverTimestamp()
+        });
+      }
+      setShowAdd(false);
+      setEditingId(null);
+      setFormData({
+        date: new Date().toISOString().split('T')[0],
+        receiptNumber: `REC-${Math.floor(1000 + Math.random() * 9000)}`,
+        orderNumber: '',
+        clientName: '',
+        salesPerson: '',
+        deliveryTeam: '',
+        branch: '',
+        address: '',
+        phone: '',
+        products: [{ name: '', quantity: 1, notes: '' }],
+        productRating: 'ممتاز',
+        teamRating: 'ممتاز',
+        notes: ''
+      });
+    } catch (err) {
+      handleFirestoreError(err, editingId ? 'update' : 'create', 'deliveryReceipts');
+    }
+  };
+
+  const handleEdit = (receipt: DeliveryReceipt) => {
+    setEditingId(receipt.id);
+    setFormData({
+      date: receipt.date,
+      receiptNumber: receipt.receiptNumber || `REC-${Math.floor(1000 + Math.random() * 9000)}`,
+      orderNumber: receipt.orderNumber || '',
+      clientName: receipt.clientName,
+      salesPerson: receipt.salesPerson || '',
+      deliveryTeam: receipt.deliveryTeam || '',
+      branch: receipt.branch,
+      address: receipt.address || '',
+      phone: receipt.phone || '',
+      products: receipt.products,
+      productRating: receipt.productRating || 'ممتاز',
+      teamRating: receipt.teamRating || 'ممتاز',
+      notes: receipt.notes || ''
+    });
+    setShowAdd(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'deliveryReceipts', id));
+      setShowDeleteConfirm(null);
+    } catch (err) {
+      handleFirestoreError(err, 'delete', 'deliveryReceipts');
+    }
+  };
+
+  const filteredReceipts = receipts.filter(r => 
+    r.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    r.branch.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+          <h2 className="text-2xl md:text-4xl font-black tracking-tight text-slate-900">محاضر الاستلام</h2>
+          <p className="text-slate-500 mt-1 font-medium text-sm md:text-base">إدارة وطباعة تقارير استلام المنتجات</p>
+        </div>
+        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
+          <div className="relative w-full md:w-64">
+            <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <Input 
+              placeholder="بحث في المحاضر..." 
+              className="pr-12 h-10 md:h-12 rounded-xl md:rounded-2xl border-slate-200 bg-white font-bold text-sm md:text-base"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <Button onClick={() => { setEditingId(null); setShowAdd(true); }} className="btn-primary h-10 md:h-12 px-6 md:px-8 whitespace-nowrap text-sm md:text-base">
+            <Plus size={18} className="ml-2" />
+            إضافة محضر جديد
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredReceipts.slice().reverse().map(r => (
+          <Card key={r.id} className="dribbble-card group overflow-hidden">
+            <CardHeader className="pb-4">
+              <div className="flex justify-between items-start">
+                <Badge className="rounded-lg px-2 py-0.5 font-black uppercase tracking-widest border-none bg-red-100 text-red-600">
+                  {r.branch}
+                </Badge>
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                  <Button variant="ghost" size="icon" onClick={() => setSelectedReceipt(r)} className="h-8 w-8 rounded-lg text-slate-400 hover:text-primary hover:bg-blue-50">
+                    <FileText size={16} />
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={() => handleEdit(r)} className="h-8 w-8 rounded-lg text-slate-400 hover:text-primary hover:bg-blue-50">
+                    <Edit2 size={16} />
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={() => setShowDeleteConfirm(r.id)} className="h-8 w-8 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50">
+                    <Trash2 size={16} />
+                  </Button>
+                </div>
+              </div>
+              <CardTitle className="mt-4 text-xl font-black text-slate-900">{r.clientName}</CardTitle>
+              <CardDescription className="font-bold text-slate-400">{r.date}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex justify-between items-center p-3 bg-slate-50 rounded-xl">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">عدد المنتجات</span>
+                <span className="font-black text-primary">{r.products.length}</span>
+              </div>
+              <div className="flex justify-between items-center p-3 bg-slate-50 rounded-xl">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">تقييم المنتج</span>
+                <span className="font-black text-green-600">{r.productRating}</span>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Confirm Delete Dialog */}
+      <ConfirmDialog 
+        isOpen={!!showDeleteConfirm}
+        title="حذف المحضر"
+        message="هل أنت متأكد من حذف هذا المحضر؟ لا يمكن التراجع عن هذا الإجراء."
+        onConfirm={() => showDeleteConfirm && handleDelete(showDeleteConfirm)}
+        onCancel={() => setShowDeleteConfirm(null)}
+      />
+
+      {/* Add/Edit Dialog */}
+      {showAdd && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+          <Card className="dribbble-card w-full max-w-4xl max-h-[90vh] overflow-auto my-8">
+            <CardHeader>
+              <CardTitle className="font-black text-2xl">{editingId ? 'تعديل محضر استلام' : 'إضافة محضر استلام جديد'}</CardTitle>
+              <CardDescription className="font-medium">أدخل تفاصيل الاستلام والمنتجات بدقة</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">رقم الإيصال</label>
+                  <Input className="rounded-xl h-11 bg-slate-50" value={formData.receiptNumber} readOnly />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">التاريخ</label>
+                  <Input type="date" className="rounded-xl h-11" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">رقم العقد / الطلب</label>
+                  <Input className="rounded-xl h-11" value={formData.orderNumber} onChange={e => setFormData({...formData, orderNumber: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">اسم العميل</label>
+                  <Input className="rounded-xl h-11" value={formData.clientName} onChange={e => setFormData({...formData, clientName: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">البائع</label>
+                  <Input className="rounded-xl h-11" value={formData.salesPerson} onChange={e => setFormData({...formData, salesPerson: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">فريق التوصيل</label>
+                  <Input className="rounded-xl h-11" value={formData.deliveryTeam} onChange={e => setFormData({...formData, deliveryTeam: e.target.value})} placeholder="مثلاً: فريق أ / كابتن محمد" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">الفرع</label>
+                  <select 
+                    className="w-full h-11 rounded-xl border border-slate-200 px-4 font-bold"
+                    value={formData.branch}
+                    onChange={e => setFormData({...formData, branch: e.target.value})}
+                  >
+                    <option value="">--- اختر الفرع ---</option>
+                    <option value="النزهة الجديدة">النزهة الجديدة</option>
+                    <option value="مدينة نصر">مدينة نصر</option>
+                    <option value="أرض الجولف">أرض الجولف</option>
+                    <option value="دمياط">دمياط</option>
+                    <option value="أخرى">أخرى</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">العنوان</label>
+                  <Input className="rounded-xl h-11" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">رقم الهاتف</label>
+                  <Input className="rounded-xl h-11" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-black text-xl text-slate-900">المنتجات المستلمة</h3>
+                  <Button variant="outline" size="sm" onClick={handleAddProduct} className="rounded-xl font-black border-slate-200 text-primary hover:bg-blue-50">
+                    <Plus size={16} className="ml-2" />
+                    إضافة منتج
+                  </Button>
+                </div>
+                
+                <div className="grid grid-cols-1 gap-4">
+                  {formData.products.map((p, idx) => (
+                    <div key={idx} className="p-6 bg-slate-50/50 rounded-2xl border border-slate-100 space-y-4 relative group">
+                      {formData.products.length > 1 && (
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="absolute top-4 left-4 text-slate-300 hover:text-red-500 hover:bg-red-50 h-8 w-8 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                          onClick={() => handleRemoveProduct(idx)}
+                        >
+                          <Trash2 size={16} />
+                        </Button>
+                      )}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="md:col-span-2 space-y-2">
+                          <label className="text-xs font-black text-slate-400 uppercase tracking-widest">اسم المنتج</label>
+                          <Input className="rounded-xl h-11 bg-white" value={p.name} onChange={e => handleProductChange(idx, 'name', e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-black text-slate-400 uppercase tracking-widest">الكمية</label>
+                          <Input type="number" className="rounded-xl h-11 bg-white" value={p.quantity} onChange={e => handleProductChange(idx, 'quantity', parseInt(e.target.value))} />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">ملاحظات المنتج</label>
+                        <Input className="rounded-xl h-11 bg-white" value={p.notes} onChange={e => handleProductChange(idx, 'notes', e.target.value)} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">تقييم المنتج</label>
+                  <select 
+                    className="w-full h-11 rounded-xl border border-slate-200 px-4 font-bold"
+                    value={formData.productRating}
+                    onChange={e => setFormData({...formData, productRating: e.target.value as any})}
+                  >
+                    <option value="مقبول">مقبول</option>
+                    <option value="جيد">جيد</option>
+                    <option value="جيد جداً">جيد جداً</option>
+                    <option value="ممتاز">ممتاز</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">تقييم فريق العمل</label>
+                  <select 
+                    className="w-full h-11 rounded-xl border border-slate-200 px-4 font-bold"
+                    value={formData.teamRating}
+                    onChange={e => setFormData({...formData, teamRating: e.target.value as any})}
+                  >
+                    <option value="مقبول">مقبول</option>
+                    <option value="جيد">جيد</option>
+                    <option value="جيد جداً">جيد جداً</option>
+                    <option value="ممتاز">ممتاز</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">ملاحظات عامة</label>
+                <Input className="rounded-xl h-11" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4">
+                <Button variant="ghost" className="rounded-xl font-bold h-12 px-8" onClick={() => { setShowAdd(false); setEditingId(null); }}>إلغاء</Button>
+                <Button onClick={handleSave} className="btn-primary px-10 h-12 font-black">
+                  {editingId ? 'حفظ التعديلات' : 'حفظ المحضر'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Print Dialog */}
+      {selectedReceipt && (
+        <>
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto print:hidden">
+            <Card className="dribbble-card w-full max-w-4xl my-8 bg-white overflow-hidden">
+              <CardHeader className="border-b border-slate-100 flex flex-row justify-between items-center bg-slate-50/50">
+                <div className="text-right">
+                  <CardTitle className="text-3xl font-black text-slate-900">محضر استلام منتج</CardTitle>
+                  <CardDescription className="font-bold text-primary text-lg">{companyInfo.name}</CardDescription>
+                </div>
+                <div className="flex gap-3">
+                  <Button onClick={() => window.print()} className="btn-primary rounded-xl font-black px-6">
+                    <Printer size={18} className="ml-2" />
+                    طباعة
+                  </Button>
+                  <Button variant="ghost" onClick={() => setSelectedReceipt(null)} className="rounded-xl font-bold text-slate-400">إغلاق</Button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-10">
+                <div className="border-2 border-slate-100 rounded-3xl p-8 space-y-8">
+                   <div className="grid grid-cols-2 gap-8">
+                      <div className="space-y-4">
+                        <p className="font-black text-slate-400 text-xs uppercase tracking-widest">بيانات العميل</p>
+                        <p className="text-xl font-black">{selectedReceipt.clientName}</p>
+                        <p className="font-bold text-slate-600">{selectedReceipt.branch}</p>
+                      </div>
+                      <div className="text-left space-y-4">
+                        <p className="font-black text-slate-400 text-xs uppercase tracking-widest">التاريخ</p>
+                        <p className="text-xl font-black">{selectedReceipt.date}</p>
+                      </div>
+                   </div>
+                   
+                   <div className="space-y-4">
+                      <p className="font-black text-slate-400 text-xs uppercase tracking-widest">المنتجات</p>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="text-right font-black">المنتج</TableHead>
+                            <TableHead className="text-center font-black">الكمية</TableHead>
+                            <TableHead className="text-right font-black">ملاحظات</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {selectedReceipt.products.map((p, i) => (
+                            <TableRow key={i}>
+                              <TableCell className="font-bold">{p.name}</TableCell>
+                              <TableCell className="text-center font-bold">{p.quantity}</TableCell>
+                              <TableCell className="text-slate-600">{p.notes || '---'}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                   </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          <PrintDeliveryReceipt receipt={selectedReceipt} companyInfo={companyInfo} />
         </>
       )}
     </div>

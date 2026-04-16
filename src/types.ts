@@ -243,6 +243,28 @@ export interface SupplierPayment {
   notes: string;
 }
 
+export interface DeliveryReceipt {
+  id: string;
+  date: string;
+  receiptNumber: string;
+  orderNumber: string;
+  clientName: string;
+  salesPerson: string;
+  deliveryTeam: string;
+  branch: string;
+  address?: string;
+  phone?: string;
+  products: {
+    name: string;
+    quantity: number;
+    notes?: string;
+  }[];
+  productRating?: 'مقبول' | 'جيد' | 'جيد جداً' | 'ممتاز';
+  teamRating?: 'مقبول' | 'جيد' | 'جيد جداً' | 'ممتاز';
+  notes?: string;
+  createdAt?: any;
+}
+
 export type OperationType = 'create' | 'update' | 'delete' | 'list' | 'get' | 'write';
 
 export interface FirestoreErrorInfo {

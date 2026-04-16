@@ -45,6 +45,10 @@ service cloud.firestore {
     // Collection: jobOtherCosts
     // Fields: jobId (string), date (string), description (string), amount (number), notes (string)
     //
+    // Collection: deliveryReceipts
+    // Fields: date (string), clientName (string), branch (string), address (string), 
+    //         phone (string), products (array), productRating (string), teamRating (string), notes (string)
+    //
     // ===============================================================
 
     // ===============================================================
@@ -171,6 +175,15 @@ service cloud.firestore {
     match /jobOtherCosts/{id} {
       allow read: if isAuthenticated();
       allow write: if isAuthenticated();
+    }
+
+    match /deliveryReceipts/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    match /test/{id} {
+      allow read: if true;
     }
   }
 }

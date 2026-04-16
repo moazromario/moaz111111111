@@ -324,6 +324,33 @@
         "notes": { "type": "string" }
       },
       "required": ["jobId", "stage", "date", "description", "amount"]
+    },
+    "DeliveryReceipt": {
+      "title": "DeliveryReceipt",
+      "description": "A client delivery receipt",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date" },
+        "clientName": { "type": "string" },
+        "branch": { "type": "string" },
+        "address": { "type": "string" },
+        "phone": { "type": "string" },
+        "products": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "quantity": { "type": "number" },
+              "notes": { "type": "string" }
+            }
+          }
+        },
+        "productRating": { "type": "string", "enum": ["مقبول", "جيد", "جيد جداً", "ممتاز"] },
+        "teamRating": { "type": "string", "enum": ["مقبول", "جيد", "جيد جداً", "ممتاز"] },
+        "notes": { "type": "string" }
+      },
+      "required": ["date", "clientName", "branch", "products"]
     }
   },
   "firestore": {
@@ -347,6 +374,7 @@
     "/payrolls/{id}": { "schema": "Payroll", "description": "Payroll records" },
     "/supplierPayments/{id}": { "schema": "SupplierPayment", "description": "Supplier payment records" },
     "/jobLabors/{id}": { "schema": "JobLabor", "description": "Job labor cost records" },
-    "/jobOtherCosts/{id}": { "schema": "JobOtherCost", "description": "Job other cost records" }
+    "/jobOtherCosts/{id}": { "schema": "JobOtherCost", "description": "Job other cost records" },
+    "/deliveryReceipts/{id}": { "schema": "DeliveryReceipt", "description": "Client delivery receipts" }
   }
 }
