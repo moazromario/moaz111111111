@@ -41,7 +41,8 @@ import {
   ChevronDown,
   Building2,
   ShieldAlert,
-  Save
+  Save,
+  MessageSquare
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
@@ -73,8 +74,8 @@ import {
   Legend
 } from 'recharts';
 import { db } from './firebase';
-import { collection, onSnapshot, query, addDoc, updateDoc, deleteDoc, doc, increment, serverTimestamp } from 'firebase/firestore';
-import { Item, Supplier, Purchase, Issuance, Warehouse, Unit, CostCenter, ProductionJob, LoadingManifest, DeliveryReceipt, Waste, BladeSharpening, PlateSharpening, MachineMaintenance, Employee, Attendance, FinancialTransaction, Loan, Payroll, SupplierPayment, JobLabor, JobOtherCost } from './types';
+import { collection, onSnapshot, query, addDoc, updateDoc, deleteDoc, doc, increment, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { Item, Supplier, Purchase, Issuance, Warehouse, Unit, CostCenter, ProductionJob, LoadingManifest, DeliveryReceipt, Waste, BladeSharpening, PlateSharpening, MachineMaintenance, Employee, Attendance, FinancialTransaction, Loan, Payroll, SupplierPayment, JobLabor, JobOtherCost, ProductionRecord } from './types';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import * as XLSX from 'xlsx';
@@ -244,6 +245,7 @@ function MainApp() {
   const [hrTransactions, setHrTransactions] = useState<FinancialTransaction[]>([]);
   const [loans, setLoans] = useState<Loan[]>([]);
   const [payrolls, setPayrolls] = useState<Payroll[]>([]);
+  const [productionRecords, setProductionRecords] = useState<ProductionRecord[]>([]);
   const [supplierPayments, setSupplierPayments] = useState<SupplierPayment[]>([]);
   const [jobLabors, setJobLabors] = useState<JobLabor[]>([]);
   const [jobOtherCosts, setJobOtherCosts] = useState<JobOtherCost[]>([]);
@@ -331,6 +333,10 @@ function MainApp() {
       setPayrolls(snap.docs.map(d => ({ id: d.id, ...d.data() } as Payroll)));
     }, (err) => handleFirestoreError(err, 'list', 'payrolls'));
 
+    const unsubProductionRecords = onSnapshot(collection(db, 'productionRecords'), (snap) => {
+      setProductionRecords(snap.docs.map(d => ({ id: d.id, ...d.data() } as ProductionRecord)));
+    }, (err) => handleFirestoreError(err, 'list', 'productionRecords'));
+
     const unsubSupplierPayments = onSnapshot(collection(db, 'supplierPayments'), (snap) => {
       setSupplierPayments(snap.docs.map(d => ({ id: d.id, ...d.data() } as SupplierPayment)));
     }, (err) => handleFirestoreError(err, 'list', 'supplierPayments'));
@@ -366,6 +372,7 @@ function MainApp() {
       unsubHrTransactions();
       unsubLoans();
       unsubPayrolls();
+      unsubProductionRecords();
       unsubSupplierPayments();
       unsubJobLabors();
       unsubJobOtherCosts();
@@ -608,13 +615,13 @@ function MainApp() {
             <button 
               onClick={() => setHrMenuOpen(!hrMenuOpen)}
               className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all duration-300 group ${
-                ['employees', 'attendance', 'loans', 'payroll', 'hrTransactions'].includes(activeTab) 
+                ['employees', 'attendance', 'loans', 'payroll', 'hrTransactions', 'hrProduction'].includes(activeTab) 
                 ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-[-4px]' 
                 : 'text-slate-500 hover:bg-blue-50 hover:text-primary'
               }`}
             >
               <div className="flex items-center gap-3">
-                <div className={`transition-transform duration-300 ${['employees', 'attendance', 'loans', 'payroll', 'hrTransactions'].includes(activeTab) ? 'scale-110' : 'group-hover:scale-110'}`}>
+                <div className={`transition-transform duration-300 ${['employees', 'attendance', 'loans', 'payroll', 'hrTransactions', 'hrProduction'].includes(activeTab) ? 'scale-110' : 'group-hover:scale-110'}`}>
                   <DollarSign size={20} />
                 </div>
                 <span className="font-bold text-sm tracking-tight">الأجور والمرتبات</span>
@@ -626,6 +633,7 @@ function MainApp() {
               <div className="mr-4 pr-4 border-r-2 border-slate-100 space-y-1.5">
                 <SubNavButton active={activeTab === 'employees'} onClick={() => handleNavClick('employees')} label="الموظفين" />
                 <SubNavButton active={activeTab === 'attendance'} onClick={() => handleNavClick('attendance')} label="الحضور والانصراف" />
+                <SubNavButton active={activeTab === 'hrProduction'} onClick={() => handleNavClick('hrProduction')} label="سجل الإنتاج (لعمال القطعة)" />
                 <SubNavButton active={activeTab === 'hrTransactions'} onClick={() => handleNavClick('hrTransactions')} label="الحركات المالية" />
                 <SubNavButton active={activeTab === 'loans'} onClick={() => handleNavClick('loans')} label="إدارة السلف" />
                 <SubNavButton active={activeTab === 'payroll'} onClick={() => handleNavClick('payroll')} label="كشوف الرواتب" />
@@ -712,9 +720,19 @@ function MainApp() {
         {activeTab === 'machineMaintenance' && <MachineMaintenanceView records={machineMaintenance} />}
         {activeTab === 'employees' && <EmployeesView employees={employees} />}
         {activeTab === 'attendance' && <AttendanceView employees={employees} attendance={attendance} />}
+        {activeTab === 'hrProduction' && <ProductionView employees={employees} productionRecords={productionRecords} />}
         {activeTab === 'hrTransactions' && <HRTransactionsView employees={employees} transactions={hrTransactions} />}
         {activeTab === 'loans' && <LoansView employees={employees} loans={loans} payrolls={payrolls} hrTransactions={hrTransactions} />}
-        {activeTab === 'payroll' && <PayrollView employees={employees} attendance={attendance} transactions={hrTransactions} loans={loans} payrolls={payrolls} />}
+        {activeTab === 'payroll' && (
+          <PayrollView 
+            employees={employees} 
+            attendance={attendance} 
+            transactions={hrTransactions} 
+            loans={loans} 
+            payrolls={payrolls} 
+            productionRecords={productionRecords} 
+          />
+        )}
         {activeTab === 'archive' && <ArchiveView employees={employees} payrolls={payrolls} />}
         {activeTab === 'suppliers' && <Suppliers suppliers={suppliers} purchases={purchases} items={items} supplierPayments={supplierPayments} />}
         {activeTab === 'reports' && <ReportsView items={items} suppliers={suppliers} purchases={purchases} issuances={issuances} warehouses={warehouses} productionJobs={productionJobs} jobLabors={jobLabors} jobOtherCosts={jobOtherCosts} />}
@@ -5287,11 +5305,15 @@ function EmployeesView({ employees }: { employees: Employee[] }) {
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [selectedDept, setSelectedDept] = useState<string>('الكل');
+  const [searchTerm, setSearchTerm] = useState('');
   const [formData, setFormData] = useState({
     name: '',
     position: '',
     department: '',
     dailyRate: 0,
+    payMethod: 'daily' as 'daily' | 'production',
+    pieceRate: 0,
+    phone: '',
     hireDate: format(new Date(), 'yyyy-MM-dd'),
     status: 'نشط' as const,
     shiftStart: '08:00',
@@ -5300,16 +5322,29 @@ function EmployeesView({ employees }: { employees: Employee[] }) {
 
   const departments = ['الكل', ...Array.from(new Set(employees.map(e => e.department).filter(Boolean))) as string[]];
 
-  const filteredEmployees = selectedDept === 'الكل' 
-    ? employees 
-    : employees.filter(e => e.department === selectedDept);
+  const filteredEmployees = employees.filter(e => {
+    const matchesDept = selectedDept === 'الكل' || e.department === selectedDept;
+    const matchesSearch = e.name.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesDept && matchesSearch;
+  });
 
   const handleAdd = async () => {
-    if (!formData.name || formData.dailyRate <= 0) return;
+    if (!formData.name) {
+      alert('يرجى إدخال اسم الموظف');
+      return;
+    }
+    if (formData.payMethod === 'daily' && formData.dailyRate <= 0) {
+      alert('يرجى إدخال قيمة اليومية');
+      return;
+    }
+    if (formData.payMethod === 'production' && (formData.pieceRate || 0) <= 0) {
+      alert('يرجى إدخال سعر القطعة الافتراضي');
+      return;
+    }
     try {
       await addDoc(collection(db, 'employees'), formData);
       setShowAdd(false);
-      setFormData({ name: '', position: '', department: '', dailyRate: 0, hireDate: format(new Date(), 'yyyy-MM-dd'), status: 'نشط', shiftStart: '08:00', shiftEnd: '18:00' });
+      setFormData({ name: '', position: '', department: '', dailyRate: 0, payMethod: 'daily', pieceRate: 0, phone: '', hireDate: format(new Date(), 'yyyy-MM-dd'), status: 'نشط', shiftStart: '08:00', shiftEnd: '18:00' });
     } catch (err) { handleFirestoreError(err, 'write', 'employees'); }
   };
 
@@ -5337,7 +5372,16 @@ function EmployeesView({ employees }: { employees: Employee[] }) {
           <h2 className="text-2xl md:text-4xl font-black tracking-tight text-slate-900">الموظفين</h2>
           <p className="text-slate-500 mt-1 font-medium text-sm md:text-base">إدارة بيانات الموظفين والرواتب اليومية</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <Input 
+              className="h-10 md:h-12 w-64 rounded-2xl border-slate-200 pr-10 font-bold text-sm" 
+              placeholder="بحث بالاسم..." 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
           <select 
             className="h-10 md:h-12 rounded-2xl border border-slate-200 px-4 bg-white font-bold text-sm"
             value={selectedDept}
@@ -5391,12 +5435,18 @@ function EmployeesView({ employees }: { employees: Employee[] }) {
               <div className="space-y-4">
                 <div className="flex items-center justify-between pt-4 border-t border-slate-100">
                   <div className="flex flex-col">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">اليومية</span>
-                    <span className="font-black text-slate-900">{emp.dailyRate.toLocaleString()} ج.م</span>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{emp.payMethod === 'daily' ? 'اليومية' : 'سعر القطعة'}</span>
+                    <span className="font-black text-slate-900">{(emp.payMethod === 'daily' ? emp.dailyRate : (emp.pieceRate || 0)).toLocaleString()} ج.م</span>
                   </div>
                   <div className="flex flex-col items-end">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">سعر الساعة (10س)</span>
                     <span className="font-black text-blue-600">{(emp.dailyRate / 10).toLocaleString()} ج.م</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between pt-2">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">رقم الهاتف</span>
+                    <span className="font-bold text-slate-700 text-xs">{emp.phone || '---'}</span>
                   </div>
                 </div>
                 <div className="flex items-center justify-between pt-2">
@@ -5426,6 +5476,10 @@ function EmployeesView({ employees }: { employees: Employee[] }) {
                 <label className="text-sm font-bold text-slate-700">الاسم بالكامل</label>
                 <Input className="rounded-xl h-11" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
               </div>
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">رقم الهاتف (للواتساب)</label>
+                <Input className="rounded-xl h-11" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="01xxxxxxxxx" />
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-slate-700">الوظيفة / المسمى الوظيفي</label>
@@ -5438,13 +5492,23 @@ function EmployeesView({ employees }: { employees: Employee[] }) {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-700">اليومية</label>
-                  <Input type="number" className="rounded-xl h-11" value={formData.dailyRate} onChange={e => setFormData({...formData, dailyRate: Number(e.target.value)})} />
+                  <label className="text-sm font-bold text-slate-700">نظام القبض</label>
+                  <select className="w-full h-11 rounded-xl border border-slate-200 px-3 bg-white font-bold" value={formData.payMethod} onChange={e => setFormData({...formData, payMethod: e.target.value as any})}>
+                    <option value="daily">باليومية</option>
+                    <option value="production">بالإنتاج (بالقطعة)</option>
+                  </select>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-700">تاريخ التعيين</label>
-                  <Input type="date" className="rounded-xl h-11" value={formData.hireDate} onChange={e => setFormData({...formData, hireDate: e.target.value})} />
-                </div>
+                {formData.payMethod === 'daily' ? (
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-slate-700">اليومية</label>
+                    <Input type="number" className="rounded-xl h-11" value={formData.dailyRate} onChange={e => setFormData({...formData, dailyRate: Number(e.target.value)})} />
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-slate-700">سعر القطعة (افتراضي)</label>
+                    <Input type="number" className="rounded-xl h-11" value={formData.pieceRate} onChange={e => setFormData({...formData, pieceRate: Number(e.target.value)})} />
+                  </div>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -5484,6 +5548,10 @@ function EmployeesView({ employees }: { employees: Employee[] }) {
                 <label className="text-sm font-bold text-slate-700">الاسم بالكامل</label>
                 <Input className="rounded-xl h-11" value={editingEmployee.name} onChange={e => setEditingEmployee({...editingEmployee, name: e.target.value})} />
               </div>
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">رقم الهاتف (للواتساب)</label>
+                <Input className="rounded-xl h-11" value={editingEmployee.phone || ''} onChange={e => setEditingEmployee({...editingEmployee, phone: e.target.value})} placeholder="01xxxxxxxxx" />
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-slate-700">الوظيفة / المسمى الوظيفي</label>
@@ -5496,13 +5564,27 @@ function EmployeesView({ employees }: { employees: Employee[] }) {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-700">اليومية</label>
-                  <Input type="number" className="rounded-xl h-11" value={editingEmployee.dailyRate} onChange={e => setEditingEmployee({...editingEmployee, dailyRate: Number(e.target.value)})} />
+                  <label className="text-sm font-bold text-slate-700">نظام القبض</label>
+                  <select className="w-full h-11 rounded-xl border border-slate-200 px-3 bg-white font-bold" value={editingEmployee.payMethod} onChange={e => setEditingEmployee({...editingEmployee, payMethod: e.target.value as any})}>
+                    <option value="daily">باليومية</option>
+                    <option value="production">بالإنتاج (بالقطعة)</option>
+                  </select>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-700">تاريخ التعيين</label>
-                  <Input type="date" className="rounded-xl h-11" value={editingEmployee.hireDate} onChange={e => setEditingEmployee({...editingEmployee, hireDate: e.target.value})} />
-                </div>
+                {editingEmployee.payMethod === 'daily' ? (
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-slate-700">اليومية</label>
+                    <Input type="number" className="rounded-xl h-11" value={editingEmployee.dailyRate} onChange={e => setEditingEmployee({...editingEmployee, dailyRate: Number(e.target.value)})} />
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-slate-700">سعر القطعة (افتراضي)</label>
+                    <Input type="number" className="rounded-xl h-11" value={editingEmployee.pieceRate} onChange={e => setEditingEmployee({...editingEmployee, pieceRate: Number(e.target.value)})} />
+                  </div>
+                )}
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">تاريخ التعيين</label>
+                <Input type="date" className="rounded-xl h-11" value={editingEmployee.hireDate} onChange={e => setEditingEmployee({...editingEmployee, hireDate: e.target.value})} />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -6624,9 +6706,286 @@ function HRTransactionsView({ employees, transactions }: { employees: Employee[]
   );
 }
 
-function PayrollView({ employees, attendance, transactions, loans, payrolls }: { employees: Employee[], attendance: Attendance[], transactions: FinancialTransaction[], loans: Loan[], payrolls: Payroll[] }) {
+function ProductionView({ employees, productionRecords }: { employees: Employee[], productionRecords: ProductionRecord[] }) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [entryEmployeeId, setEntryEmployeeId] = useState('');
+  const [entryDate, setEntryDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [items, setItems] = useState([{ id: Math.random().toString(36).substr(2, 9), itemName: '', quantity: 0, rate: 0 }]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState('');
+
+  const productionEmployees = employees.filter(e => e.payMethod === 'production');
+
+  const filteredRecords = productionRecords.filter(r => {
+    const employee = employees.find(e => e.id === r.employeeId);
+    if (!employee) return false;
+    
+    // Name search
+    if (searchTerm && !employee.name.toLowerCase().includes(searchTerm.toLowerCase()) && !r.itemName.toLowerCase().includes(searchTerm.toLowerCase())) {
+      return false;
+    }
+    
+    // Date range
+    if (filterStartDate && r.date < filterStartDate) return false;
+    if (filterEndDate && r.date > filterEndDate) return false;
+    
+    return true;
+  });
+
+  const addItem = () => {
+    setItems([...items, { id: Math.random().toString(36).substr(2, 9), itemName: '', quantity: 0, rate: 0 }]);
+  };
+
+  const removeItem = (id: string) => {
+    if (items.length > 1) {
+      setItems(items.filter(item => item.id !== id));
+    }
+  };
+
+  const updateItem = (id: string, field: string, value: any) => {
+    setItems(items.map(item => item.id === id ? { ...item, [field]: value } : item));
+  };
+
+  const handleAdd = async () => {
+    if (!entryEmployeeId) {
+      alert('يرجى اختيار الموظف');
+      return;
+    }
+
+    const validItems = items.filter(item => item.itemName && item.quantity > 0 && item.rate > 0);
+    if (validItems.length === 0) {
+      alert('يرجى إضافة منتج واحد على الأقل ببيانات صحيحة');
+      return;
+    }
+
+    try {
+      const batch = writeBatch(db);
+      validItems.forEach(item => {
+        const docRef = doc(collection(db, 'productionRecords'));
+        batch.set(docRef, {
+          employeeId: entryEmployeeId,
+          date: entryDate,
+          itemName: item.itemName,
+          quantity: item.quantity,
+          rate: item.rate,
+          total: item.quantity * item.rate,
+          createdAt: serverTimestamp()
+        });
+      });
+      
+      await batch.commit();
+      setShowAdd(false);
+      setItems([{ id: Math.random().toString(36).substr(2, 9), itemName: '', quantity: 0, rate: 0 }]);
+      setEntryEmployeeId('');
+    } catch (err) { handleFirestoreError(err, 'write', 'productionRecords'); }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'productionRecords', id));
+    } catch (err) { handleFirestoreError(err, 'delete', 'productionRecords'); }
+  };
+
+  return (
+    <div className="space-y-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+          <h2 className="text-2xl md:text-4xl font-black tracking-tight text-slate-900">سجل الإنتاج</h2>
+          <p className="text-slate-500 mt-1 font-medium text-sm md:text-base">تسجيل إنتاج العمال بالقطعة - يدعم تسجيل عدة أصناف معاً</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <Input 
+              className="h-10 md:h-12 w-48 rounded-2xl border-slate-200 pr-10 font-bold text-sm" 
+              placeholder="بحث بالاسم أو المنتج..." 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <div className="flex items-center gap-2 bg-white px-3 py-1 rounded-2xl border border-slate-200 h-10 md:h-12">
+            <span className="text-[10px] font-bold text-slate-400 uppercase">من:</span>
+            <input type="date" className="border-none p-0 text-sm font-bold focus:ring-0" value={filterStartDate} onChange={e => setFilterStartDate(e.target.value)} />
+            <span className="text-[10px] font-bold text-slate-400 uppercase">إلى:</span>
+            <input type="date" className="border-none p-0 text-sm font-bold focus:ring-0" value={filterEndDate} onChange={e => setFilterEndDate(e.target.value)} />
+          </div>
+          <Button onClick={() => setShowAdd(true)} className="btn-primary h-10 md:h-12 px-6 md:px-8">
+            <Plus size={18} className="ml-2" />
+            إضافة سجل جديد
+          </Button>
+        </div>
+      </div>
+
+      <Card className="dribbble-card overflow-hidden border-none shadow-sm">
+        <Table>
+          <TableHeader className="bg-slate-50/50">
+            <TableRow>
+              <TableHead className="text-right font-black text-slate-900 py-5">تاريخ</TableHead>
+              <TableHead className="text-right font-black text-slate-900">الموظف</TableHead>
+              <TableHead className="text-right font-black text-slate-900">البيان (المنتج)</TableHead>
+              <TableHead className="text-right font-black text-slate-900">الكمية</TableHead>
+              <TableHead className="text-right font-black text-slate-900">سعر القطعة</TableHead>
+              <TableHead className="text-right font-black text-slate-900">الإجمالي</TableHead>
+              <TableHead className="text-right font-black text-slate-900">إجراءات</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filteredRecords.slice().sort((a, b) => b.date.localeCompare(a.date)).map(record => (
+              <TableRow key={record.id} className="hover:bg-slate-50/50 transition-colors">
+                <TableCell className="font-bold text-slate-500">{record.date}</TableCell>
+                <TableCell className="font-black text-slate-900">{employees.find(e => e.id === record.employeeId)?.name}</TableCell>
+                <TableCell className="font-bold text-slate-600">{record.itemName}</TableCell>
+                <TableCell className="font-black text-blue-600">{record.quantity} قطعة</TableCell>
+                <TableCell className="font-bold text-slate-600">{record.rate.toLocaleString()} ج.م</TableCell>
+                <TableCell className="font-black text-primary text-lg">{record.total.toLocaleString()} ج.م</TableCell>
+                <TableCell>
+                  <Button onClick={() => handleDelete(record.id)} variant="ghost" size="icon" className="text-red-600 hover:bg-red-50">
+                    <Trash2 size={16} />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
+
+      {showAdd && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto py-10">
+          <Card className="dribbble-card w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+            <CardHeader className="flex-shrink-0 border-b border-slate-100 flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="font-black text-2xl">تسجيل إنتاج جديد</CardTitle>
+                <CardDescription className="font-bold">يمكنك إضافة عدة منتجات في سجل واحد</CardDescription>
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => setShowAdd(false)} className="rounded-full">
+                <X size={20} />
+              </Button>
+            </CardHeader>
+            <CardContent className="flex-grow overflow-auto py-6 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">الموظف</label>
+                  <select 
+                    className="w-full h-11 rounded-xl border border-slate-200 px-3 bg-white font-bold" 
+                    value={entryEmployeeId} 
+                    onChange={e => {
+                      const empId = e.target.value;
+                      const emp = productionEmployees.find(emp => emp.id === empId);
+                      setEntryEmployeeId(empId);
+                      // Update rates for items if it's the first time
+                      if (items.length === 1 && items[0].rate === 0) {
+                        setItems(items.map(item => ({...item, rate: emp?.pieceRate || 0})));
+                      }
+                    }}
+                  >
+                    <option value="">اختر الموظف...</option>
+                    {productionEmployees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">التاريخ</label>
+                  <Input type="date" className="rounded-xl h-11" value={entryDate} onChange={e => setEntryDate(e.target.value)} />
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-black text-slate-900 border-r-4 border-primary pr-3">قائمة المنتجات / العمليات</h4>
+                  <Button onClick={addItem} variant="outline" size="sm" className="rounded-xl border-primary text-primary hover:bg-primary/5 font-bold h-9">
+                    <Plus size={16} className="ml-2" />
+                    إضافة سطر جديد
+                  </Button>
+                </div>
+
+                <div className="border rounded-2xl overflow-hidden">
+                  <Table>
+                    <TableHeader className="bg-slate-50/50">
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="text-right font-black text-slate-700 w-[40%]">المنتج / العملية</TableHead>
+                        <TableHead className="text-right font-black text-slate-700">الكمية</TableHead>
+                        <TableHead className="text-right font-black text-slate-700">سعر القطعة</TableHead>
+                        <TableHead className="text-right font-black text-slate-700">الإجمالي</TableHead>
+                        <TableHead className="w-[50px]"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {items.map((item, index) => (
+                        <TableRow key={item.id} className="hover:bg-slate-50/20">
+                          <TableCell className="p-2">
+                            <Input 
+                              className="rounded-lg h-10 border-slate-200" 
+                              placeholder="مثال: تجميع غرفة نوم"
+                              value={item.itemName}
+                              onChange={(e) => updateItem(item.id, 'itemName', e.target.value)}
+                            />
+                          </TableCell>
+                          <TableCell className="p-2">
+                            <Input 
+                              type="number" 
+                              className="rounded-lg h-10 border-slate-200" 
+                              value={item.quantity}
+                              onChange={(e) => updateItem(item.id, 'quantity', Number(e.target.value))}
+                            />
+                          </TableCell>
+                          <TableCell className="p-2">
+                            <Input 
+                              type="number" 
+                              className="rounded-lg h-10 border-slate-200" 
+                              value={item.rate}
+                              onChange={(e) => updateItem(item.id, 'rate', Number(e.target.value))}
+                            />
+                          </TableCell>
+                          <TableCell className="p-2 font-black text-slate-900">
+                            {(item.quantity * item.rate).toLocaleString()}
+                          </TableCell>
+                          <TableCell className="p-2">
+                            {items.length > 1 && (
+                              <Button variant="ghost" size="icon" onClick={() => removeItem(item.id)} className="text-red-500 hover:bg-red-50 h-8 w-8">
+                                <Trash2 size={14} />
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+
+              <div className="p-5 bg-slate-50 rounded-2xl flex justify-between items-center">
+                <div>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">إجمالي السجل</p>
+                  <p className="text-3xl font-black text-slate-900">
+                    {items.reduce((sum, item) => sum + (item.quantity * item.rate), 0).toLocaleString()} <span className="text-sm font-bold text-slate-500">ج.م</span>
+                  </p>
+                </div>
+                <div className="text-left">
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest text-left">عدد البنود</p>
+                  <p className="text-xl font-black text-slate-900 text-left">{items.length}</p>
+                </div>
+              </div>
+            </CardContent>
+            <CardFooter className="flex-shrink-0 border-t border-slate-100 p-6 flex justify-end gap-3 bg-slate-50/30">
+              <Button variant="ghost" className="rounded-xl font-black h-12 px-8" onClick={() => setShowAdd(false)}>إلغاء</Button>
+              <Button onClick={handleAdd} className="btn-primary px-12 h-12 font-black text-lg shadow-xl shadow-primary/20">
+                حفظ السجلات بالكامل
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PayrollView({ employees, attendance, transactions, loans, payrolls, productionRecords }: { employees: Employee[], attendance: Attendance[], transactions: FinancialTransaction[], loans: Loan[], payrolls: Payroll[], productionRecords: ProductionRecord[] }) {
   const [showGenerate, setShowGenerate] = useState(false);
   const [selectedDept, setSelectedDept] = useState<string>('الكل');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
   const [genData, setGenData] = useState({
     startDate: format(new Date(), 'yyyy-MM-dd'),
     endDate: format(new Date(), 'yyyy-MM-dd'),
@@ -6705,7 +7064,19 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls }: {
         const manualDeductions = empTransactions.filter(t => t.type === 'خصم' || t.type === 'مصروف').reduce((sum, t) => sum + t.amount, 0);
         const totalDeductions = manualDeductions + Math.round(timeDeduction * 100) / 100;
         
-        const baseSalary = emp.dailyRate * daysWorked;
+        // Calculate Base Salary based on Pay Method
+        let baseSalary = 0;
+        if (emp.payMethod === 'production') {
+          const empProduction = productionRecords.filter(r => 
+            r.employeeId === emp.id && 
+            r.date >= genData.startDate && 
+            r.date <= genData.endDate
+          );
+          baseSalary = empProduction.reduce((sum, r) => sum + r.total, 0);
+        } else {
+          baseSalary = emp.dailyRate * daysWorked;
+        }
+
         const earningsBeforeLoans = baseSalary + totalBonuses + totalOvertime - totalDeductions;
         const availableForLoans = Math.max(0, earningsBeforeLoans);
 
@@ -6733,15 +7104,16 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls }: {
           year: genData.year,
           startDate: genData.startDate,
           endDate: genData.endDate,
-          dailyRate: emp.dailyRate,
-          daysWorked,
+          dailyRate: emp.payMethod === 'daily' ? emp.dailyRate : (emp.pieceRate || 0),
+          daysWorked: emp.payMethod === 'daily' ? daysWorked : 0,
           baseSalary,
           totalBonuses,
           totalOvertime,
           totalDeductions,
           totalLoans,
           netSalary,
-          status: 'مسودة'
+          status: 'مسودة',
+          payMethod: emp.payMethod
         });
       }
       setShowGenerate(false);
@@ -6821,16 +7193,199 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls }: {
     window.print();
   };
 
+  const handleWhatsApp = (p: Payroll) => {
+    const emp = employees.find(e => e.id === p.employeeId);
+    if (!emp?.phone) {
+      alert('يرجى إضافة رقم الهاتف للموظف أولاً');
+      return;
+    }
+
+    const message = `*مصنع النجار للأثاث*
+*قسيمة صرف راتب أسبوعي*
+--------------------------
+*الاسم:* ${emp.name}
+*الأسبوع:* ${p.weekNumber} / ${p.year}
+*الفترة:* ${p.startDate} إلى ${p.endDate}
+--------------------------
+*اليومية:* ${p.dailyRate.toLocaleString()}
+*أيام العمل:* ${(p.daysWorked || 0).toFixed(2)}
+*إجمالي اليوميات:* ${p.baseSalary.toLocaleString()}
+*إضافي (+):* ${p.totalOvertime.toLocaleString()}
+*مكافآت (+):* ${p.totalBonuses.toLocaleString()}
+*خصومات (-):* ${p.totalDeductions.toLocaleString()}
+*سلف (-):* ${p.totalLoans.toLocaleString()}
+--------------------------
+*صافي الراتب:* ${p.netSalary.toLocaleString()} ج.م
+--------------------------
+شكراً لعملكم معنا.`;
+
+    const encodedMessage = encodeURIComponent(message);
+    const whatsappUrl = `https://wa.me/${emp.phone.startsWith('0') ? '2' + emp.phone : emp.phone}?text=${encodedMessage}`;
+    window.open(whatsappUrl, '_blank');
+  };
+
   const departments = ['الكل', ...Array.from(new Set(employees.map(e => e.department).filter(Boolean))) as string[]];
 
-  const filteredDraftPayrolls = selectedDept === 'الكل'
-    ? draftPayrolls
-    : draftPayrolls.filter(p => {
-        const emp = employees.find(e => e.id === p.employeeId);
-        return emp?.department === selectedDept;
-      });
+  const filteredDraftPayrolls = draftPayrolls.filter(p => {
+    const emp = employees.find(e => e.id === p.employeeId);
+    const matchesDept = selectedDept === 'الكل' || emp?.department === selectedDept;
+    const matchesSearch = emp?.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesDate = (!filterStartDate || p.startDate >= filterStartDate) && 
+                       (!filterEndDate || p.endDate <= filterEndDate);
+    
+    return matchesDept && matchesSearch && matchesDate;
+  });
 
-  const filteredTotalWeekly = filteredDraftPayrolls.reduce((sum, p) => sum + p.netSalary, 0);
+  // Calculate live values for a draft payroll
+  const getLivePayroll = (p: Payroll) => {
+    if (p.status !== 'مسودة') return p;
+    
+    const emp = employees.find(e => e.id === p.employeeId);
+    if (!emp) return p;
+
+    // Calculate days worked and time deductions
+    const empAttendance = attendance.filter(a => {
+      if (a.employeeId !== emp.id || (a.status !== 'حضور' && a.status !== 'تأخير')) return false;
+      return a.date >= p.startDate && a.date <= p.endDate;
+    });
+
+    const attendanceStats = empAttendance.reduce((acc, a) => {
+      if (!a.checkIn || !a.checkOut) {
+        acc.daysWorked += 1;
+        return acc;
+      }
+      const [inH, inM] = a.checkIn.split(':').map(Number);
+      const [outH, outM] = a.checkOut.split(':').map(Number);
+      const checkInMins = inH * 60 + inM;
+      const checkOutMins = outH * 60 + outM;
+      
+      const shiftStartStr = emp.shiftStart || '08:00';
+      const shiftEndStr = emp.shiftEnd || '18:00';
+      const [sH, sM] = shiftStartStr.split(':').map(Number);
+      const [eH, eM] = shiftEndStr.split(':').map(Number);
+      const officialStart = sH * 60 + sM;
+      const officialEnd = eH * 60 + eM;
+      const shiftDurationMins = officialEnd - officialStart;
+      const gracePeriod = 15;
+      
+      if (checkInMins <= officialStart + gracePeriod && a.checkOut === '12:00' && officialStart <= 12 * 60) {
+        acc.daysWorked += 0.5;
+        return acc;
+      }
+      
+      let lateMins = 0;
+      if (checkInMins > officialStart + gracePeriod) lateMins = checkInMins - officialStart;
+      const earlyMins = Math.max(0, officialEnd - checkOutMins);
+      
+      acc.daysWorked += 1;
+      acc.timeDeduction += (lateMins + earlyMins) * (emp.dailyRate / (shiftDurationMins > 0 ? shiftDurationMins : 600));
+      return acc;
+    }, { daysWorked: 0, timeDeduction: 0 });
+
+    const empTransactions = transactions.filter(t => t.employeeId === emp.id && t.date >= p.startDate && t.date <= p.endDate);
+    const totalOvertime = empTransactions.filter(t => t.type === 'إضافي').reduce((sum, t) => sum + t.amount, 0);
+    const totalBonuses = empTransactions.filter(t => t.type === 'مكافأة' || t.type === 'بدل').reduce((sum, t) => sum + t.amount, 0);
+    const manualDeductions = empTransactions.filter(t => t.type === 'خصم' || t.type === 'مصروف').reduce((sum, t) => sum + t.amount, 0);
+    const totalDeductions = manualDeductions + Math.round(attendanceStats.timeDeduction * 100) / 100;
+
+    let baseSalary = 0;
+    if (emp.payMethod === 'production') {
+      const empProduction = productionRecords.filter(r => r.employeeId === emp.id && r.date >= p.startDate && r.date <= p.endDate);
+      baseSalary = empProduction.reduce((sum, r) => sum + r.total, 0);
+    } else {
+      baseSalary = emp.dailyRate * attendanceStats.daysWorked;
+    }
+
+    const earningsBeforeLoans = baseSalary + totalBonuses + totalOvertime - totalDeductions;
+    const availableForLoans = Math.max(0, earningsBeforeLoans);
+
+    const empLoans = loans.filter(l => l.employeeId === emp.id && l.status === 'نشط');
+    const calculatedLoans = empLoans.reduce((sum, l) => {
+      const weeklyInstallment = l.installments && l.installments > 0 ? l.amount / l.installments : (emp.dailyRate * (attendanceStats.daysWorked || 6)) * 0.1;
+      return sum + Math.min(l.remainingAmount, weeklyInstallment);
+    }, 0);
+
+    const totalLoans = Math.min(calculatedLoans, availableForLoans);
+    const netSalary = Math.max(0, earningsBeforeLoans - totalLoans);
+
+    return {
+      ...p,
+      daysWorked: attendanceStats.daysWorked,
+      baseSalary,
+      totalBonuses,
+      totalOvertime,
+      totalDeductions,
+      totalLoans,
+      netSalary
+    };
+  };
+
+  const processedPayrolls = filteredDraftPayrolls.map(getLivePayroll);
+  const filteredTotalWeekly = processedPayrolls.reduce((sum, p) => sum + p.netSalary, 0);
+
+  const handleExportExcel = () => {
+    const dataToExport = filteredDraftPayrolls.map(p => ({
+      'الأسبوع': `أسبوع ${p.weekNumber}`,
+      'الفترة': `${p.startDate} - ${p.endDate}`,
+      'اسم الموظف': employees.find(e => e.id === p.employeeId)?.name || 'غير معروف',
+      'اليومية': p.dailyRate,
+      'أيام العمل': p.daysWorked,
+      'إجمالي اليوميات': p.baseSalary,
+      'إضافي': p.totalOvertime,
+      'مكافآت': p.totalBonuses,
+      'خصومات': p.totalDeductions,
+      'سلف': p.totalLoans,
+      'صافي الراتب': p.netSalary,
+      'الحالة': p.status
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(dataToExport);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Payroll");
+    XLSX.writeFile(wb, `Payroll_Summary_${genData.startDate}_to_${genData.endDate}.xlsx`);
+  };
+
+  const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = XLSX.utils.sheet_to_json(ws) as any[];
+
+        for (const row of data) {
+          const empName = row['اسم الموظف'];
+          const emp = employees.find(e => e.name === empName);
+          if (!emp) continue;
+
+          await addDoc(collection(db, 'payrolls'), {
+            employeeId: emp.id,
+            weekNumber: genData.weekNumber,
+            year: genData.year,
+            startDate: genData.startDate,
+            endDate: genData.endDate,
+            dailyRate: Number(row['اليومية']) || emp.dailyRate,
+            daysWorked: Number(row['أيام العمل']) || 0,
+            baseSalary: Number(row['إجمالي اليوميات']) || 0,
+            totalBonuses: Number(row['مكافآت']) || 0,
+            totalOvertime: Number(row['إضافي']) || 0,
+            totalDeductions: Number(row['خصومات']) || 0,
+            totalLoans: Number(row['سلف']) || 0,
+            netSalary: Number(row['صافي الراتب']) || 0,
+            status: 'مسودة'
+          });
+        }
+      } catch (err) { handleFirestoreError(err, 'write', 'payrolls'); }
+      finally { setIsImporting(false); }
+    };
+    reader.readAsBinaryString(file);
+  };
 
   return (
     <div className="space-y-8">
@@ -6839,7 +7394,22 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls }: {
           <h2 className="text-2xl md:text-4xl font-black tracking-tight text-slate-900">كشوف الرواتب</h2>
           <p className="text-slate-500 mt-1 font-medium text-sm md:text-base">إصدار ومراجعة كشوف الرواتب الأسبوعية (باليومية)</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <Input 
+              className="h-10 md:h-12 w-48 rounded-2xl border-slate-200 pr-10 font-bold text-sm" 
+              placeholder="بحث بالاسم..." 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <div className="flex items-center gap-2 bg-white px-3 py-1 rounded-2xl border border-slate-200 h-10 md:h-12">
+            <span className="text-[10px] font-bold text-slate-400 uppercase">من:</span>
+            <input type="date" className="border-none p-0 text-sm font-bold focus:ring-0" value={filterStartDate} onChange={e => setFilterStartDate(e.target.value)} />
+            <span className="text-[10px] font-bold text-slate-400 uppercase">إلى:</span>
+            <input type="date" className="border-none p-0 text-sm font-bold focus:ring-0" value={filterEndDate} onChange={e => setFilterEndDate(e.target.value)} />
+          </div>
           <select 
             className="h-10 md:h-12 rounded-2xl border border-slate-200 px-4 bg-white font-bold text-sm"
             value={selectedDept}
@@ -6852,6 +7422,23 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls }: {
           <Button onClick={() => setShowVouchers(true)} variant="outline" className="h-10 md:h-12 px-6 rounded-2xl font-bold border-slate-200">
             <Printer size={18} className="ml-2" />
             قسائم الصرف
+          </Button>
+          <div className="relative">
+            <input
+              type="file"
+              accept=".xlsx, .xls"
+              onChange={handleImportExcel}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              disabled={isImporting}
+            />
+            <Button variant="outline" className="h-10 md:h-12 px-6 rounded-2xl font-bold border-slate-200" disabled={isImporting}>
+              <Upload size={18} className="ml-2" />
+              استيراد
+            </Button>
+          </div>
+          <Button onClick={handleExportExcel} variant="outline" className="h-10 md:h-12 px-6 rounded-2xl font-bold border-slate-200">
+            <Download size={18} className="ml-2" />
+            تصدير
           </Button>
           <Button onClick={() => setShowGenerate(true)} className="btn-primary h-10 md:h-12 px-6 md:px-8">
             <BarChart3 size={18} className="ml-2" />
@@ -6887,9 +7474,9 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls }: {
             <TableRow>
               <TableHead className="text-right font-black text-slate-900 py-5">الأسبوع</TableHead>
               <TableHead className="text-right font-black text-slate-900">الموظف</TableHead>
-              <TableHead className="text-right font-black text-slate-900">اليومية</TableHead>
-              <TableHead className="text-right font-black text-slate-900">أيام العمل</TableHead>
-              <TableHead className="text-right font-black text-slate-900">إجمالي اليوميات</TableHead>
+              <TableHead className="text-right font-black text-slate-900">سعر اليومية / القطعة</TableHead>
+              <TableHead className="text-right font-black text-slate-900">أيام العمل / الإنتاج</TableHead>
+              <TableHead className="text-right font-black text-slate-900">إجمالي الأجر الأساسي</TableHead>
               <TableHead className="text-right font-black text-slate-900">إضافي</TableHead>
               <TableHead className="text-right font-black text-slate-900">مكافآت</TableHead>
               <TableHead className="text-right font-black text-slate-900">خصومات</TableHead>
@@ -6910,7 +7497,12 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls }: {
                 </TableCell>
                 <TableCell className="font-black text-slate-900">{employees.find(e => e.id === p.employeeId)?.name}</TableCell>
                 <TableCell className="font-bold text-slate-600">{p.dailyRate?.toLocaleString()} ج.م</TableCell>
-                <TableCell className="font-black text-blue-600">{(p.daysWorked || 0).toFixed(2)} يوم</TableCell>
+                <TableCell className="font-black text-blue-600">
+                  {p.payMethod === 'production' 
+                    ? <Badge className="bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100">بالإنتاج</Badge>
+                    : `${(p.daysWorked || 0).toFixed(2)} يوم`
+                  }
+                </TableCell>
                 <TableCell className="font-bold text-slate-600">{p.baseSalary.toLocaleString()} ج.م</TableCell>
                 <TableCell className="font-bold text-blue-600">+{p.totalOvertime?.toLocaleString() || 0}</TableCell>
                 <TableCell className="font-bold text-green-600">+{p.totalBonuses.toLocaleString()}</TableCell>
@@ -6926,6 +7518,9 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls }: {
                   <div className="flex items-center gap-2">
                     <Button onClick={() => handleArchive(p.id)} variant="outline" size="sm" className="rounded-lg font-bold border-primary text-primary hover:bg-primary hover:text-white">
                       أرشفة وقبض
+                    </Button>
+                    <Button onClick={() => handleWhatsApp(p)} variant="ghost" size="icon" className="text-green-600 hover:bg-green-50">
+                      <MessageSquare size={16} />
                     </Button>
                     <Button onClick={() => setEditingPayroll(p)} variant="ghost" size="icon" className="text-blue-600 hover:bg-blue-50">
                       <Edit2 size={16} />
@@ -6981,6 +7576,13 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls }: {
                           </div>
                         </div>
                         <div className="text-left bg-slate-50 p-2 rounded-xl border border-slate-100 print:p-1 print:rounded-md print:bg-transparent print:border-none">
+                          <button 
+                            onClick={() => handleWhatsApp(p)}
+                            className="absolute top-4 left-4 p-2 bg-green-50 text-green-600 rounded-full hover:bg-green-100 print:hidden"
+                            title="إرسال عبر واتساب"
+                          >
+                            <MessageSquare size={16} />
+                          </button>
                           <p className="font-black text-slate-900 text-sm print:text-[8px]">#W{p.weekNumber}-{p.id.slice(-4)}</p>
                           <p className="font-bold text-slate-600 text-[10px] print:text-[7px]">أسبوع {p.weekNumber} / {p.year}</p>
                         </div>
@@ -7063,11 +7665,25 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls }: {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-700">أيام العمل</label>
-                  <Input type="number" className="rounded-xl h-11" value={editingPayroll.daysWorked} onChange={e => setEditingPayroll({...editingPayroll, daysWorked: Number(e.target.value), baseSalary: Number(e.target.value) * editingPayroll.dailyRate})} />
+                  <label className="text-sm font-bold text-slate-700">
+                    {editingPayroll.payMethod === 'production' ? 'استحقاق الإنتاج' : 'أيام العمل'}
+                  </label>
+                  <Input 
+                    type="number" 
+                    className="rounded-xl h-11" 
+                    value={editingPayroll.payMethod === 'production' ? editingPayroll.baseSalary : editingPayroll.daysWorked} 
+                    onChange={e => {
+                      const val = Number(e.target.value);
+                      if (editingPayroll.payMethod === 'production') {
+                        setEditingPayroll({...editingPayroll, baseSalary: val});
+                      } else {
+                        setEditingPayroll({...editingPayroll, daysWorked: val, baseSalary: val * (editingPayroll.dailyRate || 0)});
+                      }
+                    }} 
+                  />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-700">إجمالي اليوميات</label>
+                  <label className="text-sm font-bold text-slate-700">الأجر الأساسي الإجمالي</label>
                   <Input type="number" className="rounded-xl h-11" value={editingPayroll.baseSalary} onChange={e => setEditingPayroll({...editingPayroll, baseSalary: Number(e.target.value)})} />
                 </div>
                 <div className="space-y-2">
@@ -7197,6 +7813,29 @@ function ArchiveView({ employees, payrolls }: { employees: Employee[], payrolls:
     } catch (err) { handleFirestoreError(err, 'delete', 'payrolls'); }
   };
 
+  const handleExportExcel = () => {
+    const dataToExport = filtered.map(p => ({
+      'الأسبوع': `أسبوع ${p.weekNumber}`,
+      'الفترة': `${p.startDate} - ${p.endDate}`,
+      'التاريخ': p.paymentDate || 'غير محدد',
+      'اسم الموظف': employees.find(e => e.id === p.employeeId)?.name || 'غير معروف',
+      'اليومية': p.dailyRate,
+      'أيام العمل': p.daysWorked,
+      'إجمالي اليوميات': p.baseSalary,
+      'إضافي': p.totalOvertime,
+      'مكافآت': p.totalBonuses,
+      'خصومات': p.totalDeductions,
+      'سلف': p.totalLoans,
+      'صافي الراتب': p.netSalary,
+      'الحالة': p.status
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(dataToExport);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Archived_Payroll");
+    XLSX.writeFile(wb, `Archived_Payroll_${new Date().toLocaleDateString()}.xlsx`);
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -7234,6 +7873,10 @@ function ArchiveView({ employees, payrolls }: { employees: Employee[], payrolls:
             <option key={dept} value={dept}>{dept}</option>
           ))}
         </select>
+        <Button onClick={handleExportExcel} variant="outline" className="h-14 px-8 rounded-2xl font-black text-lg border-slate-200 bg-white shadow-sm">
+          <Download size={20} className="ml-2" />
+          تصدير للأرشيف
+        </Button>
       </div>
 
       <Card className="dribbble-card overflow-hidden border-none">

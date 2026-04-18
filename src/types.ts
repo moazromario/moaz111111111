@@ -176,6 +176,9 @@ export interface Employee {
   position: string;
   department?: string;
   dailyRate: number;
+  payMethod: 'daily' | 'production';
+  pieceRate?: number;
+  phone?: string;
   hireDate: string;
   status: 'نشط' | 'موقوف' | 'مستقيل';
   shiftStart?: string;
@@ -214,6 +217,16 @@ export interface Loan {
   status: 'نشط' | 'مسدد';
 }
 
+export interface ProductionRecord {
+  id: string;
+  employeeId: string;
+  date: string;
+  itemName: string;
+  quantity: number;
+  rate: number;
+  total: number;
+}
+
 export interface Payroll {
   id: string;
   employeeId: string;
@@ -231,6 +244,7 @@ export interface Payroll {
   netSalary: number;
   status: 'مسودة' | 'مدفوع';
   paymentDate?: string;
+  payMethod?: 'daily' | 'production';
 }
 
 export interface SupplierPayment {

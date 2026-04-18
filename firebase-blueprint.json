@@ -212,10 +212,13 @@
         "position": { "type": "string" },
         "department": { "type": "string" },
         "dailyRate": { "type": "number" },
+        "payMethod": { "type": "string", "enum": ["daily", "production"] },
+        "pieceRate": { "type": "number" },
+        "phone": { "type": "string" },
         "hireDate": { "type": "string", "format": "date" },
         "status": { "type": "string", "enum": ["نشط", "موقوف", "مستقيل"] }
       },
-      "required": ["name", "dailyRate", "status"]
+      "required": ["name", "dailyRate", "status", "payMethod"]
     },
     "Attendance": {
       "title": "Attendance",
@@ -277,9 +280,24 @@
         "totalLoans": { "type": "number" },
         "netSalary": { "type": "number" },
         "status": { "type": "string", "enum": ["مسودة", "مدفوع"] },
-        "paymentDate": { "type": "string", "format": "date" }
+        "paymentDate": { "type": "string", "format": "date" },
+        "payMethod": { "type": "string", "enum": ["daily", "production"] }
       },
       "required": ["employeeId", "weekNumber", "year", "netSalary", "status"]
+    },
+    "ProductionRecord": {
+      "title": "ProductionRecord",
+      "description": "A record of production work for an employee",
+      "type": "object",
+      "properties": {
+        "employeeId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "itemName": { "type": "string" },
+        "quantity": { "type": "number" },
+        "rate": { "type": "number" },
+        "total": { "type": "number" }
+      },
+      "required": ["employeeId", "date", "quantity", "rate"]
     },
     "SupplierPayment": {
       "title": "SupplierPayment",
@@ -373,6 +391,7 @@
     "/loans/{id}": { "schema": "Loan", "description": "Employee loans" },
     "/payrolls/{id}": { "schema": "Payroll", "description": "Payroll records" },
     "/supplierPayments/{id}": { "schema": "SupplierPayment", "description": "Supplier payment records" },
+    "/productionRecords/{id}": { "schema": "ProductionRecord", "description": "Production work records for piece-rate workers" },
     "/jobLabors/{id}": { "schema": "JobLabor", "description": "Job labor cost records" },
     "/jobOtherCosts/{id}": { "schema": "JobOtherCost", "description": "Job other cost records" },
     "/deliveryReceipts/{id}": { "schema": "DeliveryReceipt", "description": "Client delivery receipts" }

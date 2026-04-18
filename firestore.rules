@@ -167,6 +167,11 @@ service cloud.firestore {
       allow write: if isAuthenticated();
     }
 
+    match /productionRecords/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
     match /jobLabors/{id} {
       allow read: if isAuthenticated();
       allow write: if isAuthenticated();
