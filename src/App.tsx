@@ -219,6 +219,410 @@ export default function App() {
   );
 }
 
+// --- Calculations ---
+
+const calculateLivePayroll = (
+  p: Payroll, 
+  employees: Employee[], 
+  attendance: Attendance[], 
+  transactions: FinancialTransaction[], 
+  loans: Loan[], 
+  productionRecords: ProductionRecord[]
+) => {
+  if (p.status !== 'مسودة') return p;
+  
+  const emp = employees.find(e => e.id === p.employeeId);
+  if (!emp) return p;
+
+  const empAttendance = attendance.filter(a => {
+    if (a.employeeId !== emp.id || (a.status !== 'حضور' && a.status !== 'تأخير')) return false;
+    return a.date >= p.startDate && a.date <= p.endDate;
+  });
+
+  const attendanceStats = empAttendance.reduce((acc, a) => {
+    if (!a.checkIn || !a.checkOut) {
+      acc.daysWorked += 1;
+      return acc;
+    }
+    const [inH, inM] = a.checkIn.split(':').map(Number);
+    const [outH, outM] = a.checkOut.split(':').map(Number);
+    const checkInMins = inH * 60 + inM;
+    const checkOutMins = outH * 60 + outM;
+    const shiftStartStr = emp.shiftStart || '08:00';
+    const shiftEndStr = emp.shiftEnd || '18:00';
+    const [sH, sM] = shiftStartStr.split(':').map(Number);
+    const [eH, eM] = shiftEndStr.split(':').map(Number);
+    const officialStart = sH * 60 + sM;
+    const officialEnd = eH * 60 + eM;
+    const shiftDurationMins = officialEnd - officialStart;
+    const gracePeriod = 15;
+    
+    if (checkInMins <= officialStart + gracePeriod && a.checkOut === '12:00' && officialStart <= 12 * 60) {
+      acc.daysWorked += 0.5;
+      return acc;
+    }
+    let lateMins = 0;
+    if (checkInMins > officialStart + gracePeriod) lateMins = checkInMins - officialStart;
+    const earlyMins = Math.max(0, officialEnd - checkOutMins);
+    acc.daysWorked += 1;
+    acc.timeDeduction += (lateMins + earlyMins) * (emp.dailyRate / (shiftDurationMins > 0 ? shiftDurationMins : 600));
+    return acc;
+  }, { daysWorked: 0, timeDeduction: 0 });
+
+  const empTransactions = transactions.filter(t => t.employeeId === emp.id && t.date >= p.startDate && t.date <= p.endDate);
+  const totalOvertime = empTransactions.filter(t => t.type === 'إضافي').reduce((sum, t) => sum + t.amount, 0);
+  const totalBonuses = empTransactions.filter(t => t.type === 'مكافأة' || t.type === 'بدل').reduce((sum, t) => sum + t.amount, 0);
+  const manualDeductions = empTransactions.filter(t => t.type === 'خصم' || t.type === 'مصروف').reduce((sum, t) => sum + t.amount, 0);
+  const totalDeductions = manualDeductions + Math.round(attendanceStats.timeDeduction * 100) / 100;
+
+  let baseSalary = 0;
+  if (emp.payMethod === 'production') {
+    const empProduction = productionRecords.filter(r => r.employeeId === emp.id && r.date >= p.startDate && r.date <= p.endDate);
+    baseSalary = empProduction.reduce((sum, r) => sum + r.total, 0);
+  } else {
+    baseSalary = emp.dailyRate * attendanceStats.daysWorked;
+  }
+
+  const earningsBeforeLoans = baseSalary + totalBonuses + totalOvertime - totalDeductions;
+  const availableForLoans = Math.max(0, earningsBeforeLoans);
+  const empLoans = loans.filter(l => l.employeeId === emp.id && l.status === 'نشط');
+  const calculatedLoans = empLoans.reduce((sum, l) => {
+    const weeklyInstallment = l.installments && l.installments > 0 ? l.amount / l.installments : (emp.dailyRate * (attendanceStats.daysWorked || 6)) * 0.1;
+    return sum + Math.min(l.remainingAmount, weeklyInstallment);
+  }, 0);
+
+  const totalLoans = Math.min(calculatedLoans, availableForLoans);
+  const netSalary = Math.max(0, earningsBeforeLoans - totalLoans);
+
+  return { ...p, daysWorked: attendanceStats.daysWorked, baseSalary, totalBonuses, totalOvertime, totalDeductions, totalLoans, netSalary };
+};
+
+function PayrollMasterReport({ payrolls, employees, hrTransactions, attendance, loans, productionRecords }: { payrolls: Payroll[], employees: Employee[], hrTransactions: FinancialTransaction[], attendance: Attendance[], loans: Loan[], productionRecords: ProductionRecord[] }) {
+  const [dateRange, setDateRange] = useState({
+    start: format(new Date(new Date().setDate(new Date().getDate() - 30)), 'yyyy-MM-dd'),
+    end: format(new Date(), 'yyyy-MM-dd')
+  });
+  const [includeDrafts, setIncludeDrafts] = useState(false);
+  const [reportSearch, setReportSearch] = useState('');
+
+  const filteredPayrolls = payrolls.filter(p => {
+    const isDateMatch = p.paymentDate 
+      ? (p.paymentDate >= dateRange.start && p.paymentDate <= dateRange.end)
+      : (p.startDate >= dateRange.start && p.endDate <= dateRange.end);
+    
+    if (includeDrafts) {
+      return isDateMatch && (p.status === 'مدفوع' || p.status === 'مسودة');
+    }
+    return p.status === 'مدفوع' && isDateMatch;
+  }).map(p => calculateLivePayroll(p, employees, attendance, hrTransactions, loans, productionRecords));
+  
+  const totalWages = filteredPayrolls.reduce((sum, p) => sum + p.netSalary, 0);
+  const totalBonuses = filteredPayrolls.reduce((sum, p) => sum + (p.totalBonuses || 0), 0);
+  const totalOvertime = filteredPayrolls.reduce((sum, p) => sum + (p.totalOvertime || 0), 0);
+  const totalDeductions = filteredPayrolls.reduce((sum, p) => sum + (p.totalDeductions || 0), 0);
+  const totalLoansRecovered = filteredPayrolls.reduce((sum, p) => sum + (p.totalLoans || 0), 0);
+  
+  const paidEmployeeCount = new Set(filteredPayrolls.map(p => p.employeeId)).size;
+  const avgNetSalary = paidEmployeeCount > 0 ? totalWages / paidEmployeeCount : 0;
+
+  const deptData = employees.reduce((acc: any[], emp) => {
+    const dept = emp.department || 'غير محدد';
+    const deptPayrolls = filteredPayrolls.filter(p => p.employeeId === emp.id);
+    const amount = deptPayrolls.reduce((sum, p) => sum + p.netSalary, 0);
+    
+    if (amount > 0) {
+      const existing = acc.find(a => a.name === dept);
+      if (existing) {
+        existing.value += amount;
+      } else {
+        acc.push({ name: dept, value: amount });
+      }
+    }
+    return acc;
+  }, []);
+
+  // Trend Data (Weekly)
+  const sortedPayrolls = [...filteredPayrolls].sort((a, b) => a.startDate.localeCompare(b.startDate));
+  const trendData = sortedPayrolls.reduce((acc: any[], p) => {
+    const weekLabel = `${p.weekNumber}/${p.year}`;
+    const existing = acc.find(a => a.name === weekLabel);
+    if (existing) {
+      existing.wages += p.netSalary;
+    } else {
+      acc.push({ name: weekLabel, wages: p.netSalary });
+    }
+    return acc;
+  }, []);
+
+  const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
+
+  const tableData = filteredPayrolls.filter(p => {
+    const emp = employees.find(e => e.id === p.employeeId);
+    return emp?.name.toLowerCase().includes(reportSearch.toLowerCase()) || 
+           emp?.department?.toLowerCase().includes(reportSearch.toLowerCase());
+  });
+
+  return (
+    <div className="space-y-8 animate-in fade-in duration-500 pb-20">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+          <h2 className="text-3xl md:text-5xl font-black tracking-tighter text-slate-900">تقرير الأجور الشامل</h2>
+          <p className="text-slate-500 mt-2 font-bold text-lg">تحليل استراتيجي متكامل لكافة النفقات البشرية</p>
+        </div>
+        <div className="flex flex-col gap-3">
+          <div className="flex bg-white p-2 rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100 items-center gap-3">
+            <div className="flex items-center gap-2 px-3">
+              <span className="text-xs font-black text-slate-400 uppercase tracking-widest">من</span>
+              <Input type="date" value={dateRange.start} onChange={e => setDateRange({...dateRange, start: e.target.value})} className="border-none bg-transparent font-black text-slate-900 h-8 p-0 w-32 focus-visible:ring-0" />
+            </div>
+            <div className="w-px h-6 bg-slate-200" />
+            <div className="flex items-center gap-2 px-3">
+              <span className="text-xs font-black text-slate-400 uppercase tracking-widest">إلى</span>
+              <Input type="date" value={dateRange.end} onChange={e => setDateRange({...dateRange, end: e.target.value})} className="border-none bg-transparent font-black text-slate-900 h-8 p-0 w-32 focus-visible:ring-0" />
+            </div>
+          </div>
+          <div className="flex items-center justify-end gap-2 px-2">
+            <span className="text-xs font-bold text-slate-500">تضمين الرواتب المعلقة (المسودة)</span>
+            <input 
+              type="checkbox" 
+              checked={includeDrafts} 
+              onChange={e => setIncludeDrafts(e.target.checked)}
+              className="w-5 h-5 accent-primary rounded-lg cursor-pointer"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
+        <Card className="dribbble-card bg-primary text-white border-none shadow-2xl shadow-primary/20">
+          <CardContent className="pt-8">
+            <div className="flex flex-col gap-2">
+              <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-md">
+                <DollarSign size={24} />
+              </div>
+              <p className="text-[10px] font-black uppercase tracking-widest opacity-80">إجمالي الأجور</p>
+              <h3 className="text-2xl font-black tracking-tight">{totalWages.toLocaleString()} <small className="text-xs">ج.م</small></h3>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="dribbble-card border-none shadow-xl shadow-slate-200/50">
+          <CardContent className="pt-8">
+            <div className="flex flex-col gap-2">
+              <div className="w-12 h-12 bg-green-50 rounded-2xl flex items-center justify-center text-green-600">
+                <Users size={24} />
+              </div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">عدد الموظفين المعنيين</p>
+              <h3 className="text-2xl font-black text-slate-900">{paidEmployeeCount} <small className="text-xs">فرد</small></h3>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="dribbble-card border-none shadow-xl shadow-slate-200/50">
+          <CardContent className="pt-8">
+            <div className="flex flex-col gap-2">
+              <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600">
+                <LayoutGrid size={24} />
+              </div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">متوسط دخل الفرد</p>
+              <h3 className="text-2xl font-black text-slate-900">{Math.round(avgNetSalary).toLocaleString()} <small className="text-xs">ج.م</small></h3>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="dribbble-card border-none shadow-xl shadow-slate-200/50">
+          <CardContent className="pt-8">
+            <div className="flex flex-col gap-2">
+              <div className="w-12 h-12 bg-orange-50 rounded-2xl flex items-center justify-center text-orange-600">
+                <Plus size={24} />
+              </div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">إجمالي الحوافز</p>
+              <h3 className="text-2xl font-black text-slate-900">{(totalBonuses + totalOvertime).toLocaleString()} <small className="text-xs">ج.م</small></h3>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="dribbble-card border-none shadow-xl shadow-slate-200/50">
+          <CardContent className="pt-8">
+            <div className="flex flex-col gap-2">
+              <div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center text-red-600">
+                <AlertCircle size={24} />
+              </div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">إجمالي الاستقطاعات</p>
+              <h3 className="text-2xl font-black text-slate-900">{(totalDeductions + totalLoansRecovered).toLocaleString()} <small className="text-xs">ج.م</small></h3>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <Card className="dribbble-card lg:col-span-2 border-none shadow-2xl shadow-slate-200/50 overflow-hidden">
+          <CardHeader className="bg-slate-50/50 border-b border-slate-100">
+            <CardTitle className="text-xl font-black text-slate-900">منحنى تكلفة الأجور</CardTitle>
+            <CardDescription className="font-bold">تتبع النفقات الأسبوعية خلال الفترة</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-10">
+            <div className="h-[350px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={trendData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontWeight: 'bold', fill: '#64748b', fontSize: 12 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontWeight: 'bold', fill: '#64748b', fontSize: 12 }} />
+                  <Tooltip 
+                    contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 40px rgba(0,0,0,0.1)', fontWeight: 'bold' }}
+                    formatter={(value: number) => `${value.toLocaleString()} ج.م`}
+                  />
+                  <Line type="monotone" dataKey="wages" stroke="#6366f1" strokeWidth={4} dot={{ r: 6, fill: '#6366f1', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 8 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="dribbble-card border-none shadow-2xl shadow-slate-200/50 overflow-hidden">
+          <CardHeader className="bg-slate-50/50 border-b border-slate-100">
+            <CardTitle className="text-xl font-black text-slate-900">هيكل تكلفة الأقسام</CardTitle>
+            <CardDescription className="font-bold">توزيع الرواتب الصافية حسب الإدارة</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-10">
+            <div className="h-[350px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={deptData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={70}
+                    outerRadius={100}
+                    paddingAngle={5}
+                    dataKey="value"
+                  >
+                    {deptData.map((_entry: any, index: number) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip 
+                    contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 40px rgba(0,0,0,0.1)', fontWeight: 'bold' }}
+                    formatter={(value: number) => `${value.toLocaleString()} ج.م`}
+                  />
+                  <Legend verticalAlign="bottom" height={36} iconType="circle" />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="dribbble-card border-none shadow-2xl shadow-slate-200/50 overflow-hidden">
+        <CardHeader className="bg-slate-50/50 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <CardTitle className="text-2xl font-black text-slate-900">كشف المدفوعات التحليلي</CardTitle>
+            <CardDescription className="font-bold">قائمة شاملة بالبيانات لكل موظف في الفترة المختارة</CardDescription>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <Input 
+                placeholder="بحث بالاسم أو القسم..." 
+                className="pr-10 bg-white border-slate-200 rounded-xl font-bold w-64"
+                value={reportSearch}
+                onChange={e => setReportSearch(e.target.value)}
+              />
+            </div>
+            <Button 
+              className="btn-primary flex items-center gap-2 h-10 px-6"
+              onClick={() => {
+                const dataToExport = tableData.map(p => {
+                  const emp = employees.find(e => e.id === p.employeeId);
+                  return {
+                    'الموظف': emp?.name,
+                    'القسم': emp?.department,
+                    'الحالة': p.status === 'مدفوع' ? 'تم الصرف' : 'مسودة',
+                    'تاريخ الصرف': p.paymentDate || 'غير محدد',
+                    'أيام العمل/الإنتاج': p.payMethod === 'daily' ? p.daysWorked : 'إنتاج بالقطعة',
+                    'الراتب الأساسي': p.baseSalary,
+                    'مكافآت': p.totalBonuses,
+                    'إضافي': p.totalOvertime,
+                    'خصومات': p.totalDeductions,
+                    'سلف': p.totalLoans,
+                    'الصافي': p.netSalary
+                  };
+                });
+                const ws = XLSX.utils.json_to_sheet(dataToExport);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Detailed Payroll Report");
+                XLSX.writeFile(wb, `Payroll_Analysis_${dateRange.start}_to_${dateRange.end}.xlsx`);
+              }}
+            >
+              <Download size={18} />
+              تصدير XLSX
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0 overflow-x-auto">
+          <Table>
+            <TableHeader className="bg-slate-50/50">
+              <TableRow>
+                <TableHead className="py-5 font-black text-slate-900 text-right">الموظف والبيانات</TableHead>
+                <TableHead className="font-black text-slate-900 text-right">الحالة</TableHead>
+                <TableHead className="font-black text-slate-900 text-right">الأساسي</TableHead>
+                <TableHead className="font-black text-slate-900 text-right">علاوات</TableHead>
+                <TableHead className="font-black text-slate-900 text-right">استقطاعات</TableHead>
+                <TableHead className="font-black text-slate-900 text-right">الصافي</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {tableData.map(p => {
+                const emp = employees.find(e => e.id === p.employeeId);
+                return (
+                  <TableRow key={p.id} className="hover:bg-slate-50/50 transition-colors">
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-black text-slate-400">
+                          {emp?.name.charAt(0)}
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="font-black text-slate-900 leading-none">{emp?.name}</span>
+                          <span className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest">{emp?.department} | {p.payMethod === 'daily' ? 'يومية' : 'إنتاج'}</span>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={`font-black tracking-tighter ${p.status === 'مدفوع' ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-orange-100 text-orange-700 hover:bg-orange-200'}`}>
+                        {p.status === 'مدفوع' ? 'تم الصرف' : 'مسودة'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="font-bold text-slate-700">{p.baseSalary.toLocaleString()} <span className="text-[10px]">ج.م</span></TableCell>
+                    <TableCell className="font-black text-green-600">
+                      +{( (p.totalBonuses || 0) + (p.totalOvertime || 0) ).toLocaleString()}
+                    </TableCell>
+                    <TableCell className="font-black text-red-600">
+                      -{( (p.totalDeductions || 0) + (p.totalLoans || 0) ).toLocaleString()}
+                    </TableCell>
+                    <TableCell className="font-black text-primary text-lg">
+                      {p.netSalary.toLocaleString()} <span className="text-xs">ج.م</span>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {tableData.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-24">
+                    <div className="flex flex-col items-center gap-4 opacity-30">
+                      <BarChart3 size={64} />
+                      <p className="font-black text-2xl">لا توجد سجلات مطابقة</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function MainApp() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -251,6 +655,7 @@ function MainApp() {
   const [jobOtherCosts, setJobOtherCosts] = useState<JobOtherCost[]>([]);
   const [deliveryReceipts, setDeliveryReceipts] = useState<DeliveryReceipt[]>([]);
   const [hrMenuOpen, setHrMenuOpen] = useState(false);
+  const [reportsMenuOpen, setReportsMenuOpen] = useState(false);
   const [companyInfo, setCompanyInfo] = useState({
     name: 'شركة المصطفى للتجارة والصناعة',
     address: 'المنطقة الصناعية، القاهرة',
@@ -643,8 +1048,34 @@ function MainApp() {
           </div>
 
           <div className="pt-4 pb-2 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">الإدارة والتقارير</div>
+          
+          <div>
+            <button 
+              onClick={() => setReportsMenuOpen(!reportsMenuOpen)}
+              className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all duration-300 group ${
+                ['reports', 'payrollMasterReport'].includes(activeTab) 
+                ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-[-4px]' 
+                : 'text-slate-500 hover:bg-blue-50 hover:text-primary'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div className={`transition-transform duration-300 ${['reports', 'payrollMasterReport'].includes(activeTab) ? 'scale-110' : 'group-hover:scale-110'}`}>
+                  <BarChart3 size={20} />
+                </div>
+                <span className="font-bold text-sm tracking-tight">تقارير النظام</span>
+              </div>
+              <ChevronDown size={16} className={`transition-transform duration-300 ${reportsMenuOpen ? 'rotate-180' : ''}`} />
+            </button>
+            
+            <div className={`overflow-hidden transition-all duration-300 ease-in-out ${reportsMenuOpen ? 'max-h-48 opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
+              <div className="mr-4 pr-4 border-r-2 border-slate-100 space-y-1.5">
+                <SubNavButton active={activeTab === 'reports'} onClick={() => handleNavClick('reports')} label="التقارير العامة" />
+                <SubNavButton active={activeTab === 'payrollMasterReport'} onClick={() => handleNavClick('payrollMasterReport')} label="تقرير الأجور الشامل" />
+              </div>
+            </div>
+          </div>
+
           <NavButton active={activeTab === 'suppliers'} onClick={() => handleNavClick('suppliers')} icon={<Users size={20} />} label="الموردين" />
-          <NavButton active={activeTab === 'reports'} onClick={() => handleNavClick('reports')} icon={<BarChart3 size={20} />} label="التقارير" />
           <NavButton active={activeTab === 'settings'} onClick={() => handleNavClick('settings')} icon={<Settings size={20} />} label="الإعدادات" />
         </nav>
 
@@ -736,6 +1167,16 @@ function MainApp() {
         {activeTab === 'archive' && <ArchiveView employees={employees} payrolls={payrolls} />}
         {activeTab === 'suppliers' && <Suppliers suppliers={suppliers} purchases={purchases} items={items} supplierPayments={supplierPayments} />}
         {activeTab === 'reports' && <ReportsView items={items} suppliers={suppliers} purchases={purchases} issuances={issuances} warehouses={warehouses} productionJobs={productionJobs} jobLabors={jobLabors} jobOtherCosts={jobOtherCosts} />}
+        {activeTab === 'payrollMasterReport' && (
+          <PayrollMasterReport 
+            payrolls={payrolls}
+            employees={employees}
+            hrTransactions={hrTransactions}
+            attendance={attendance}
+            loans={loans}
+            productionRecords={productionRecords}
+          />
+        )}
         {activeTab === 'settings' && <SettingsView items={items} suppliers={suppliers} warehouses={warehouses} units={units} costCenters={costCenters} companyInfo={companyInfo} setCompanyInfo={setCompanyInfo} />}
       </main>
     </div>
@@ -7113,7 +7554,7 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls, pro
           totalLoans,
           netSalary,
           status: 'مسودة',
-          payMethod: emp.payMethod
+          payMethod: emp.payMethod || 'daily'
         });
       }
       setShowGenerate(false);
@@ -7143,11 +7584,16 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls, pro
   const handleArchive = async (id: string) => {
     try {
       const payroll = payrolls.find(p => p.id === id);
-      if (payroll) await updateLoanBalances(payroll);
-      await updateDoc(doc(db, 'payrolls', id), {
-        status: 'مدفوع',
-        paymentDate: format(new Date(), 'yyyy-MM-dd')
-      });
+      if (payroll) {
+        const livePayroll = getLivePayroll(payroll);
+        await updateLoanBalances(livePayroll);
+        const { id: _id, ...updateData } = livePayroll;
+        await updateDoc(doc(db, 'payrolls', id), {
+          ...updateData,
+          status: 'مدفوع',
+          paymentDate: format(new Date(), 'yyyy-MM-dd')
+        });
+      }
     } catch (err) { handleFirestoreError(err, 'update', 'payrolls'); }
   };
 
@@ -7180,8 +7626,11 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls, pro
   const handleBulkArchive = async () => {
     try {
       for (const p of draftPayrolls) {
-        await updateLoanBalances(p);
-        await updateDoc(doc(db, 'payrolls', p.id), {
+        const liveP = getLivePayroll(p);
+        await updateLoanBalances(liveP);
+        const { id, ...updateData } = liveP;
+        await updateDoc(doc(db, 'payrolls', id), {
+          ...updateData,
           status: 'مدفوع',
           paymentDate: format(new Date(), 'yyyy-MM-dd')
         });
@@ -7236,95 +7685,13 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls, pro
     return matchesDept && matchesSearch && matchesDate;
   });
 
-  // Calculate live values for a draft payroll
-  const getLivePayroll = (p: Payroll) => {
-    if (p.status !== 'مسودة') return p;
-    
-    const emp = employees.find(e => e.id === p.employeeId);
-    if (!emp) return p;
-
-    // Calculate days worked and time deductions
-    const empAttendance = attendance.filter(a => {
-      if (a.employeeId !== emp.id || (a.status !== 'حضور' && a.status !== 'تأخير')) return false;
-      return a.date >= p.startDate && a.date <= p.endDate;
-    });
-
-    const attendanceStats = empAttendance.reduce((acc, a) => {
-      if (!a.checkIn || !a.checkOut) {
-        acc.daysWorked += 1;
-        return acc;
-      }
-      const [inH, inM] = a.checkIn.split(':').map(Number);
-      const [outH, outM] = a.checkOut.split(':').map(Number);
-      const checkInMins = inH * 60 + inM;
-      const checkOutMins = outH * 60 + outM;
-      
-      const shiftStartStr = emp.shiftStart || '08:00';
-      const shiftEndStr = emp.shiftEnd || '18:00';
-      const [sH, sM] = shiftStartStr.split(':').map(Number);
-      const [eH, eM] = shiftEndStr.split(':').map(Number);
-      const officialStart = sH * 60 + sM;
-      const officialEnd = eH * 60 + eM;
-      const shiftDurationMins = officialEnd - officialStart;
-      const gracePeriod = 15;
-      
-      if (checkInMins <= officialStart + gracePeriod && a.checkOut === '12:00' && officialStart <= 12 * 60) {
-        acc.daysWorked += 0.5;
-        return acc;
-      }
-      
-      let lateMins = 0;
-      if (checkInMins > officialStart + gracePeriod) lateMins = checkInMins - officialStart;
-      const earlyMins = Math.max(0, officialEnd - checkOutMins);
-      
-      acc.daysWorked += 1;
-      acc.timeDeduction += (lateMins + earlyMins) * (emp.dailyRate / (shiftDurationMins > 0 ? shiftDurationMins : 600));
-      return acc;
-    }, { daysWorked: 0, timeDeduction: 0 });
-
-    const empTransactions = transactions.filter(t => t.employeeId === emp.id && t.date >= p.startDate && t.date <= p.endDate);
-    const totalOvertime = empTransactions.filter(t => t.type === 'إضافي').reduce((sum, t) => sum + t.amount, 0);
-    const totalBonuses = empTransactions.filter(t => t.type === 'مكافأة' || t.type === 'بدل').reduce((sum, t) => sum + t.amount, 0);
-    const manualDeductions = empTransactions.filter(t => t.type === 'خصم' || t.type === 'مصروف').reduce((sum, t) => sum + t.amount, 0);
-    const totalDeductions = manualDeductions + Math.round(attendanceStats.timeDeduction * 100) / 100;
-
-    let baseSalary = 0;
-    if (emp.payMethod === 'production') {
-      const empProduction = productionRecords.filter(r => r.employeeId === emp.id && r.date >= p.startDate && r.date <= p.endDate);
-      baseSalary = empProduction.reduce((sum, r) => sum + r.total, 0);
-    } else {
-      baseSalary = emp.dailyRate * attendanceStats.daysWorked;
-    }
-
-    const earningsBeforeLoans = baseSalary + totalBonuses + totalOvertime - totalDeductions;
-    const availableForLoans = Math.max(0, earningsBeforeLoans);
-
-    const empLoans = loans.filter(l => l.employeeId === emp.id && l.status === 'نشط');
-    const calculatedLoans = empLoans.reduce((sum, l) => {
-      const weeklyInstallment = l.installments && l.installments > 0 ? l.amount / l.installments : (emp.dailyRate * (attendanceStats.daysWorked || 6)) * 0.1;
-      return sum + Math.min(l.remainingAmount, weeklyInstallment);
-    }, 0);
-
-    const totalLoans = Math.min(calculatedLoans, availableForLoans);
-    const netSalary = Math.max(0, earningsBeforeLoans - totalLoans);
-
-    return {
-      ...p,
-      daysWorked: attendanceStats.daysWorked,
-      baseSalary,
-      totalBonuses,
-      totalOvertime,
-      totalDeductions,
-      totalLoans,
-      netSalary
-    };
-  };
+  const getLivePayroll = (p: Payroll) => calculateLivePayroll(p, employees, attendance, transactions, loans, productionRecords);
 
   const processedPayrolls = filteredDraftPayrolls.map(getLivePayroll);
   const filteredTotalWeekly = processedPayrolls.reduce((sum, p) => sum + p.netSalary, 0);
 
   const handleExportExcel = () => {
-    const dataToExport = filteredDraftPayrolls.map(p => ({
+    const dataToExport = processedPayrolls.map(p => ({
       'الأسبوع': `أسبوع ${p.weekNumber}`,
       'الفترة': `${p.startDate} - ${p.endDate}`,
       'اسم الموظف': employees.find(e => e.id === p.employeeId)?.name || 'غير معروف',
@@ -7378,7 +7745,8 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls, pro
             totalDeductions: Number(row['خصومات']) || 0,
             totalLoans: Number(row['سلف']) || 0,
             netSalary: Number(row['صافي الراتب']) || 0,
-            status: 'مسودة'
+            status: 'مسودة',
+            payMethod: emp.payMethod || 'daily'
           });
         }
       } catch (err) { handleFirestoreError(err, 'write', 'payrolls'); }
@@ -7487,7 +7855,7 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls, pro
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredDraftPayrolls.slice().sort((a, b) => b.year - a.year || b.weekNumber - a.weekNumber).map(p => (
+            {processedPayrolls.slice().sort((a, b) => b.year - a.year || b.weekNumber - a.weekNumber).map(p => (
               <TableRow key={p.id} className="hover:bg-slate-50/50 transition-colors">
                 <TableCell className="font-bold text-slate-500">
                   <div className="flex flex-col">
@@ -7510,7 +7878,7 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls, pro
                 <TableCell className="font-bold text-orange-600">-{p.totalLoans.toLocaleString()}</TableCell>
                 <TableCell className="font-black text-primary text-lg">{p.netSalary.toLocaleString()} ج.م</TableCell>
                 <TableCell>
-                  <Badge className="rounded-lg px-3 py-1 border-none font-black text-[10px] uppercase tracking-widest bg-slate-100 text-slate-700">
+                  <Badge className={`rounded-lg px-3 py-1 border-none font-black text-[10px] uppercase tracking-widest ${p.status === 'مدفوع' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700'}`}>
                     {p.status}
                   </Badge>
                 </TableCell>
@@ -7554,14 +7922,14 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls, pro
               </div>
             </div>
             <div className="p-8 overflow-auto flex-1 bg-slate-100/30 space-y-8 print:p-0 print:bg-white print:space-y-0 print:overflow-visible print:grid print:grid-cols-2 print:gap-0">
-              {draftPayrolls.length === 0 ? (
+              {processedPayrolls.length === 0 ? (
                 <div className="col-span-2 flex flex-col items-center justify-center py-20 text-slate-400">
                   <AlertCircle size={48} className="mb-4 opacity-20" />
                   <p className="font-bold text-xl">لا توجد كشوف رواتب (مسودات) حالياً للطباعة</p>
                   <p className="text-sm">قم بإصدار رواتب أسبوع جديد أولاً</p>
                 </div>
               ) : (
-                draftPayrolls.map((p, idx) => {
+                processedPayrolls.map((p, idx) => {
                   const emp = employees.find(e => e.id === p.employeeId);
                   return (
                     <div key={p.id} className="bg-white p-8 rounded-3xl border-2 border-dashed border-slate-200 relative print:border-solid print:border-slate-300 print:rounded-none print:shadow-none print:mb-0 print:p-4 print:h-[16.66vh] print:border-collapse print:overflow-hidden">
