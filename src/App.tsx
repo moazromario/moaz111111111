@@ -362,23 +362,36 @@ function PayrollMasterReport({ payrolls, employees, hrTransactions, attendance, 
            emp?.department?.toLowerCase().includes(reportSearch.toLowerCase());
   });
 
+  // Top 5 Earners
+  const topEarners = [...tableData]
+    .sort((a, b) => b.netSalary - a.netSalary)
+    .slice(0, 5);
+
+  // Bonus vs Base Analysis
+  const totalBase = filteredPayrolls.reduce((sum, p) => sum + p.baseSalary, 0);
+  const compositionData = [
+    { name: 'الراتب الأساسي', value: totalBase, color: '#6366f1' },
+    { name: 'حوافز وإضافي', value: totalBonuses + totalOvertime, color: '#10b981' },
+    { name: 'استقطاعات وسلف', value: totalDeductions + totalLoansRecovered, color: '#ef4444' }
+  ];
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-20">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 print:hidden">
         <div>
-          <h2 className="text-3xl md:text-5xl font-black tracking-tighter text-slate-900">تقرير الأجور الشامل</h2>
+          <h2 className="text-3xl md:text-5xl font-black tracking-tighter text-slate-900 leading-none">تقرير الأجور الشامل</h2>
           <p className="text-slate-500 mt-2 font-bold text-lg">تحليل استراتيجي متكامل لكافة النفقات البشرية</p>
         </div>
         <div className="flex flex-col gap-3">
           <div className="flex bg-white p-2 rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100 items-center gap-3">
             <div className="flex items-center gap-2 px-3">
               <span className="text-xs font-black text-slate-400 uppercase tracking-widest">من</span>
-              <Input type="date" value={dateRange.start} onChange={e => setDateRange({...dateRange, start: e.target.value})} className="border-none bg-transparent font-black text-slate-900 h-8 p-0 w-32 focus-visible:ring-0" />
+              <Input type="date" value={dateRange.start} onChange={e => setDateRange({...dateRange, start: e.target.value})} className="border-none bg-transparent font-black text-slate-900 h-8 p-0 w-32 focus-visible:ring-0 cursor-pointer" />
             </div>
             <div className="w-px h-6 bg-slate-200" />
             <div className="flex items-center gap-2 px-3">
               <span className="text-xs font-black text-slate-400 uppercase tracking-widest">إلى</span>
-              <Input type="date" value={dateRange.end} onChange={e => setDateRange({...dateRange, end: e.target.value})} className="border-none bg-transparent font-black text-slate-900 h-8 p-0 w-32 focus-visible:ring-0" />
+              <Input type="date" value={dateRange.end} onChange={e => setDateRange({...dateRange, end: e.target.value})} className="border-none bg-transparent font-black text-slate-900 h-8 p-0 w-32 focus-visible:ring-0 cursor-pointer" />
             </div>
           </div>
           <div className="flex items-center justify-end gap-2 px-2">
@@ -387,10 +400,16 @@ function PayrollMasterReport({ payrolls, employees, hrTransactions, attendance, 
               type="checkbox" 
               checked={includeDrafts} 
               onChange={e => setIncludeDrafts(e.target.checked)}
-              className="w-5 h-5 accent-primary rounded-lg cursor-pointer"
+              className="w-5 h-5 accent-primary rounded-lg cursor-pointer transition-all hover:scale-110"
             />
           </div>
         </div>
+      </div>
+
+      <div className="hidden print:block text-center mb-12 border-b-2 border-slate-100 pb-8">
+        <h1 className="text-4xl font-black text-slate-900">كشف الأجور والمرتبات التفصيلي</h1>
+        <p className="text-slate-500 font-bold mt-2">عن الفترة من {dateRange.start} إلى {dateRange.end}</p>
+        <div className="mt-6 w-32 h-1.5 bg-primary mx-auto rounded-full" />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
@@ -455,11 +474,17 @@ function PayrollMasterReport({ payrolls, employees, hrTransactions, attendance, 
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <Card className="dribbble-card lg:col-span-2 border-none shadow-2xl shadow-slate-200/50 overflow-hidden">
-          <CardHeader className="bg-slate-50/50 border-b border-slate-100">
-            <CardTitle className="text-xl font-black text-slate-900">منحنى تكلفة الأجور</CardTitle>
-            <CardDescription className="font-bold">تتبع النفقات الأسبوعية خلال الفترة</CardDescription>
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+        {/* Trend Chart */}
+        <Card className="dribbble-card lg:col-span-2 border-none shadow-2xl shadow-slate-200/50 overflow-hidden group">
+          <CardHeader className="bg-slate-50/50 border-b border-slate-100 flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-xl font-black text-slate-900">منحنى تكلفة الأجور</CardTitle>
+              <CardDescription className="font-bold">تتبع النفقات الأسبوعية خلال الفترة</CardDescription>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-500 group-hover:scale-110 transition-transform">
+              <BarChart3 size={20} />
+            </div>
           </CardHeader>
           <CardContent className="pt-10">
             <div className="h-[350px] w-full">
@@ -479,26 +504,27 @@ function PayrollMasterReport({ payrolls, employees, hrTransactions, attendance, 
           </CardContent>
         </Card>
 
+        {/* Composition Chart */}
         <Card className="dribbble-card border-none shadow-2xl shadow-slate-200/50 overflow-hidden">
           <CardHeader className="bg-slate-50/50 border-b border-slate-100">
-            <CardTitle className="text-xl font-black text-slate-900">هيكل تكلفة الأقسام</CardTitle>
-            <CardDescription className="font-bold">توزيع الرواتب الصافية حسب الإدارة</CardDescription>
+            <CardTitle className="text-xl font-black text-slate-900">هيكل الأجور</CardTitle>
+            <CardDescription className="font-bold">مكونات إجمالي نفقات الموظفين</CardDescription>
           </CardHeader>
-          <CardContent className="pt-10">
-            <div className="h-[350px] w-full">
+          <CardContent className="pt-6">
+            <div className="h-[280px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={deptData}
+                    data={compositionData}
                     cx="50%"
                     cy="50%"
-                    innerRadius={70}
-                    outerRadius={100}
-                    paddingAngle={5}
+                    innerRadius={60}
+                    outerRadius={80}
+                    paddingAngle={10}
                     dataKey="value"
                   >
-                    {deptData.map((_entry: any, index: number) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    {compositionData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
                   <Tooltip 
@@ -508,6 +534,49 @@ function PayrollMasterReport({ payrolls, employees, hrTransactions, attendance, 
                   <Legend verticalAlign="bottom" height={36} iconType="circle" />
                 </PieChart>
               </ResponsiveContainer>
+            </div>
+            <div className="mt-6 space-y-3">
+              {compositionData.map((item, i) => (
+                <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-slate-50/50 group hover:bg-white transition-all">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
+                    <span className="text-sm font-bold text-slate-600">{item.name}</span>
+                  </div>
+                  <span className="font-black text-slate-900">{((item.value / (totalWages || 1)) * 100).toFixed(1)}%</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Top Earners */}
+        <Card className="dribbble-card border-none shadow-2xl shadow-slate-200/50 overflow-hidden">
+          <CardHeader className="bg-slate-50/50 border-b border-slate-100">
+            <CardTitle className="text-xl font-black text-slate-900">الأكثر كسباً</CardTitle>
+            <CardDescription className="font-bold">أعلى 5 موظفين دخلاً في الفترة</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-6">
+            <div className="space-y-4">
+              {topEarners.map((earner, i) => {
+                const emp = employees.find(e => e.id === earner.employeeId);
+                return (
+                  <div key={i} className="flex items-center justify-between group">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center font-black text-slate-400 group-hover:bg-primary group-hover:text-white transition-all">
+                        {i + 1}
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-black text-slate-800 leading-tight">{emp?.name}</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{emp?.department}</span>
+                      </div>
+                    </div>
+                    <span className="font-black text-slate-900 text-sm">
+                      {earner.netSalary.toLocaleString()}
+                    </span>
+                  </div>
+                );
+              })}
+              {topEarners.length === 0 && <p className="text-center py-10 text-slate-400 font-bold">لا توجد بيانات كافية</p>}
             </div>
           </CardContent>
         </Card>
@@ -1166,7 +1235,22 @@ function MainApp() {
         )}
         {activeTab === 'archive' && <ArchiveView employees={employees} payrolls={payrolls} />}
         {activeTab === 'suppliers' && <Suppliers suppliers={suppliers} purchases={purchases} items={items} supplierPayments={supplierPayments} />}
-        {activeTab === 'reports' && <ReportsView items={items} suppliers={suppliers} purchases={purchases} issuances={issuances} warehouses={warehouses} productionJobs={productionJobs} jobLabors={jobLabors} jobOtherCosts={jobOtherCosts} />}
+        {activeTab === 'reports' && (
+          <ReportsView 
+            items={items} 
+            suppliers={suppliers} 
+            purchases={purchases} 
+            issuances={issuances} 
+            warehouses={warehouses} 
+            productionJobs={productionJobs} 
+            jobLabors={jobLabors} 
+            jobOtherCosts={jobOtherCosts}
+            wasteRecords={wasteRecords}
+            bladeSharpening={bladeSharpening}
+            plateSharpening={plateSharpening}
+            machineMaintenance={machineMaintenance}
+          />
+        )}
         {activeTab === 'payrollMasterReport' && (
           <PayrollMasterReport 
             payrolls={payrolls}
@@ -5104,7 +5188,11 @@ function ReportsView({
   warehouses, 
   productionJobs, 
   jobLabors, 
-  jobOtherCosts 
+  jobOtherCosts,
+  wasteRecords,
+  bladeSharpening,
+  plateSharpening,
+  machineMaintenance
 }: { 
   items: Item[], 
   suppliers: Supplier[], 
@@ -5113,7 +5201,11 @@ function ReportsView({
   warehouses: Warehouse[],
   productionJobs: ProductionJob[],
   jobLabors: JobLabor[],
-  jobOtherCosts: JobOtherCost[]
+  jobOtherCosts: JobOtherCost[],
+  wasteRecords: Waste[],
+  bladeSharpening: BladeSharpening[],
+  plateSharpening: PlateSharpening[],
+  machineMaintenance: MachineMaintenance[]
 }) {
   // 1. Data for Warehouse Value Chart
   const warehouseData = warehouses.map(w => {
@@ -5122,6 +5214,13 @@ function ReportsView({
       .reduce((acc, i) => acc + (i.currentBalance * i.price), 0);
     return { name: w.name, value };
   });
+
+  const totalInventoryValue = warehouseData.reduce((acc, w) => acc + w.value, 0);
+  const totalSupplierDebt = suppliers.reduce((acc, s) => acc + s.balance, 0);
+  const totalWasteValue = wasteRecords.reduce((acc, w) => {
+    const item = items.find(i => i.id === w.itemId);
+    return acc + (w.quantity * (item?.price || 0));
+  }, 0);
 
   // 2. Data for Cost Center Consumption
   const costCenterData = issuances.reduce((acc: any[], iss) => {
@@ -5155,6 +5254,8 @@ function ReportsView({
     };
   });
 
+  const totalProductionCost = productionProfitData.reduce((acc, j) => acc + j.cost, 0);
+
   // 4. Monthly Trends (Last 6 months)
   const monthlyTrends = Array.from({ length: 6 }).map((_, i) => {
     const date = new Date();
@@ -5172,7 +5273,14 @@ function ReportsView({
     return { name: monthStr, purchases: monthPurchases, issuances: monthIssuances };
   }).reverse();
 
-  const COLORS = ['#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe', '#dbeafe'];
+  // 5. Maintenance Data
+  const maintenanceData = [
+    { name: 'سن الصواني', value: plateSharpening.reduce((acc, s) => acc + s.cost, 0) },
+    { name: 'سن الأسلحة', value: bladeSharpening.reduce((acc, s) => acc + s.cost, 0) },
+    { name: 'صيانة الماكينات', value: machineMaintenance.reduce((acc, s) => acc + s.cost, 0) },
+  ];
+
+  const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
 
   const exportToExcel = (data: any[], fileName: string) => {
     const ws = XLSX.utils.json_to_sheet(data);
@@ -5205,14 +5313,73 @@ function ReportsView({
         <div className="mt-4 w-20 h-1 bg-primary mx-auto rounded-full" />
       </div>
 
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <Card className="dribbble-card border-none bg-blue-50/50 shadow-sm">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-blue-500 flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
+                <Package size={24} />
+              </div>
+              <div>
+                <p className="text-xs font-black text-blue-600 uppercase tracking-widest mb-1">قيمة المخزون</p>
+                <h3 className="text-2xl font-black text-slate-900">{totalInventoryValue.toLocaleString()} <small className="text-xs font-bold text-slate-400">ج.م</small></h3>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="dribbble-card border-none bg-red-50/50 shadow-sm">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-red-500 flex items-center justify-center text-white shadow-lg shadow-red-500/20">
+                <Users size={24} />
+              </div>
+              <div>
+                <p className="text-xs font-black text-red-600 uppercase tracking-widest mb-1">مديونيات الموردين</p>
+                <h3 className="text-2xl font-black text-slate-900">{totalSupplierDebt.toLocaleString()} <small className="text-xs font-bold text-slate-400">ج.م</small></h3>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="dribbble-card border-none bg-emerald-50/50 shadow-sm">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20">
+                <Layers size={24} />
+              </div>
+              <div>
+                <p className="text-xs font-black text-emerald-600 uppercase tracking-widest mb-1">تكلفة الإنتاج</p>
+                <h3 className="text-2xl font-black text-slate-900">{totalProductionCost.toLocaleString()} <small className="text-xs font-bold text-slate-400">ج.م</small></h3>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="dribbble-card border-none bg-orange-50/50 shadow-sm">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-orange-500 flex items-center justify-center text-white shadow-lg shadow-orange-500/20">
+                <AlertTriangle size={24} />
+              </div>
+              <div>
+                <p className="text-xs font-black text-orange-600 uppercase tracking-widest mb-1">قيمة الهالك</p>
+                <h3 className="text-2xl font-black text-slate-900">{totalWasteValue.toLocaleString()} <small className="text-xs font-bold text-slate-400">ج.م</small></h3>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Chart 1: Inventory Value by Warehouse */}
-        <Card className="dribbble-card border-none">
-          <CardHeader>
-            <CardTitle className="text-xl font-black text-slate-900">قيمة المخزون لكل مخزن</CardTitle>
-            <CardDescription className="font-medium">توزيع رأس المال المركون في المخازن</CardDescription>
+        <Card className="dribbble-card border-none shadow-xl shadow-slate-200/50 overflow-hidden">
+          <CardHeader className="bg-slate-50/50 border-b border-slate-100">
+            <CardTitle className="text-xl font-black text-slate-900">توزيع المخزون</CardTitle>
+            <CardDescription className="font-bold">القيمة المالية لكل مخزن حالياً</CardDescription>
           </CardHeader>
-          <CardContent className="h-[350px] pt-4">
+          <CardContent className="h-[350px] pt-10">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={warehouseData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -5229,10 +5396,10 @@ function ReportsView({
         </Card>
 
         {/* Chart 2: Consumption by Cost Center */}
-        <Card className="dribbble-card border-none">
-          <CardHeader>
-            <CardTitle className="text-xl font-black text-slate-900">استهلاك مراكز التكلفة</CardTitle>
-            <CardDescription className="font-medium">توزيع المنصرف على مراحل الإنتاج</CardDescription>
+        <Card className="dribbble-card border-none shadow-xl shadow-slate-200/50 overflow-hidden">
+          <CardHeader className="bg-slate-50/50 border-b border-slate-100">
+            <CardTitle className="text-xl font-black text-slate-900">استهلاك مراحل الإنتاج</CardTitle>
+            <CardDescription className="font-bold">توزيع المنصرف من المواد الخام حسب المرحلة</CardDescription>
           </CardHeader>
           <CardContent className="h-[350px] flex items-center justify-center pt-4">
             <ResponsiveContainer width="100%" height="100%">
@@ -5246,7 +5413,7 @@ function ReportsView({
                   paddingAngle={8}
                   dataKey="value"
                 >
-                  {costCenterData.map((entry, index) => (
+                  {costCenterData.map((_entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
                   ))}
                 </Pie>
@@ -5260,13 +5427,71 @@ function ReportsView({
           </CardContent>
         </Card>
 
-        {/* Chart 3: Production Profitability */}
-        <Card className="dribbble-card border-none lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-xl font-black text-slate-900">تحليل ربحية أوامر الإنتاج</CardTitle>
-            <CardDescription className="font-medium">مقارنة التكلفة الفعلية بسعر البيع لكل طلب</CardDescription>
+        {/* Chart: Maintenance Analysis */}
+        <Card className="dribbble-card border-none shadow-xl shadow-slate-200/50 overflow-hidden lg:col-span-1">
+          <CardHeader className="bg-slate-50/50 border-b border-slate-100">
+            <CardTitle className="text-xl font-black text-slate-900">تكاليف الصيانة والسن</CardTitle>
+            <CardDescription className="font-bold">إجمالي المصاريف الخاصة بتجهيز الماكينات والعدد</CardDescription>
           </CardHeader>
-          <CardContent className="h-[400px] pt-4">
+          <CardContent className="h-[350px] pt-10">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={maintenanceData} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                <XAxis type="number" hide />
+                <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }} width={100} />
+                <Tooltip 
+                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px' }}
+                  formatter={(value: number) => [`${value.toLocaleString()} ج.م`, 'التكلفة']}
+                />
+                <Bar dataKey="value" fill="#8b5cf6" radius={[0, 8, 8, 0]} barSize={40} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* Waste Analysis Table */}
+        <Card className="dribbble-card border-none shadow-xl shadow-slate-200/50 overflow-hidden">
+          <CardHeader className="bg-slate-50/50 border-b border-slate-100">
+            <CardTitle className="text-xl font-black text-slate-900">سجل الهالك الأخير</CardTitle>
+            <CardDescription className="font-bold">متابعة المواد المهدرة وأسبابها</CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader className="bg-slate-50/50">
+                <TableRow className="hover:bg-transparent border-slate-100">
+                  <TableHead className="text-right font-black text-slate-900 py-4">الصنف</TableHead>
+                  <TableHead className="text-right font-black text-slate-900">الكمية</TableHead>
+                  <TableHead className="text-right font-black text-slate-900">السبب</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {wasteRecords.slice(-5).reverse().map(waste => {
+                  const item = items.find(i => i.id === waste.itemId);
+                  return (
+                    <TableRow key={waste.id} className="border-slate-50 hover:bg-slate-50/50">
+                      <TableCell className="font-bold text-slate-900">{item?.name || 'صنف محذوف'}</TableCell>
+                      <TableCell className="font-black text-orange-600">{waste.quantity} {waste.unit}</TableCell>
+                      <TableCell className="text-slate-500 font-bold">{waste.reason}</TableCell>
+                    </TableRow>
+                  );
+                })}
+                {wasteRecords.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={3} className="text-center py-8 text-slate-400 font-bold">لا يوجد سجل هالك</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        {/* Chart 3: Production Profitability */}
+        <Card className="dribbble-card border-none shadow-xl shadow-slate-200/50 overflow-hidden lg:col-span-2">
+          <CardHeader className="bg-slate-50/50 border-b border-slate-100">
+            <CardTitle className="text-xl font-black text-slate-900">تحليل ربحية أوامر الإنتاج</CardTitle>
+            <CardDescription className="font-bold">مقارنة التكلفة الفعلية بسعر البيع لكل طلب</CardDescription>
+          </CardHeader>
+          <CardContent className="h-[400px] pt-10">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={productionProfitData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -5283,6 +5508,7 @@ function ReportsView({
             </ResponsiveContainer>
           </CardContent>
         </Card>
+
 
         {/* Detailed Job Costing Report */}
         <Card className="dribbble-card border-none lg:col-span-2">
