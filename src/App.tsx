@@ -471,7 +471,7 @@ function PayrollMasterReport({ payrolls, employees, hrTransactions, attendance, 
 
       <div className="hidden print:block text-center mb-12 border-b-2 border-slate-100 pb-8">
         <h1 className="text-4xl font-black text-slate-900">كشف الأجور والمرتبات لكافة العاملين - {companyInfo.name}</h1>
-        <p className="text-slate-500 font-bold mt-2">عن الفترة من {dateRange.start} إلى {dateRange.end}</p>
+        <p className="text-slate-500 font-bold mt-2">عن الفترة: {format(new Date(dateRange.start), 'dd/MM/yyyy')} إلى {format(new Date(dateRange.end), 'dd/MM/yyyy')}</p>
         <div className="mt-6 w-32 h-1.5 bg-primary mx-auto rounded-full" />
       </div>
 
@@ -670,7 +670,7 @@ function PayrollMasterReport({ payrolls, employees, hrTransactions, attendance, 
                     'الموظف': emp?.name,
                     'القسم': emp?.department,
                     'الحالة': p.status === 'مدفوع' ? 'تم الصرف' : 'مسودة',
-                    'تاريخ الصرف': p.paymentDate || 'غير محدد',
+                    'تاريخ الصرف': p.paymentDate ? format(new Date(p.paymentDate), 'dd/MM/yyyy') : 'غير محدد',
                     'أيام العمل': p.daysWorked,
                     'الراتب الأساسي': p.baseSalary,
                     'حوافز إنتاج': p.totalProduction,
@@ -1701,7 +1701,7 @@ function ItemCardView({ items, suppliers, purchases, issuances, getItemMovements
                   {movements.slice().reverse().map((m, idx) => (
                     <TableRow key={idx} className="hover:bg-slate-50/50 transition-colors">
                       <TableCell className="text-slate-500 font-medium">
-                        {m.date !== '---' ? format(new Date(m.date), 'yyyy/MM/dd HH:mm') : '---'}
+                        {m.date !== '---' ? format(new Date(m.date), 'dd/MM/yyyy HH:mm') : '---'}
                       </TableCell>
                       <TableCell>
                         <Badge className={`rounded-lg px-3 py-1 border-none font-bold ${
@@ -2480,7 +2480,7 @@ function Inventory({ items, warehouses, purchases, issuances, suppliers, getItem
                   <TableBody>
                     {getItemMovements(selectedItemCard.id).slice().reverse().map((m, idx) => (
                       <TableRow key={idx} className="border-slate-50 hover:bg-slate-50/50 transition-colors">
-                        <TableCell className="text-slate-500 font-medium">{m.date !== '---' ? format(new Date(m.date), 'yyyy/MM/dd HH:mm') : '---'}</TableCell>
+                        <TableCell className="text-slate-500 font-medium">{m.date !== '---' ? format(new Date(m.date), 'dd/MM/yyyy HH:mm') : '---'}</TableCell>
                         <TableCell>
                           <Badge className={`rounded-lg px-3 py-1 border-none font-bold ${
                             m.type.includes('وارد') ? 'bg-green-100 text-green-700' : 
@@ -3134,6 +3134,14 @@ function ProductionLine({
                                       </div>
                                     </div>
                                     
+                                    {/* Manufacturing Progress */}
+                                    <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                                      <div 
+                                        className="bg-primary h-full transition-all duration-500"
+                                        style={{ width: `${(Math.min(job.workflowStep || 0, costCenters.length) / costCenters.length) * 100}%` }}
+                                      />
+                                    </div>
+                                    
                                     <div>
                                       <h4 className="font-black text-slate-900 leading-tight">{job.productName}</h4>
                                       <div className="flex justify-between items-center mt-1">
@@ -3195,7 +3203,7 @@ function ProductionLine({
                                       <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                                         <Calendar size={12} className={job.deadline && new Date(job.deadline) < new Date() ? "text-red-500 animate-pulse" : "text-primary"} />
                                         <span className={job.deadline && new Date(job.deadline) < new Date() ? "text-red-500 font-black" : ""}>
-                                          {job.deadline ? format(new Date(job.deadline), 'MM/dd') : 'بدون موعد'}
+                                          {job.deadline ? format(new Date(job.deadline), 'dd/MM') : 'بدون موعد'}
                                         </span>
                                       </div>
                                       <Badge 
@@ -4324,7 +4332,7 @@ function Purchases({ items, suppliers, purchases }: { items: Item[], suppliers: 
 
   const handleExportExcel = () => {
     const data = filteredPurchases.map(p => ({
-      'التاريخ': format(new Date(p.date), 'yyyy/MM/dd'),
+      'التاريخ': format(new Date(p.date), 'dd/MM/yyyy'),
       'المورد': suppliers.find(s => s.id === p.supplierId)?.name || 'غير معروف',
       'الصنف': items.find(i => i.id === p.itemId)?.name || 'غير معروف',
       'الكمية': p.quantity,
@@ -4484,7 +4492,7 @@ function Purchases({ items, suppliers, purchases }: { items: Item[], suppliers: 
           <TableBody>
             {filteredPurchases.slice().reverse().map(p => (
               <TableRow key={p.id} className="border-slate-50 hover:bg-slate-50/50 transition-colors">
-                <TableCell className="font-bold text-slate-500">{format(new Date(p.date), 'yyyy/MM/dd')}</TableCell>
+                <TableCell className="font-bold text-slate-500">{format(new Date(p.date), 'dd/MM/yyyy')}</TableCell>
                 <TableCell className="font-black text-slate-900">{suppliers.find(s => s.id === p.supplierId)?.name}</TableCell>
                 <TableCell className="font-bold text-slate-700">{items.find(i => i.id === p.itemId)?.name}</TableCell>
                 <TableCell className="font-bold text-slate-600">{p.quantity}</TableCell>
@@ -4632,7 +4640,7 @@ function Issuances({ items, issuances, costCenters }: { items: Item[], issuances
 
   const handleExportExcel = () => {
     const data = filteredIssuances.map(iss => ({
-      'التاريخ': format(new Date(iss.date), 'yyyy/MM/dd HH:mm'),
+      'التاريخ': format(new Date(iss.date), 'dd/MM/yyyy HH:mm'),
       'رقم أمر الشغل': iss.jobOrderNo,
       'الصنف': items.find(i => i.id === iss.itemId)?.name || 'غير معروف',
       'الكمية': iss.quantity,
@@ -4794,7 +4802,7 @@ function Issuances({ items, issuances, costCenters }: { items: Item[], issuances
           <TableBody>
             {filteredIssuances.slice().reverse().map(iss => (
               <TableRow key={iss.id} className="border-slate-50 hover:bg-slate-50/50 transition-colors">
-                <TableCell className="font-bold text-slate-500">{format(new Date(iss.date), 'yyyy/MM/dd HH:mm')}</TableCell>
+                <TableCell className="font-bold text-slate-500">{format(new Date(iss.date), 'dd/MM/yyyy HH:mm')}</TableCell>
                 <TableCell className="font-black text-slate-900">
                   <Badge variant="outline" className="border-slate-200 text-slate-400 font-black text-[10px] uppercase tracking-widest">
                     #{iss.jobOrderNo || '-'}
@@ -5086,7 +5094,7 @@ function Suppliers({ suppliers, purchases, items, supplierPayments }: { supplier
                     ...supplierPaymentsList.map(p => ({ ...p, _type: 'payment', _date: new Date(p.date).getTime() }))
                   ].sort((a, b) => b._date - a._date).map((item: any) => (
                     <TableRow key={item.id}>
-                      <TableCell>{format(new Date(item.date), 'yyyy/MM/dd')}</TableCell>
+                      <TableCell>{format(new Date(item.date), 'dd/MM/yyyy')}</TableCell>
                       <TableCell>
                         {item._type === 'purchase' ? (
                           <Badge className="bg-blue-100 text-blue-700 border-none">فاتورة مشتريات</Badge>
@@ -5419,7 +5427,7 @@ function WastedItemsView({ items, wasteRecords }: { items: Item[], wasteRecords:
           <TableBody>
             {wasteRecords.slice().reverse().map(record => (
               <TableRow key={record.id} className="border-slate-50 hover:bg-slate-50/50 transition-colors">
-                <TableCell className="font-bold text-slate-500">{format(new Date(record.date), 'yyyy/MM/dd HH:mm')}</TableCell>
+                <TableCell className="font-bold text-slate-500">{format(new Date(record.date), 'dd/MM/yyyy HH:mm')}</TableCell>
                 <TableCell className="font-black text-slate-900">{items.find(i => i.id === record.itemId)?.name}</TableCell>
                 <TableCell className="font-bold text-red-600">{record.quantity}</TableCell>
                 <TableCell className="text-slate-500 font-medium">{record.unit}</TableCell>
@@ -5532,6 +5540,8 @@ function ReportsView({
   machineMaintenance: MachineMaintenance[],
   companySettings: CompanySettings
 }) {
+  const [activeReportTab, setActiveReportTab] = useState('dashboard');
+  
   // 1. Data for Warehouse Value Chart
   const warehouseData = warehouses.map(w => {
     const value = items
@@ -5639,268 +5649,158 @@ function ReportsView({
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card className="dribbble-card border-none bg-blue-50/50 shadow-sm">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-blue-500 flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
-                <Package size={24} />
-              </div>
-              <div>
-                <p className="text-xs font-black text-blue-600 uppercase tracking-widest mb-1">قيمة المخزون</p>
-                <h3 className="text-2xl font-black text-slate-900">{totalInventoryValue.toLocaleString()} <small className="text-xs font-bold text-slate-400">ج.م</small></h3>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="dribbble-card border-none bg-red-50/50 shadow-sm">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-red-500 flex items-center justify-center text-white shadow-lg shadow-red-500/20">
-                <Users size={24} />
-              </div>
-              <div>
-                <p className="text-xs font-black text-red-600 uppercase tracking-widest mb-1">مديونيات الموردين</p>
-                <h3 className="text-2xl font-black text-slate-900">{totalSupplierDebt.toLocaleString()} <small className="text-xs font-bold text-slate-400">ج.م</small></h3>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="dribbble-card border-none bg-emerald-50/50 shadow-sm">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-500 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20">
-                <Layers size={24} />
-              </div>
-              <div>
-                <p className="text-xs font-black text-emerald-600 uppercase tracking-widest mb-1">تكلفة الإنتاج</p>
-                <h3 className="text-2xl font-black text-slate-900">{totalProductionCost.toLocaleString()} <small className="text-xs font-bold text-slate-400">ج.م</small></h3>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="dribbble-card border-none bg-orange-50/50 shadow-sm">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-orange-500 flex items-center justify-center text-white shadow-lg shadow-orange-500/20">
-                <AlertTriangle size={24} />
-              </div>
-              <div>
-                <p className="text-xs font-black text-orange-600 uppercase tracking-widest mb-1">قيمة الهالك</p>
-                <h3 className="text-2xl font-black text-slate-900">{totalWasteValue.toLocaleString()} <small className="text-xs font-bold text-slate-400">ج.م</small></h3>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="flex items-center justify-between">
+        <h2 className="text-3xl font-black text-slate-900">تقارير النظام</h2>
+        <div className="flex bg-slate-100 p-1 rounded-2xl">
+          <button 
+            onClick={() => setActiveReportTab('dashboard')}
+            className={`px-6 py-2 rounded-xl font-black transition-all ${activeReportTab === 'dashboard' ? 'bg-white shadow-sm text-primary' : 'text-slate-500'}`}
+          >
+            لوحة المؤشرات
+          </button>
+          <button 
+            onClick={() => setActiveReportTab('warehouse')}
+            className={`px-6 py-2 rounded-xl font-black transition-all ${activeReportTab === 'warehouse' ? 'bg-white shadow-sm text-primary' : 'text-slate-500'}`}
+          >
+            جرد المخزن الشامل
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Chart 1: Inventory Value by Warehouse */}
-        <Card className="dribbble-card border-none shadow-xl shadow-slate-200/50 overflow-hidden">
-          <CardHeader className="bg-slate-50/50 border-b border-slate-100">
-            <CardTitle className="text-xl font-black text-slate-900">توزيع المخزون</CardTitle>
-            <CardDescription className="font-bold">القيمة المالية لكل مخزن حالياً</CardDescription>
-          </CardHeader>
-          <CardContent className="h-[350px] pt-10">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={warehouseData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }} />
-                <Tooltip 
-                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px' }}
-                  formatter={(value: number) => [`${value.toLocaleString()} ج.م`, 'القيمة']}
-                />
-                <Bar dataKey="value" fill="#3b82f6" radius={[8, 8, 0, 0]} barSize={40} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+      {activeReportTab === 'dashboard' ? (
+        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <Card className="dribbble-card border-none bg-blue-50/50 shadow-sm">
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-blue-500 flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
+                    <Package size={24} />
+                  </div>
+                  <div>
+                    <p className="text-xs font-black text-blue-600 uppercase tracking-widest mb-1">قيمة المخزون</p>
+                    <h3 className="text-2xl font-black text-slate-900">{totalInventoryValue.toLocaleString()} <small className="text-xs font-bold text-slate-400">ج.م</small></h3>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-        {/* Chart 2: Consumption by Cost Center */}
-        <Card className="dribbble-card border-none shadow-xl shadow-slate-200/50 overflow-hidden">
-          <CardHeader className="bg-slate-50/50 border-b border-slate-100">
-            <CardTitle className="text-xl font-black text-slate-900">استهلاك مراحل الإنتاج</CardTitle>
-            <CardDescription className="font-bold">توزيع المنصرف من المواد الخام حسب المرحلة</CardDescription>
-          </CardHeader>
-          <CardContent className="h-[350px] flex items-center justify-center pt-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={costCenterData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={80}
-                  outerRadius={110}
-                  paddingAngle={8}
-                  dataKey="value"
-                >
-                  {costCenterData.map((_entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px' }}
-                  formatter={(value: number) => `${value.toLocaleString()} ج.م`} 
-                />
-                <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ paddingTop: '20px', fontWeight: 600 }} />
-              </PieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+            <Card className="dribbble-card border-none bg-red-50/50 shadow-sm">
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-red-500 flex items-center justify-center text-white shadow-lg shadow-red-500/20">
+                    <Users size={24} />
+                  </div>
+                  <div>
+                    <p className="text-xs font-black text-red-600 uppercase tracking-widest mb-1">مديونيات الموردين</p>
+                    <h3 className="text-2xl font-black text-slate-900">{totalSupplierDebt.toLocaleString()} <small className="text-xs font-bold text-slate-400">ج.م</small></h3>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-        {/* Chart: Maintenance Analysis */}
-        <Card className="dribbble-card border-none shadow-xl shadow-slate-200/50 overflow-hidden lg:col-span-1">
-          <CardHeader className="bg-slate-50/50 border-b border-slate-100">
-            <CardTitle className="text-xl font-black text-slate-900">تكاليف الصيانة والسن</CardTitle>
-            <CardDescription className="font-bold">إجمالي المصاريف الخاصة بتجهيز الماكينات والعدد</CardDescription>
-          </CardHeader>
-          <CardContent className="h-[350px] pt-10">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={maintenanceData} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
-                <XAxis type="number" hide />
-                <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }} width={100} />
-                <Tooltip 
-                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px' }}
-                  formatter={(value: number) => [`${value.toLocaleString()} ج.م`, 'التكلفة']}
-                />
-                <Bar dataKey="value" fill="#8b5cf6" radius={[0, 8, 8, 0]} barSize={40} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+            <Card className="dribbble-card border-none bg-emerald-50/50 shadow-sm">
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-500 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20">
+                    <Layers size={24} />
+                  </div>
+                  <div>
+                    <p className="text-xs font-black text-emerald-600 uppercase tracking-widest mb-1">تكلفة الإنتاج</p>
+                    <h3 className="text-2xl font-black text-slate-900">{totalProductionCost.toLocaleString()} <small className="text-xs font-bold text-slate-400">ج.م</small></h3>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-        {/* Waste Analysis Table */}
-        <Card className="dribbble-card border-none shadow-xl shadow-slate-200/50 overflow-hidden">
-          <CardHeader className="bg-slate-50/50 border-b border-slate-100">
-            <CardTitle className="text-xl font-black text-slate-900">سجل الهالك الأخير</CardTitle>
-            <CardDescription className="font-bold">متابعة المواد المهدرة وأسبابها</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader className="bg-slate-50/50">
-                <TableRow className="hover:bg-transparent border-slate-100">
-                  <TableHead className="text-right font-black text-slate-900 py-4">الصنف</TableHead>
-                  <TableHead className="text-right font-black text-slate-900">الكمية</TableHead>
-                  <TableHead className="text-right font-black text-slate-900">السبب</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {wasteRecords.slice(-5).reverse().map(waste => {
-                  const item = items.find(i => i.id === waste.itemId);
-                  return (
-                    <TableRow key={waste.id} className="border-slate-50 hover:bg-slate-50/50">
-                      <TableCell className="font-bold text-slate-900">{item?.name || 'صنف محذوف'}</TableCell>
-                      <TableCell className="font-black text-orange-600">{waste.quantity} {waste.unit}</TableCell>
-                      <TableCell className="text-slate-500 font-bold">{waste.reason}</TableCell>
-                    </TableRow>
-                  );
-                })}
-                {wasteRecords.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={3} className="text-center py-8 text-slate-400 font-bold">لا يوجد سجل هالك</TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+            <Card className="dribbble-card border-none bg-orange-50/50 shadow-sm">
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-orange-500 flex items-center justify-center text-white shadow-lg shadow-orange-500/20">
+                    <AlertTriangle size={24} />
+                  </div>
+                  <div>
+                    <p className="text-xs font-black text-orange-600 uppercase tracking-widest mb-1">قيمة الهالك</p>
+                    <h3 className="text-2xl font-black text-slate-900">{totalWasteValue.toLocaleString()} <small className="text-xs font-bold text-slate-400">ج.م</small></h3>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
-        {/* Chart 3: Production Profitability */}
-        <Card className="dribbble-card border-none shadow-xl shadow-slate-200/50 overflow-hidden lg:col-span-2">
-          <CardHeader className="bg-slate-50/50 border-b border-slate-100">
-            <CardTitle className="text-xl font-black text-slate-900">تحليل ربحية أوامر الإنتاج</CardTitle>
-            <CardDescription className="font-bold">مقارنة التكلفة الفعلية بسعر البيع لكل طلب</CardDescription>
-          </CardHeader>
-          <CardContent className="h-[400px] pt-10">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={productionProfitData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="orderNo" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }} />
-                <Tooltip 
-                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px' }}
-                />
-                <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ paddingBottom: '20px', fontWeight: 600 }} />
-                <Bar dataKey="cost" name="التكلفة" fill="#60a5fa" radius={[8, 8, 0, 0]} barSize={30} />
-                <Bar dataKey="sellingPrice" name="سعر البيع" fill="#34d399" radius={[8, 8, 0, 0]} barSize={30} />
-                <Line type="monotone" dataKey="profit" name="الربح" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4, fill: '#f59e0b', strokeWidth: 2 }} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <Card className="dribbble-card border-none shadow-xl shadow-slate-200/50 overflow-hidden">
+              <CardHeader className="bg-slate-50/50 border-b border-slate-100">
+                <CardTitle className="text-xl font-black text-slate-900">توزيع المخزون</CardTitle>
+                <CardDescription className="font-bold">القيمة المالية لكل مخزن حالياً</CardDescription>
+              </CardHeader>
+              <CardContent className="h-[350px] pt-10">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={warehouseData}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }} />
+                    <Tooltip 
+                      contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px' }}
+                      formatter={(value: number) => [`${value.toLocaleString()} ج.م`, 'القيمة']}
+                    />
+                    <Bar dataKey="value" fill="#3b82f6" radius={[8, 8, 0, 0]} barSize={40} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
 
+            <Card className="dribbble-card border-none shadow-xl shadow-slate-200/50 overflow-hidden">
+              <CardHeader className="bg-slate-50/50 border-b border-slate-100">
+                <CardTitle className="text-xl font-black text-slate-900">استهلاك مراحل الإنتاج</CardTitle>
+                <CardDescription className="font-bold">توزيع المنصرف من المواد الخام حسب المرحلة</CardDescription>
+              </CardHeader>
+              <CardContent className="h-[350px] flex items-center justify-center pt-4">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={costCenterData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={80}
+                      outerRadius={110}
+                      paddingAngle={8}
+                      dataKey="value"
+                    >
+                      {costCenterData.map((_entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px' }}
+                      formatter={(value: number) => `${value.toLocaleString()} ج.م`} 
+                    />
+                    <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ paddingTop: '20px', fontWeight: 600 }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
 
-        {/* Detailed Job Costing Report */}
-        <Card className="dribbble-card border-none lg:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle className="text-xl font-black text-slate-900">تقرير تكاليف وربحية الأوامر (تفصيلي)</CardTitle>
-              <CardDescription className="font-medium">بيانات مالية كاملة لكل أمر إنتاج</CardDescription>
-            </div>
-            <Button variant="outline" size="sm" className="rounded-xl font-bold" onClick={() => exportToExcel(productionProfitData, 'تقرير_ربحية_الإنتاج')}>
-              تصدير إكسيل
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-right font-black">رقم الأمر</TableHead>
-                  <TableHead className="text-right font-black">المنتج</TableHead>
-                  <TableHead className="text-right font-black">التكلفة الفعلية</TableHead>
-                  <TableHead className="text-right font-black">سعر البيع</TableHead>
-                  <TableHead className="text-right font-black">الربح / الخسارة</TableHead>
-                  <TableHead className="text-right font-black">النسبة</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {productionProfitData.map(job => (
-                  <TableRow key={job.orderNo}>
-                    <TableCell className="font-black">#{job.orderNo}</TableCell>
-                    <TableCell className="font-bold">{job.name}</TableCell>
-                    <TableCell className="font-bold">{job.cost.toLocaleString()} ج.م</TableCell>
-                    <TableCell className="font-bold">{job.sellingPrice.toLocaleString()} ج.م</TableCell>
-                    <TableCell className={`font-black ${job.profit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                      {job.profit.toLocaleString()} ج.م
-                    </TableCell>
-                    <TableCell className="font-bold">
-                      {job.sellingPrice > 0 ? ((job.profit / job.sellingPrice) * 100).toFixed(1) : 0}%
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-
-        {/* Chart 4: Purchase vs Issuance Trends */}
-        <Card className="dribbble-card border-none lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-xl font-black text-slate-900">حركة المشتريات مقابل المنصرف</CardTitle>
-            <CardDescription className="font-medium">مقارنة التدفقات الداخلة والخارجة خلال 6 أشهر</CardDescription>
-          </CardHeader>
-          <CardContent className="h-[400px] pt-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={monthlyTrends}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }} />
-                <Tooltip 
-                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px' }}
-                />
-                <Legend verticalAlign="top" align="right" height={36} iconType="circle" wrapperStyle={{ paddingBottom: '20px', fontWeight: 600 }} />
-                <Line type="monotone" dataKey="purchases" name="المشتريات" stroke="#3b82f6" strokeWidth={4} dot={{ r: 6, fill: '#3b82f6', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 8, strokeWidth: 0 }} />
-                <Line type="monotone" dataKey="issuances" name="المنصرف" stroke="#94a3b8" strokeWidth={4} dot={{ r: 6, fill: '#94a3b8', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 8, strokeWidth: 0 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
+            <Card className="dribbble-card border-none shadow-xl shadow-slate-200/50 overflow-hidden lg:col-span-1">
+              <CardHeader className="bg-slate-50/50 border-b border-slate-100">
+                <CardTitle className="text-xl font-black text-slate-900">تكاليف الصيانة والسن</CardTitle>
+                <CardDescription className="font-bold">إجمالي المصاريف الخاصة بتجهيز الماكينات والعدد</CardDescription>
+              </CardHeader>
+              <CardContent className="h-[350px] pt-10">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={maintenanceData} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                    <XAxis type="number" hide />
+                    <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }} width={100} />
+                    <Tooltip 
+                      contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px' }}
+                      formatter={(value: number) => [`${value.toLocaleString()} ج.م`, 'التكلفة']}
+                    />
+                    <Bar dataKey="value" fill="#8b5cf6" radius={[0, 8, 8, 0]} barSize={40} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
 
       {/* Summary Tables */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -5972,6 +5872,50 @@ function ReportsView({
           </CardContent>
         </Card>
       </div>
+      </div>
+      ) : (
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <Card className="dribbble-card border-none">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-2xl font-black">تقرير جرد المخزن الشامل</CardTitle>
+              <Button onClick={() => exportToExcel(items.map(i => ({
+                الاسم: i.name,
+                الوحدة: i.unit,
+                المخزن: warehouses.find(w => w.id === i.warehouseId)?.name,
+                الرصيد: i.currentBalance,
+                السعر: i.price,
+                القيمة: i.currentBalance * i.price
+              })), 'تقرير_المخزن_الشامل')} className="rounded-xl font-bold">تصدير إكسيل</Button>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="font-black">الصنف</TableHead>
+                    <TableHead className="font-black">المخزن</TableHead>
+                    <TableHead className="font-black">الوحدة</TableHead>
+                    <TableHead className="font-black">الرصيد</TableHead>
+                    <TableHead className="font-black">السعر</TableHead>
+                    <TableHead className="font-black">القيمة</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {items.map(item => (
+                    <TableRow key={item.id}>
+                      <TableCell className="font-bold">{item.name}</TableCell>
+                      <TableCell className="font-bold">{warehouses.find(w => w.id === item.warehouseId)?.name}</TableCell>
+                      <TableCell className="font-bold">{item.unit}</TableCell>
+                      <TableCell className={`font-black ${item.currentBalance <= item.safetyLimit ? 'text-red-500' : 'text-slate-700'}`}>{item.currentBalance}</TableCell>
+                      <TableCell className="font-bold">{item.price.toLocaleString()} ج.م</TableCell>
+                      <TableCell className="font-black text-emerald-600">{(item.currentBalance * item.price).toLocaleString()} ج.م</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
@@ -6025,7 +5969,7 @@ function BladeSharpeningView({ records }: { records: BladeSharpening[] }) {
           <TableBody>
             {records.slice().sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(r => (
               <TableRow key={r.id} className="hover:bg-slate-50/50 transition-colors">
-                <TableCell className="font-bold text-slate-500">{format(new Date(r.date), 'yyyy/MM/dd')}</TableCell>
+                <TableCell className="font-bold text-slate-500">{format(new Date(r.date), 'dd/MM/yyyy')}</TableCell>
                 <TableCell className="font-black text-slate-900">{r.bladeName}</TableCell>
                 <TableCell className="font-bold text-slate-600">{r.quantity}</TableCell>
                 <TableCell className="font-black text-primary">{r.cost.toLocaleString()} ج.م</TableCell>
@@ -6131,7 +6075,7 @@ function PlateSharpeningView({ records }: { records: PlateSharpening[] }) {
           <TableBody>
             {records.slice().sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(r => (
               <TableRow key={r.id} className="hover:bg-slate-50/50 transition-colors">
-                <TableCell className="font-bold text-slate-500">{format(new Date(r.date), 'yyyy/MM/dd')}</TableCell>
+                <TableCell className="font-bold text-slate-500">{format(new Date(r.date), 'dd/MM/yyyy')}</TableCell>
                 <TableCell className="font-black text-slate-900">{r.plateName}</TableCell>
                 <TableCell className="font-bold text-slate-600">{r.quantity}</TableCell>
                 <TableCell className="font-black text-primary">{r.cost.toLocaleString()} ج.م</TableCell>
@@ -6237,7 +6181,7 @@ function MachineMaintenanceView({ records }: { records: MachineMaintenance[] }) 
           <TableBody>
             {records.slice().sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(r => (
               <TableRow key={r.id} className="hover:bg-slate-50/50 transition-colors">
-                <TableCell className="font-bold text-slate-500">{format(new Date(r.date), 'yyyy/MM/dd')}</TableCell>
+                <TableCell className="font-bold text-slate-500">{format(new Date(r.date), 'dd/MM/yyyy')}</TableCell>
                 <TableCell className="font-black text-slate-900">{r.machineName}</TableCell>
                 <TableCell className="font-bold text-blue-600">{r.maintenanceType}</TableCell>
                 <TableCell className="font-black text-primary">{r.cost.toLocaleString()} ج.م</TableCell>
@@ -8605,7 +8549,7 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls, pro
                 <TableCell className="font-bold text-slate-500">
                   <div className="flex flex-col">
                     <span>أسبوع {p.weekNumber}</span>
-                    <span className="text-[10px] text-slate-400">{p.startDate} - {p.endDate}</span>
+                    <span className="text-[10px] text-slate-400">{format(new Date(p.startDate), 'dd/MM/yyyy')} إلى {format(new Date(p.endDate), 'dd/MM/yyyy')}</span>
                   </div>
                 </TableCell>
                 <TableCell className="font-black text-slate-900">{employees.find(e => e.id === p.employeeId)?.name}</TableCell>
@@ -9014,9 +8958,9 @@ function ArchiveView({ employees, payrolls }: { employees: Employee[], payrolls:
                       <span className="text-xs font-bold text-slate-400">{emp?.position}</span>
                     </div>
                   </TableCell>
-                  <TableCell className="font-bold text-slate-500">{p.paymentDate || '-'}</TableCell>
+                  <TableCell className="font-bold text-slate-500">{p.paymentDate ? format(new Date(p.paymentDate), 'dd/MM/yyyy') : '-'}</TableCell>
                   <TableCell className="font-bold text-slate-600">
-                    من {p.startDate} إلى {p.endDate}
+                    {format(new Date(p.startDate), 'dd/MM/yyyy')} إلى {format(new Date(p.endDate), 'dd/MM/yyyy')}
                   </TableCell>
                   <TableCell className="font-black text-primary">{p.netSalary.toLocaleString()} ج.م</TableCell>
                   <TableCell>
@@ -9344,24 +9288,17 @@ function SettingsView({
   const handleResetAllData = async () => {
     setIsResetting(true);
     const collectionsToClear = [
-      'items', 'suppliers', 'warehouses', 'units', 'costCenters', 
       'purchases', 'issuances', 'productionJobs', 'loadingManifests', 
-      'waste', 'bladeSharpening', 'plateSharpening', 'machineMaintenance'
+      'waste', 'bladeSharpening', 'plateSharpening', 'machineMaintenance',
+      'attendance', 'hrTransactions', 'loans', 'payrolls', 'productionRecords',
+      'supplierPayments', 'deliveryReceipts', 'jobLabors', 'jobOtherCosts'
     ];
 
     try {
+      const { getDocs, query, collection, writeBatch, doc } = await import('firebase/firestore');
+
+      // 1. Clear transactional collections
       for (const colName of collectionsToClear) {
-        // We use a simple approach: delete documents we have in state or fetch them
-        // For simplicity and safety in this environment, we'll use the ones passed in props where possible
-        // and for others we'll just inform the user or fetch them.
-        // However, a better way is to just delete the ones we know about.
-        
-        // Note: In a real app, you'd use a cloud function or a batch delete.
-        // Here we'll just delete the ones we have access to in the current view's context if possible,
-        // but since we want a FULL reset, we should ideally fetch all.
-        
-        // Since I don't have all collections in props, I'll just use a generic fetch and delete for each.
-        const { getDocs, query, collection, writeBatch } = await import('firebase/firestore');
         const querySnapshot = await getDocs(query(collection(db, colName)));
         const batch = writeBatch(db);
         querySnapshot.forEach((doc) => {
@@ -9369,8 +9306,24 @@ function SettingsView({
         });
         await batch.commit();
       }
+
+      // 2. Reset item balances
+      const itemsSnapshot = await getDocs(query(collection(db, 'items')));
+      const itemBatch = writeBatch(db);
+      itemsSnapshot.forEach((itemDoc) => {
+        const itemData = itemDoc.data() as Item;
+        itemBatch.update(itemDoc.ref, {
+          inward: 0,
+          outward: 0,
+          returned: 0,
+          wasted: 0,
+          currentBalance: itemData.openingBalance
+        });
+      });
+      await itemBatch.commit();
+      
       setShowResetConfirm(false);
-      alert('تم تصفير كافة بيانات البرنامج بنجاح');
+      alert('تم تصفير كافة بيانات العمليات بنجاح، مع الاحتفاظ ببيانات الموظفين والأصناف والموردين');
     } catch (err) {
       handleFirestoreError(err, 'delete', 'all');
     } finally {
