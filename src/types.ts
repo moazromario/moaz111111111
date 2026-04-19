@@ -239,6 +239,7 @@ export interface Payroll {
   baseSalary: number;
   totalBonuses: number;
   totalOvertime: number;
+  totalProduction: number;
   totalDeductions: number;
   totalLoans: number;
   netSalary: number;
@@ -293,4 +294,33 @@ export interface FirestoreErrorInfo {
     tenantId: string | undefined;
     providerInfo: any[];
   };
+}
+
+export interface UserProfile {
+  uid: string;
+  email: string;
+  name: string;
+  isAdmin: boolean;
+  permissions: {
+    dashboard: boolean;
+    inventory: boolean;
+    production: boolean;
+    maintenance: boolean;
+    purchases: boolean;
+    hr: boolean;
+    reports: boolean;
+    suppliers: boolean;
+    settings: boolean;
+  };
+}
+
+export interface CompanySettings {
+  id: string;
+  name: string;
+  address: string;
+  phone: string;
+  email: string;
+  taxId?: string;
+  logoUrl?: string;
+  managerName?: string;
 }

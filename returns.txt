@@ -1,0 +1,46 @@
+106:  return (
+150:  return (
+234:    return () => unsubSettings();
+261:  return (
+434:  return (
+618:                return (
+704:                return (
+895:    return () => {
+1009:  return (
+1342:  return (
+1361:  return (
+1380:  return (
+1544:  return (
+1786:  return (
+1849:  return (
+2266:  return (
+2378:  return (
+2547:  return (
+2774:  return (
+3354:  return (
+3767:  return (
+4134:  return (
+4462:  return (
+4719:  return (
+4986:  return (
+5142:  return (
+5365:  return (
+5543:                  return (
+5749:  return (
+5855:  return (
+5961:  return (
+6108:  return (
+6386:  return (
+6393:          return (
+6541:  return (
+6912:  return (
+7118:                        return (loanPaid + expensePaid).toLocaleString();
+7137:                        return (loanRemaining + (totalExpenses - settledExpenses)).toLocaleString();
+7236:                            return (
+7408:  return (
+7720:  return (
+8250:  return (
+8427:                  return (
+8700:  return (
+8757:              return (
+9129:  return (

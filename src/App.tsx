@@ -41,8 +41,11 @@ import {
   ChevronDown,
   Building2,
   ShieldAlert,
+  ShieldCheck,
+  UserCircle,
   Save,
-  MessageSquare
+  MessageSquare,
+  Code
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
@@ -74,8 +77,8 @@ import {
   Legend
 } from 'recharts';
 import { db } from './firebase';
-import { collection, onSnapshot, query, addDoc, updateDoc, deleteDoc, doc, increment, serverTimestamp, writeBatch } from 'firebase/firestore';
-import { Item, Supplier, Purchase, Issuance, Warehouse, Unit, CostCenter, ProductionJob, LoadingManifest, DeliveryReceipt, Waste, BladeSharpening, PlateSharpening, MachineMaintenance, Employee, Attendance, FinancialTransaction, Loan, Payroll, SupplierPayment, JobLabor, JobOtherCost, ProductionRecord } from './types';
+import { collection, onSnapshot, query, addDoc, updateDoc, deleteDoc, doc, increment, serverTimestamp, writeBatch, setDoc } from 'firebase/firestore';
+import { Item, Supplier, Purchase, Issuance, Warehouse, Unit, CostCenter, ProductionJob, LoadingManifest, DeliveryReceipt, Waste, BladeSharpening, PlateSharpening, MachineMaintenance, Employee, Attendance, FinancialTransaction, Loan, Payroll, SupplierPayment, JobLabor, JobOtherCost, ProductionRecord, CompanySettings, UserProfile } from './types';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import * as XLSX from 'xlsx';
@@ -122,7 +125,7 @@ function ConfirmDialog({
   );
 }
 
-function LoginPage() {
+function LoginPage({ companySettings }: { companySettings: CompanySettings }) {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -159,7 +162,7 @@ function LoginPage() {
             <Package className="text-white w-10 h-10" />
           </div>
           <div className="space-y-1">
-            <CardTitle className="text-4xl font-black tracking-tight text-slate-900">مصنع النجار</CardTitle>
+            <CardTitle className="text-4xl font-black tracking-tight text-slate-900">{companySettings.name}</CardTitle>
             <CardDescription className="text-slate-500 font-bold text-lg">نظام إدارة المخازن والإنتاج الذكي</CardDescription>
           </div>
         </CardHeader>
@@ -211,10 +214,68 @@ function LoginPage() {
   );
 }
 
+function AppContent() {
+  const { user, loading: authLoading } = useAuth();
+  const [companySettings, setCompanySettings] = useState<CompanySettings>({
+    name: 'مصنع النجار للأثاث',
+    address: 'دمياط - المنطقة الصناعية',
+    phone: '01000000000',
+    taxId: '123-456-789',
+    email: 'info@naggar-furniture.com',
+    logoUrl: '',
+    managerName: 'أ. محمد النجار'
+  });
+
+  useEffect(() => {
+    const unsubSettings = onSnapshot(doc(db, 'settings', 'company'), (docSnap) => {
+      if (docSnap.exists()) {
+        setCompanySettings(docSnap.data() as CompanySettings);
+      }
+    }, (err) => {
+      console.warn("Settings listener failed (likely not logged in yet):", err);
+    });
+    return () => unsubSettings();
+  }, []);
+
+  const handleSaveCompanySettings = async (settings: CompanySettings) => {
+    try {
+      const settingsRef = doc(db, 'settings', 'company');
+      await updateDoc(settingsRef, {
+        ...settings,
+        updatedAt: serverTimestamp()
+      }).catch(async (err) => {
+        if (err.code === 'not-found') {
+          await setDoc(settingsRef, {
+            ...settings,
+            updatedAt: serverTimestamp()
+          });
+        } else {
+          throw err;
+        }
+      });
+      alert('تم حفظ إعدادات الشركة بنجاح');
+    } catch (err) {
+      handleFirestoreError(err, 'write', 'settings');
+    }
+  };
+
+  if (authLoading) return null;
+
+  return user ? (
+    <MainApp 
+      companySettings={companySettings} 
+      setCompanySettings={setCompanySettings} 
+      handleSaveCompanySettings={() => handleSaveCompanySettings(companySettings)} 
+    />
+  ) : (
+    <LoginPage companySettings={companySettings} />
+  );
+}
+
 export default function App() {
   return (
     <AuthProvider>
-      <MainApp />
+      <AppContent />
     </AuthProvider>
   );
 }
@@ -275,15 +336,17 @@ const calculateLivePayroll = (
   const manualDeductions = empTransactions.filter(t => t.type === 'خصم' || t.type === 'مصروف').reduce((sum, t) => sum + t.amount, 0);
   const totalDeductions = manualDeductions + Math.round(attendanceStats.timeDeduction * 100) / 100;
 
+  const empProduction = productionRecords.filter(r => r.employeeId === emp.id && r.date >= p.startDate && r.date <= p.endDate);
+  const totalProduction = empProduction.reduce((sum, r) => sum + r.total, 0);
+
   let baseSalary = 0;
   if (emp.payMethod === 'production') {
-    const empProduction = productionRecords.filter(r => r.employeeId === emp.id && r.date >= p.startDate && r.date <= p.endDate);
-    baseSalary = empProduction.reduce((sum, r) => sum + r.total, 0);
+    baseSalary = totalProduction;
   } else {
     baseSalary = emp.dailyRate * attendanceStats.daysWorked;
   }
 
-  const earningsBeforeLoans = baseSalary + totalBonuses + totalOvertime - totalDeductions;
+  const earningsBeforeLoans = baseSalary + totalBonuses + totalOvertime - totalDeductions + (emp.payMethod === 'daily' ? totalProduction : 0);
   const availableForLoans = Math.max(0, earningsBeforeLoans);
   const empLoans = loans.filter(l => l.employeeId === emp.id && l.status === 'نشط');
   const calculatedLoans = empLoans.reduce((sum, l) => {
@@ -294,10 +357,10 @@ const calculateLivePayroll = (
   const totalLoans = Math.min(calculatedLoans, availableForLoans);
   const netSalary = Math.max(0, earningsBeforeLoans - totalLoans);
 
-  return { ...p, daysWorked: attendanceStats.daysWorked, baseSalary, totalBonuses, totalOvertime, totalDeductions, totalLoans, netSalary };
+  return { ...p, daysWorked: attendanceStats.daysWorked, baseSalary, totalBonuses, totalOvertime, totalProduction, totalDeductions, totalLoans, netSalary };
 };
 
-function PayrollMasterReport({ payrolls, employees, hrTransactions, attendance, loans, productionRecords }: { payrolls: Payroll[], employees: Employee[], hrTransactions: FinancialTransaction[], attendance: Attendance[], loans: Loan[], productionRecords: ProductionRecord[] }) {
+function PayrollMasterReport({ payrolls, employees, hrTransactions, attendance, loans, productionRecords, companyInfo }: { payrolls: Payroll[], employees: Employee[], hrTransactions: FinancialTransaction[], attendance: Attendance[], loans: Loan[], productionRecords: ProductionRecord[], companyInfo: CompanySettings }) {
   const [dateRange, setDateRange] = useState({
     start: format(new Date(new Date().setDate(new Date().getDate() - 30)), 'yyyy-MM-dd'),
     end: format(new Date(), 'yyyy-MM-dd')
@@ -407,7 +470,7 @@ function PayrollMasterReport({ payrolls, employees, hrTransactions, attendance, 
       </div>
 
       <div className="hidden print:block text-center mb-12 border-b-2 border-slate-100 pb-8">
-        <h1 className="text-4xl font-black text-slate-900">كشف الأجور والمرتبات التفصيلي</h1>
+        <h1 className="text-4xl font-black text-slate-900">كشف الأجور والمرتبات لكافة العاملين - {companyInfo.name}</h1>
         <p className="text-slate-500 font-bold mt-2">عن الفترة من {dateRange.start} إلى {dateRange.end}</p>
         <div className="mt-6 w-32 h-1.5 bg-primary mx-auto rounded-full" />
       </div>
@@ -608,8 +671,9 @@ function PayrollMasterReport({ payrolls, employees, hrTransactions, attendance, 
                     'القسم': emp?.department,
                     'الحالة': p.status === 'مدفوع' ? 'تم الصرف' : 'مسودة',
                     'تاريخ الصرف': p.paymentDate || 'غير محدد',
-                    'أيام العمل/الإنتاج': p.payMethod === 'daily' ? p.daysWorked : 'إنتاج بالقطعة',
+                    'أيام العمل': p.daysWorked,
                     'الراتب الأساسي': p.baseSalary,
+                    'حوافز إنتاج': p.totalProduction,
                     'مكافآت': p.totalBonuses,
                     'إضافي': p.totalOvertime,
                     'خصومات': p.totalDeductions,
@@ -635,6 +699,7 @@ function PayrollMasterReport({ payrolls, employees, hrTransactions, attendance, 
                 <TableHead className="py-5 font-black text-slate-900 text-right">الموظف والبيانات</TableHead>
                 <TableHead className="font-black text-slate-900 text-right">الحالة</TableHead>
                 <TableHead className="font-black text-slate-900 text-right">الأساسي</TableHead>
+                <TableHead className="font-black text-slate-900 text-right">إنتاج</TableHead>
                 <TableHead className="font-black text-slate-900 text-right">علاوات</TableHead>
                 <TableHead className="font-black text-slate-900 text-right">استقطاعات</TableHead>
                 <TableHead className="font-black text-slate-900 text-right">الصافي</TableHead>
@@ -662,6 +727,9 @@ function PayrollMasterReport({ payrolls, employees, hrTransactions, attendance, 
                       </Badge>
                     </TableCell>
                     <TableCell className="font-bold text-slate-700">{p.baseSalary.toLocaleString()} <span className="text-[10px]">ج.م</span></TableCell>
+                    <TableCell className="font-black text-purple-600">
+                      {p.totalProduction > 0 ? `+${p.totalProduction.toLocaleString()}` : '0'}
+                    </TableCell>
                     <TableCell className="font-black text-green-600">
                       +{( (p.totalBonuses || 0) + (p.totalOvertime || 0) ).toLocaleString()}
                     </TableCell>
@@ -692,8 +760,16 @@ function PayrollMasterReport({ payrolls, employees, hrTransactions, attendance, 
   );
 }
 
-function MainApp() {
-  const { user } = useAuth();
+function MainApp({ 
+  companySettings, 
+  setCompanySettings, 
+  handleSaveCompanySettings 
+}: { 
+  companySettings: CompanySettings, 
+  setCompanySettings: (info: CompanySettings) => void, 
+  handleSaveCompanySettings: () => Promise<void> 
+}) {
+  const { user, profile } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [inventoryMenuOpen, setInventoryMenuOpen] = useState(false);
@@ -725,107 +801,172 @@ function MainApp() {
   const [deliveryReceipts, setDeliveryReceipts] = useState<DeliveryReceipt[]>([]);
   const [hrMenuOpen, setHrMenuOpen] = useState(false);
   const [reportsMenuOpen, setReportsMenuOpen] = useState(false);
-  const [companyInfo, setCompanyInfo] = useState({
-    name: 'شركة المصطفى للتجارة والصناعة',
-    address: 'المنطقة الصناعية، القاهرة',
-    phone: '01000000000',
-    taxId: '123-456-789'
-  });
+
+
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !profile) return;
 
-    const unsubWarehouses = onSnapshot(collection(db, 'warehouses'), (snap) => {
-      setWarehouses(snap.docs.map(d => ({ id: d.id, ...d.data() } as Warehouse)));
-    }, (err) => handleFirestoreError(err, 'list', 'warehouses'));
+    let unsubWarehouses = () => {};
+    if (profile.isAdmin || profile.permissions.inventory || profile.permissions.reports) {
+      unsubWarehouses = onSnapshot(collection(db, 'warehouses'), (snap) => {
+        setWarehouses(snap.docs.map(d => ({ id: d.id, ...d.data() } as Warehouse)));
+      }, (err) => handleFirestoreError(err, 'list', 'warehouses'));
+    }
 
-    const unsubUnits = onSnapshot(collection(db, 'units'), (snap) => {
-      setUnits(snap.docs.map(d => ({ id: d.id, ...d.data() } as Unit)));
-    }, (err) => handleFirestoreError(err, 'list', 'units'));
+    let unsubUnits = () => {};
+    if (profile.isAdmin || profile.permissions.inventory || profile.permissions.reports) {
+      unsubUnits = onSnapshot(collection(db, 'units'), (snap) => {
+        setUnits(snap.docs.map(d => ({ id: d.id, ...d.data() } as Unit)));
+      }, (err) => handleFirestoreError(err, 'list', 'units'));
+    }
 
-    const unsubCostCenters = onSnapshot(collection(db, 'costCenters'), (snap) => {
-      setCostCenters(snap.docs.map(d => ({ id: d.id, ...d.data() } as CostCenter)));
-    }, (err) => handleFirestoreError(err, 'list', 'costCenters'));
+    let unsubCostCenters = () => {};
+    if (profile.isAdmin || profile.permissions.inventory || profile.permissions.production || profile.permissions.reports) {
+      unsubCostCenters = onSnapshot(collection(db, 'costCenters'), (snap) => {
+        setCostCenters(snap.docs.map(d => ({ id: d.id, ...d.data() } as CostCenter)));
+      }, (err) => handleFirestoreError(err, 'list', 'costCenters'));
+    }
 
-    const unsubItems = onSnapshot(collection(db, 'items'), (snap) => {
-      setItems(snap.docs.map(d => ({ id: d.id, ...d.data() } as Item)));
-    }, (err) => handleFirestoreError(err, 'list', 'items'));
+    let unsubItems = () => {};
+    if (profile.isAdmin || profile.permissions.inventory || profile.permissions.reports) {
+      unsubItems = onSnapshot(collection(db, 'items'), (snap) => {
+        setItems(snap.docs.map(d => ({ id: d.id, ...d.data() } as Item)));
+      }, (err) => handleFirestoreError(err, 'list', 'items'));
+    }
 
-    const unsubSuppliers = onSnapshot(collection(db, 'suppliers'), (snap) => {
-      setSuppliers(snap.docs.map(d => ({ id: d.id, ...d.data() } as Supplier)));
-    }, (err) => handleFirestoreError(err, 'list', 'suppliers'));
+    let unsubSuppliers = () => {};
+    if (profile.isAdmin || profile.permissions.suppliers || profile.permissions.reports) {
+      unsubSuppliers = onSnapshot(collection(db, 'suppliers'), (snap) => {
+        setSuppliers(snap.docs.map(d => ({ id: d.id, ...d.data() } as Supplier)));
+      }, (err) => handleFirestoreError(err, 'list', 'suppliers'));
+    }
 
-    const unsubPurchases = onSnapshot(collection(db, 'purchases'), (snap) => {
-      setPurchases(snap.docs.map(d => ({ id: d.id, ...d.data() } as Purchase)));
-    }, (err) => handleFirestoreError(err, 'list', 'purchases'));
+    let unsubPurchases = () => {};
+    if (profile.isAdmin || profile.permissions.purchases || profile.permissions.reports) {
+      unsubPurchases = onSnapshot(collection(db, 'purchases'), (snap) => {
+        setPurchases(snap.docs.map(d => ({ id: d.id, ...d.data() } as Purchase)));
+      }, (err) => handleFirestoreError(err, 'list', 'purchases'));
+    }
 
-    const unsubIssuances = onSnapshot(collection(db, 'issuances'), (snap) => {
-      setIssuances(snap.docs.map(d => ({ id: d.id, ...d.data() } as Issuance)));
-    }, (err) => handleFirestoreError(err, 'list', 'issuances'));
+    let unsubIssuances = () => {};
+    if (profile.isAdmin || profile.permissions.inventory || profile.permissions.reports) {
+      unsubIssuances = onSnapshot(collection(db, 'issuances'), (snap) => {
+        setIssuances(snap.docs.map(d => ({ id: d.id, ...d.data() } as Issuance)));
+      }, (err) => handleFirestoreError(err, 'list', 'issuances'));
+    }
 
-    const unsubProductionJobs = onSnapshot(collection(db, 'productionJobs'), (snap) => {
-      setProductionJobs(snap.docs.map(d => ({ id: d.id, ...d.data() } as ProductionJob)));
-    }, (err) => handleFirestoreError(err, 'list', 'productionJobs'));
+    let unsubProductionJobs = () => {};
+    if (profile.isAdmin || profile.permissions.production || profile.permissions.reports) {
+      unsubProductionJobs = onSnapshot(collection(db, 'productionJobs'), (snap) => {
+        setProductionJobs(snap.docs.map(d => ({ id: d.id, ...d.data() } as ProductionJob)));
+      }, (err) => handleFirestoreError(err, 'list', 'productionJobs'));
+    }
 
-    const unsubLoadingManifests = onSnapshot(collection(db, 'loadingManifests'), (snap) => {
-      setLoadingManifests(snap.docs.map(d => ({ id: d.id, ...d.data() } as LoadingManifest)));
-    }, (err) => handleFirestoreError(err, 'list', 'loadingManifests'));
+    let unsubLoadingManifests = () => {};
+    if (profile.isAdmin || profile.permissions.production || profile.permissions.reports) {
+      unsubLoadingManifests = onSnapshot(collection(db, 'loadingManifests'), (snap) => {
+        setLoadingManifests(snap.docs.map(d => ({ id: d.id, ...d.data() } as LoadingManifest)));
+      }, (err) => handleFirestoreError(err, 'list', 'loadingManifests'));
+    }
 
-    const unsubWaste = onSnapshot(collection(db, 'waste'), (snap) => {
-      setWasteRecords(snap.docs.map(d => ({ id: d.id, ...d.data() } as Waste)));
-    }, (err) => handleFirestoreError(err, 'list', 'waste'));
+    let unsubWaste = () => {};
+    if (profile.isAdmin || profile.permissions.inventory || profile.permissions.reports) {
+      unsubWaste = onSnapshot(collection(db, 'waste'), (snap) => {
+        setWasteRecords(snap.docs.map(d => ({ id: d.id, ...d.data() } as Waste)));
+      }, (err) => handleFirestoreError(err, 'list', 'waste'));
+    }
 
-    const unsubBladeSharpening = onSnapshot(collection(db, 'bladeSharpening'), (snap) => {
-      setBladeSharpening(snap.docs.map(d => ({ id: d.id, ...d.data() } as BladeSharpening)));
-    }, (err) => handleFirestoreError(err, 'list', 'bladeSharpening'));
+    let unsubBladeSharpening = () => {};
+    if (profile.isAdmin || profile.permissions.maintenance || profile.permissions.reports) {
+      unsubBladeSharpening = onSnapshot(collection(db, 'bladeSharpening'), (snap) => {
+        setBladeSharpening(snap.docs.map(d => ({ id: d.id, ...d.data() } as BladeSharpening)));
+      }, (err) => handleFirestoreError(err, 'list', 'bladeSharpening'));
+    }
 
-    const unsubPlateSharpening = onSnapshot(collection(db, 'plateSharpening'), (snap) => {
-      setPlateSharpening(snap.docs.map(d => ({ id: d.id, ...d.data() } as PlateSharpening)));
-    }, (err) => handleFirestoreError(err, 'list', 'plateSharpening'));
+    let unsubPlateSharpening = () => {};
+    if (profile.isAdmin || profile.permissions.maintenance || profile.permissions.reports) {
+      unsubPlateSharpening = onSnapshot(collection(db, 'plateSharpening'), (snap) => {
+        setPlateSharpening(snap.docs.map(d => ({ id: d.id, ...d.data() } as PlateSharpening)));
+      }, (err) => handleFirestoreError(err, 'list', 'plateSharpening'));
+    }
 
-    const unsubMachineMaintenance = onSnapshot(collection(db, 'machineMaintenance'), (snap) => {
-      setMachineMaintenance(snap.docs.map(d => ({ id: d.id, ...d.data() } as MachineMaintenance)));
-    }, (err) => handleFirestoreError(err, 'list', 'machineMaintenance'));
+    let unsubMachineMaintenance = () => {};
+    if (profile.isAdmin || profile.permissions.maintenance || profile.permissions.reports) {
+      unsubMachineMaintenance = onSnapshot(collection(db, 'machineMaintenance'), (snap) => {
+        setMachineMaintenance(snap.docs.map(d => ({ id: d.id, ...d.data() } as MachineMaintenance)));
+      }, (err) => handleFirestoreError(err, 'list', 'machineMaintenance'));
+    }
 
-    const unsubEmployees = onSnapshot(collection(db, 'employees'), (snap) => {
-      setEmployees(snap.docs.map(d => ({ id: d.id, ...d.data() } as Employee)));
-    }, (err) => handleFirestoreError(err, 'list', 'employees'));
+    let unsubEmployees = () => {};
+    if (profile.isAdmin || profile.permissions.hr || profile.permissions.reports) {
+      unsubEmployees = onSnapshot(collection(db, 'employees'), (snap) => {
+        setEmployees(snap.docs.map(d => ({ id: d.id, ...d.data() } as Employee)));
+      }, (err) => handleFirestoreError(err, 'list', 'employees'));
+    }
 
-    const unsubAttendance = onSnapshot(collection(db, 'attendance'), (snap) => {
-      setAttendance(snap.docs.map(d => ({ id: d.id, ...d.data() } as Attendance)));
-    }, (err) => handleFirestoreError(err, 'list', 'attendance'));
+    let unsubAttendance = () => {};
+    if (profile.isAdmin || profile.permissions.hr || profile.permissions.reports) {
+      unsubAttendance = onSnapshot(collection(db, 'attendance'), (snap) => {
+        setAttendance(snap.docs.map(d => ({ id: d.id, ...d.data() } as Attendance)));
+      }, (err) => handleFirestoreError(err, 'list', 'attendance'));
+    }
 
-    const unsubHrTransactions = onSnapshot(collection(db, 'hrTransactions'), (snap) => {
-      setHrTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() } as FinancialTransaction)));
-    }, (err) => handleFirestoreError(err, 'list', 'hrTransactions'));
+    let unsubHrTransactions = () => {};
+    if (profile.isAdmin || profile.permissions.hr || profile.permissions.reports) {
+      unsubHrTransactions = onSnapshot(collection(db, 'hrTransactions'), (snap) => {
+        setHrTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() } as FinancialTransaction)));
+      }, (err) => handleFirestoreError(err, 'list', 'hrTransactions'));
+    }
 
-    const unsubLoans = onSnapshot(collection(db, 'loans'), (snap) => {
-      setLoans(snap.docs.map(d => ({ id: d.id, ...d.data() } as Loan)));
-    }, (err) => handleFirestoreError(err, 'list', 'loans'));
+    let unsubLoans = () => {};
+    if (profile.isAdmin || profile.permissions.hr || profile.permissions.reports) {
+      unsubLoans = onSnapshot(collection(db, 'loans'), (snap) => {
+        setLoans(snap.docs.map(d => ({ id: d.id, ...d.data() } as Loan)));
+      }, (err) => handleFirestoreError(err, 'list', 'loans'));
+    }
 
-    const unsubPayrolls = onSnapshot(collection(db, 'payrolls'), (snap) => {
-      setPayrolls(snap.docs.map(d => ({ id: d.id, ...d.data() } as Payroll)));
-    }, (err) => handleFirestoreError(err, 'list', 'payrolls'));
+    let unsubPayrolls = () => {};
+    if (profile.isAdmin || profile.permissions.hr || profile.permissions.reports) {
+      unsubPayrolls = onSnapshot(collection(db, 'payrolls'), (snap) => {
+        setPayrolls(snap.docs.map(d => ({ id: d.id, ...d.data() } as Payroll)));
+      }, (err) => handleFirestoreError(err, 'list', 'payrolls'));
+    }
 
-    const unsubProductionRecords = onSnapshot(collection(db, 'productionRecords'), (snap) => {
-      setProductionRecords(snap.docs.map(d => ({ id: d.id, ...d.data() } as ProductionRecord)));
-    }, (err) => handleFirestoreError(err, 'list', 'productionRecords'));
+    let unsubProductionRecords = () => {};
+    if (profile.isAdmin || profile.permissions.hr || profile.permissions.reports) {
+      unsubProductionRecords = onSnapshot(collection(db, 'productionRecords'), (snap) => {
+        setProductionRecords(snap.docs.map(d => ({ id: d.id, ...d.data() } as ProductionRecord)));
+      }, (err) => handleFirestoreError(err, 'list', 'productionRecords'));
+    }
 
-    const unsubSupplierPayments = onSnapshot(collection(db, 'supplierPayments'), (snap) => {
-      setSupplierPayments(snap.docs.map(d => ({ id: d.id, ...d.data() } as SupplierPayment)));
-    }, (err) => handleFirestoreError(err, 'list', 'supplierPayments'));
+    let unsubSupplierPayments = () => {};
+    if (profile.isAdmin || profile.permissions.suppliers || profile.permissions.reports) {
+      unsubSupplierPayments = onSnapshot(collection(db, 'supplierPayments'), (snap) => {
+        setSupplierPayments(snap.docs.map(d => ({ id: d.id, ...d.data() } as SupplierPayment)));
+      }, (err) => handleFirestoreError(err, 'list', 'supplierPayments'));
+    }
 
-    const unsubJobLabors = onSnapshot(collection(db, 'jobLabors'), (snap) => {
-      setJobLabors(snap.docs.map(d => ({ id: d.id, ...d.data() } as JobLabor)));
-    }, (err) => handleFirestoreError(err, 'list', 'jobLabors'));
+    let unsubJobLabors = () => {};
+    if (profile.isAdmin || profile.permissions.production || profile.permissions.reports) {
+      unsubJobLabors = onSnapshot(collection(db, 'jobLabors'), (snap) => {
+        setJobLabors(snap.docs.map(d => ({ id: d.id, ...d.data() } as JobLabor)));
+      }, (err) => handleFirestoreError(err, 'list', 'jobLabors'));
+    }
 
-    const unsubJobOtherCosts = onSnapshot(collection(db, 'jobOtherCosts'), (snap) => {
-      setJobOtherCosts(snap.docs.map(d => ({ id: d.id, ...d.data() } as JobOtherCost)));
-    }, (err) => handleFirestoreError(err, 'list', 'jobOtherCosts'));
+    let unsubJobOtherCosts = () => {};
+    if (profile.isAdmin || profile.permissions.production || profile.permissions.reports) {
+      unsubJobOtherCosts = onSnapshot(collection(db, 'jobOtherCosts'), (snap) => {
+        setJobOtherCosts(snap.docs.map(d => ({ id: d.id, ...d.data() } as JobOtherCost)));
+      }, (err) => handleFirestoreError(err, 'list', 'jobOtherCosts'));
+    }
 
-    const unsubDeliveryReceipts = onSnapshot(collection(db, 'deliveryReceipts'), (snap) => {
-      setDeliveryReceipts(snap.docs.map(d => ({ id: d.id, ...d.data() } as DeliveryReceipt)));
-    }, (err) => handleFirestoreError(err, 'list', 'deliveryReceipts'));
+    let unsubDeliveryReceipts = () => {};
+    if (profile.isAdmin || profile.permissions.production || profile.permissions.reports) {
+      unsubDeliveryReceipts = onSnapshot(collection(db, 'deliveryReceipts'), (snap) => {
+        setDeliveryReceipts(snap.docs.map(d => ({ id: d.id, ...d.data() } as DeliveryReceipt)));
+      }, (err) => handleFirestoreError(err, 'list', 'deliveryReceipts'));
+    }
 
     return () => {
       unsubWarehouses();
@@ -852,9 +993,9 @@ function MainApp() {
       unsubJobOtherCosts();
       unsubDeliveryReceipts();
     };
-  }, [user]);
+  }, [user, profile]);
 
-  if (!user) return <LoginPage />;
+  if (!user) return <LoginPage companySettings={companySettings} />;
 
   const handleNavClick = (tab: string) => {
     setActiveTab(tab);
@@ -933,38 +1074,11 @@ function MainApp() {
       if (b.date === '---') return 1;
       return new Date(a.date).getTime() - new Date(b.date).getTime();
     });
-
-    let currentBal = 0;
-    return sorted.map(m => {
-      currentBal += (m.in - m.out);
-      return { ...m, balance: currentBal };
-    });
+    return sorted;
   };
 
   return (
-    <div className="min-h-screen bg-slate-50/50 flex flex-col md:flex-row font-sans" dir="rtl">
-      {/* Mobile Header */}
-      <div className="md:hidden bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 z-30">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-lg shadow-primary/30">
-            <Package className="text-white w-5 h-5" />
-          </div>
-          <h1 className="font-bold text-lg tracking-tight text-slate-900">النجار للأثاث</h1>
-        </div>
-        <Button variant="ghost" size="icon" onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="rounded-xl">
-          {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-        </Button>
-      </div>
-
-      {/* Sidebar Overlay */}
-      {mobileMenuOpen && (
-        <div 
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 md:hidden" 
-          onClick={() => setMobileMenuOpen(false)}
-        />
-      )}
-
-      {/* Sidebar */}
+    <div className="flex min-h-screen bg-slate-50 font-sans text-right" dir="rtl">
       <aside className={`
         fixed inset-y-0 right-0 w-72 bg-white border-l border-slate-200 flex flex-col shadow-2xl z-50 transition-transform duration-300 ease-in-out
         md:relative md:translate-x-0 md:shadow-xl md:shadow-blue-500/5 md:z-20
@@ -976,7 +1090,7 @@ function MainApp() {
               <Package className="text-white w-6 h-6" />
             </div>
             <div>
-              <h1 className="font-bold text-xl tracking-tight text-slate-900">النجار للأثاث</h1>
+              <h1 className="font-bold text-xl tracking-tight text-slate-900">{companySettings.name || 'النجار للأثاث'}</h1>
               <p className="text-[10px] text-primary font-bold uppercase tracking-widest">نظام الإدارة الذكي</p>
             </div>
           </div>
@@ -994,160 +1108,182 @@ function MainApp() {
           </Button>
         </div>
         
-        <nav className="flex-1 px-4 py-6 md:py-0 space-y-1.5 overflow-y-auto">
-          <NavButton active={activeTab === 'dashboard'} onClick={() => handleNavClick('dashboard')} icon={<LayoutDashboard size={20} />} label="لوحة التحكم" />
+        <nav className="flex-1 px-4 py-6 md:py-0 space-y-1.5 overflow-y-auto font-sans">
+          <NavButton active={activeTab === 'dashboard'} onClick={() => handleNavClick('dashboard')} icon={<LayoutDashboard size={20} />} label="لوحة التحكم" permission="dashboard" profile={profile} />
           
-          <div className="pt-4 pb-2 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">المخازن والعمليات</div>
+          {(profile?.isAdmin || profile?.permissions?.inventory) && (
+            <>
+              <div className="pt-4 pb-2 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">المخازن والعمليات</div>
+              
+              <div>
+                <button 
+                  onClick={() => setInventoryMenuOpen(!inventoryMenuOpen)}
+                  className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all duration-300 group ${
+                    ['inventory', 'issuances', 'returns', 'itemCard', 'waste'].includes(activeTab) 
+                    ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-[-4px]' 
+                    : 'text-slate-500 hover:bg-blue-50 hover:text-primary'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`transition-transform duration-300 ${['inventory', 'issuances', 'returns', 'itemCard', 'waste'].includes(activeTab) ? 'scale-110' : 'group-hover:scale-110'}`}>
+                      <Package size={20} />
+                    </div>
+                    <span className="font-bold text-sm tracking-tight">المخزن</span>
+                  </div>
+                  <ChevronDown size={16} className={`transition-transform duration-300 ${inventoryMenuOpen ? 'rotate-180' : ''}`} />
+                </button>
+                
+                <div className={`overflow-hidden transition-all duration-300 ease-in-out ${inventoryMenuOpen ? 'max-h-56 opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
+                  <div className="mr-4 pr-4 border-r-2 border-slate-100 space-y-1.5">
+                    <SubNavButton active={activeTab === 'inventory'} onClick={() => handleNavClick('inventory')} label="رصيد المخزن" permission="inventory" profile={profile} />
+                    <SubNavButton active={activeTab === 'itemCard'} onClick={() => handleNavClick('itemCard')} label="كارت الصنف" permission="inventory" profile={profile} />
+                    <SubNavButton active={activeTab === 'issuances'} onClick={() => handleNavClick('issuances')} label="صرف الخامات" permission="inventory" profile={profile} />
+                    <SubNavButton active={activeTab === 'returns'} onClick={() => handleNavClick('returns')} label="المرتجع" permission="inventory" profile={profile} />
+                    <SubNavButton active={activeTab === 'waste'} onClick={() => handleNavClick('waste')} label="الهالك" permission="inventory" profile={profile} />
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {(profile?.isAdmin || profile?.permissions?.production) && (
+            <div>
+              <button 
+                onClick={() => setProductionMenuOpen(!productionMenuOpen)}
+                className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all duration-300 group ${
+                  ['production', 'productionCosts', 'loading', 'deliveryReceipts'].includes(activeTab) 
+                  ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-[-4px]' 
+                  : 'text-slate-500 hover:bg-blue-50 hover:text-primary'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`transition-transform duration-300 ${['production', 'productionCosts', 'loading', 'deliveryReceipts'].includes(activeTab) ? 'scale-110' : 'group-hover:scale-110'}`}>
+                    <Layers size={20} />
+                  </div>
+                  <span className="font-bold text-sm tracking-tight">الإنتاج</span>
+                </div>
+                <ChevronDown size={16} className={`transition-transform duration-300 ${productionMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+              
+              <div className={`overflow-hidden transition-all duration-300 ease-in-out ${productionMenuOpen ? 'max-h-60 opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
+                <div className="mr-4 pr-4 border-r-2 border-slate-100 space-y-1.5">
+                  <SubNavButton active={activeTab === 'production'} onClick={() => handleNavClick('production')} label="أوامر الإنتاج" permission="production" profile={profile} />
+                  <SubNavButton active={activeTab === 'productionCosts'} onClick={() => handleNavClick('productionCosts')} label="تكاليف الإنتاج" permission="production" profile={profile} />
+                  <SubNavButton active={activeTab === 'loading'} onClick={() => handleNavClick('loading')} label="حمولة العربية" permission="production" profile={profile} />
+                  <SubNavButton active={activeTab === 'deliveryReceipts'} onClick={() => handleNavClick('deliveryReceipts')} label="محاضر الاستلام" permission="production" profile={profile} />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {(profile?.isAdmin || profile?.permissions?.maintenance) && (
+            <div>
+              <button 
+                onClick={() => setMaintenanceMenuOpen(!maintenanceMenuOpen)}
+                className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all duration-300 group ${
+                  ['bladeSharpening', 'plateSharpening', 'machineMaintenance'].includes(activeTab) 
+                  ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-[-4px]' 
+                  : 'text-slate-500 hover:bg-blue-50 hover:text-primary'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`transition-transform duration-300 ${['bladeSharpening', 'plateSharpening', 'machineMaintenance'].includes(activeTab) ? 'scale-110' : 'group-hover:scale-110'}`}>
+                    <Wrench size={20} />
+                  </div>
+                  <span className="font-bold text-sm tracking-tight">الصيانة</span>
+                </div>
+                <ChevronDown size={16} className={`transition-transform duration-300 ${maintenanceMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+              
+              <div className={`overflow-hidden transition-all duration-300 ease-in-out ${maintenanceMenuOpen ? 'max-h-60 opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
+                <div className="mr-4 pr-4 border-r-2 border-slate-100 space-y-1.5">
+                  <SubNavButton active={activeTab === 'bladeSharpening'} onClick={() => handleNavClick('bladeSharpening')} label="سن الصواني" permission="maintenance" profile={profile} />
+                  <SubNavButton active={activeTab === 'plateSharpening'} onClick={() => handleNavClick('plateSharpening')} label="سن الصفايح" permission="maintenance" profile={profile} />
+                  <SubNavButton active={activeTab === 'machineMaintenance'} onClick={() => handleNavClick('machineMaintenance')} label="صيانة الماكينات" permission="maintenance" profile={profile} />
+                </div>
+              </div>
+            </div>
+          )}
+
+          <NavButton active={activeTab === 'purchases'} onClick={() => handleNavClick('purchases')} icon={<ShoppingCart size={20} />} label="المشتريات" permission="purchases" profile={profile} />
           
-          <div>
-            <button 
-              onClick={() => setInventoryMenuOpen(!inventoryMenuOpen)}
-              className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all duration-300 group ${
-                ['inventory', 'issuances', 'returns'].includes(activeTab) 
-                ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-[-4px]' 
-                : 'text-slate-500 hover:bg-blue-50 hover:text-primary'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div className={`transition-transform duration-300 ${['inventory', 'issuances', 'returns'].includes(activeTab) ? 'scale-110' : 'group-hover:scale-110'}`}>
-                  <Package size={20} />
+          {(profile?.isAdmin || profile?.permissions?.hr) && (
+            <div>
+              <button 
+                onClick={() => setHrMenuOpen(!hrMenuOpen)}
+                className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all duration-300 group ${
+                  ['employees', 'attendance', 'loans', 'payroll', 'hrTransactions', 'hrProduction', 'archive'].includes(activeTab) 
+                  ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-[-4px]' 
+                  : 'text-slate-500 hover:bg-blue-50 hover:text-primary'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`transition-transform duration-300 ${['employees', 'attendance', 'loans', 'payroll', 'hrTransactions', 'hrProduction', 'archive'].includes(activeTab) ? 'scale-110' : 'group-hover:scale-110'}`}>
+                    <DollarSign size={20} />
+                  </div>
+                  <span className="font-bold text-sm tracking-tight">الأجور والمرتبات</span>
                 </div>
-                <span className="font-bold text-sm tracking-tight">المخزن</span>
-              </div>
-              <ChevronDown size={16} className={`transition-transform duration-300 ${inventoryMenuOpen ? 'rotate-180' : ''}`} />
-            </button>
-            
-            <div className={`overflow-hidden transition-all duration-300 ease-in-out ${inventoryMenuOpen ? 'max-h-48 opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
-              <div className="mr-4 pr-4 border-r-2 border-slate-100 space-y-1.5">
-                <SubNavButton active={activeTab === 'inventory'} onClick={() => handleNavClick('inventory')} label="رصيد المخزن" />
-                <SubNavButton active={activeTab === 'itemCard'} onClick={() => handleNavClick('itemCard')} label="كارت الصنف" />
-                <SubNavButton active={activeTab === 'issuances'} onClick={() => handleNavClick('issuances')} label="صرف الخامات" />
-                <SubNavButton active={activeTab === 'returns'} onClick={() => handleNavClick('returns')} label="المرتجع" />
-                <SubNavButton active={activeTab === 'waste'} onClick={() => handleNavClick('waste')} label="الهالك" />
+                <ChevronDown size={16} className={`transition-transform duration-300 ${hrMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+              
+              <div className={`overflow-hidden transition-all duration-300 ease-in-out ${hrMenuOpen ? 'max-h-[400px] opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
+                <div className="mr-4 pr-4 border-r-2 border-slate-100 space-y-1.5">
+                  <SubNavButton active={activeTab === 'employees'} onClick={() => handleNavClick('employees')} label="الموظفين" permission="hr" profile={profile} />
+                  <SubNavButton active={activeTab === 'attendance'} onClick={() => handleNavClick('attendance')} label="الحضور والانصراف" permission="hr" profile={profile} />
+                  <SubNavButton active={activeTab === 'hrProduction'} onClick={() => handleNavClick('hrProduction')} label="سجل الإنتاج" permission="hr" profile={profile} />
+                  <SubNavButton active={activeTab === 'hrTransactions'} onClick={() => handleNavClick('hrTransactions')} label="الحركات المالية" permission="hr" profile={profile} />
+                  <SubNavButton active={activeTab === 'loans'} onClick={() => handleNavClick('loans')} label="إدارة السلف" permission="hr" profile={profile} />
+                  <SubNavButton active={activeTab === 'payroll'} onClick={() => handleNavClick('payroll')} label="كشوف الرواتب" permission="hr" profile={profile} />
+                  <SubNavButton active={activeTab === 'archive'} onClick={() => handleNavClick('archive')} label="الأرشيف" permission="hr" profile={profile} />
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
-          <div>
-            <button 
-              onClick={() => setProductionMenuOpen(!productionMenuOpen)}
-              className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all duration-300 group ${
-                ['production', 'loading'].includes(activeTab) 
-                ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-[-4px]' 
-                : 'text-slate-500 hover:bg-blue-50 hover:text-primary'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div className={`transition-transform duration-300 ${['production', 'loading'].includes(activeTab) ? 'scale-110' : 'group-hover:scale-110'}`}>
-                  <LayoutDashboard size={20} />
-                </div>
-                <span className="font-bold text-sm tracking-tight">خط الإنتاج</span>
-              </div>
-              <ChevronDown size={16} className={`transition-transform duration-300 ${productionMenuOpen ? 'rotate-180' : ''}`} />
-            </button>
-            
-            <div className={`overflow-hidden transition-all duration-300 ease-in-out ${productionMenuOpen ? 'max-h-60 opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
-              <div className="mr-4 pr-4 border-r-2 border-slate-100 space-y-1.5">
-                <SubNavButton active={activeTab === 'production'} onClick={() => handleNavClick('production')} label="أوامر الإنتاج" />
-                <SubNavButton active={activeTab === 'productionCosts'} onClick={() => handleNavClick('productionCosts')} label="تكاليف الإنتاج" />
-                <SubNavButton active={activeTab === 'loading'} onClick={() => handleNavClick('loading')} label="حمولة العربية" />
-                <SubNavButton active={activeTab === 'deliveryReceipts'} onClick={() => handleNavClick('deliveryReceipts')} label="محاضر الاستلام" />
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <button 
-              onClick={() => setMaintenanceMenuOpen(!maintenanceMenuOpen)}
-              className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all duration-300 group ${
-                ['bladeSharpening', 'plateSharpening', 'machineMaintenance'].includes(activeTab) 
-                ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-[-4px]' 
-                : 'text-slate-500 hover:bg-blue-50 hover:text-primary'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div className={`transition-transform duration-300 ${['bladeSharpening', 'plateSharpening', 'machineMaintenance'].includes(activeTab) ? 'scale-110' : 'group-hover:scale-110'}`}>
-                  <Wrench size={20} />
-                </div>
-                <span className="font-bold text-sm tracking-tight">الصيانة</span>
-              </div>
-              <ChevronDown size={16} className={`transition-transform duration-300 ${maintenanceMenuOpen ? 'rotate-180' : ''}`} />
-            </button>
-            
-            <div className={`overflow-hidden transition-all duration-300 ease-in-out ${maintenanceMenuOpen ? 'max-h-60 opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
-              <div className="mr-4 pr-4 border-r-2 border-slate-100 space-y-1.5">
-                <SubNavButton active={activeTab === 'bladeSharpening'} onClick={() => handleNavClick('bladeSharpening')} label="سن الصواني" />
-                <SubNavButton active={activeTab === 'plateSharpening'} onClick={() => handleNavClick('plateSharpening')} label="سن الصفايح" />
-                <SubNavButton active={activeTab === 'machineMaintenance'} onClick={() => handleNavClick('machineMaintenance')} label="صيانة الالات والمعدات" />
-              </div>
-            </div>
-          </div>
-
-          <NavButton active={activeTab === 'purchases'} onClick={() => handleNavClick('purchases')} icon={<ShoppingCart size={20} />} label="المشتريات" />
+          {(profile?.isAdmin || profile?.permissions?.reports || profile?.permissions?.suppliers) && (
+            <div className="pt-4 pb-2 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">الإدارة والتقارير</div>
+          )}
           
-          <div>
-            <button 
-              onClick={() => setHrMenuOpen(!hrMenuOpen)}
-              className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all duration-300 group ${
-                ['employees', 'attendance', 'loans', 'payroll', 'hrTransactions', 'hrProduction'].includes(activeTab) 
-                ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-[-4px]' 
-                : 'text-slate-500 hover:bg-blue-50 hover:text-primary'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div className={`transition-transform duration-300 ${['employees', 'attendance', 'loans', 'payroll', 'hrTransactions', 'hrProduction'].includes(activeTab) ? 'scale-110' : 'group-hover:scale-110'}`}>
-                  <DollarSign size={20} />
+          {(profile?.isAdmin || profile?.permissions?.reports) && (
+            <div>
+              <button 
+                onClick={() => setReportsMenuOpen(!reportsMenuOpen)}
+                className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all duration-300 group ${
+                  ['reports', 'payrollMasterReport'].includes(activeTab) 
+                  ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-[-4px]' 
+                  : 'text-slate-500 hover:bg-blue-50 hover:text-primary'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`transition-transform duration-300 ${['reports', 'payrollMasterReport'].includes(activeTab) ? 'scale-110' : 'group-hover:scale-110'}`}>
+                    <BarChart3 size={20} />
+                  </div>
+                  <span className="font-bold text-sm tracking-tight">تقارير النظام</span>
                 </div>
-                <span className="font-bold text-sm tracking-tight">الأجور والمرتبات</span>
-              </div>
-              <ChevronDown size={16} className={`transition-transform duration-300 ${hrMenuOpen ? 'rotate-180' : ''}`} />
-            </button>
-            
-            <div className={`overflow-hidden transition-all duration-300 ease-in-out ${hrMenuOpen ? 'max-h-[400px] opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
-              <div className="mr-4 pr-4 border-r-2 border-slate-100 space-y-1.5">
-                <SubNavButton active={activeTab === 'employees'} onClick={() => handleNavClick('employees')} label="الموظفين" />
-                <SubNavButton active={activeTab === 'attendance'} onClick={() => handleNavClick('attendance')} label="الحضور والانصراف" />
-                <SubNavButton active={activeTab === 'hrProduction'} onClick={() => handleNavClick('hrProduction')} label="سجل الإنتاج (لعمال القطعة)" />
-                <SubNavButton active={activeTab === 'hrTransactions'} onClick={() => handleNavClick('hrTransactions')} label="الحركات المالية" />
-                <SubNavButton active={activeTab === 'loans'} onClick={() => handleNavClick('loans')} label="إدارة السلف" />
-                <SubNavButton active={activeTab === 'payroll'} onClick={() => handleNavClick('payroll')} label="كشوف الرواتب" />
-                <SubNavButton active={activeTab === 'archive'} onClick={() => handleNavClick('archive')} label="الأرشيف" />
+                <ChevronDown size={16} className={`transition-transform duration-300 ${reportsMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+              
+              <div className={`overflow-hidden transition-all duration-300 ease-in-out ${reportsMenuOpen ? 'max-h-48 opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
+                <div className="mr-4 pr-4 border-r-2 border-slate-100 space-y-1.5">
+                  <SubNavButton active={activeTab === 'reports'} onClick={() => handleNavClick('reports')} label="التقارير العامة" permission="reports" profile={profile} />
+                  <SubNavButton active={activeTab === 'payrollMasterReport'} onClick={() => handleNavClick('payrollMasterReport')} label="تقرير الأجور الشامل" permission="reports" profile={profile} />
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
-          <div className="pt-4 pb-2 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">الإدارة والتقارير</div>
+          <NavButton active={activeTab === 'suppliers'} onClick={() => handleNavClick('suppliers')} icon={<Users size={20} />} label="الموردين" permission="suppliers" profile={profile} />
           
-          <div>
-            <button 
-              onClick={() => setReportsMenuOpen(!reportsMenuOpen)}
-              className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all duration-300 group ${
-                ['reports', 'payrollMasterReport'].includes(activeTab) 
-                ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-[-4px]' 
-                : 'text-slate-500 hover:bg-blue-50 hover:text-primary'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div className={`transition-transform duration-300 ${['reports', 'payrollMasterReport'].includes(activeTab) ? 'scale-110' : 'group-hover:scale-110'}`}>
-                  <BarChart3 size={20} />
-                </div>
-                <span className="font-bold text-sm tracking-tight">تقارير النظام</span>
-              </div>
-              <ChevronDown size={16} className={`transition-transform duration-300 ${reportsMenuOpen ? 'rotate-180' : ''}`} />
-            </button>
-            
-            <div className={`overflow-hidden transition-all duration-300 ease-in-out ${reportsMenuOpen ? 'max-h-48 opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
-              <div className="mr-4 pr-4 border-r-2 border-slate-100 space-y-1.5">
-                <SubNavButton active={activeTab === 'reports'} onClick={() => handleNavClick('reports')} label="التقارير العامة" />
-                <SubNavButton active={activeTab === 'payrollMasterReport'} onClick={() => handleNavClick('payrollMasterReport')} label="تقرير الأجور الشامل" />
-              </div>
-            </div>
-          </div>
-
-          <NavButton active={activeTab === 'suppliers'} onClick={() => handleNavClick('suppliers')} icon={<Users size={20} />} label="الموردين" />
-          <NavButton active={activeTab === 'settings'} onClick={() => handleNavClick('settings')} icon={<Settings size={20} />} label="الإعدادات" />
+          {(profile?.isAdmin || profile?.permissions?.settings) && (
+            <div className="pt-6 pb-2 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">النظام</div>
+          )}
+          
+          {profile?.isAdmin && (
+            <NavButton active={activeTab === 'userManagement'} onClick={() => handleNavClick('userManagement')} icon={<ShieldAlert size={20} />} label="إدارة المستخدمين" />
+          )}
+          
+          <NavButton active={activeTab === 'settings'} onClick={() => handleNavClick('settings')} icon={<Settings size={20} />} label="الإعدادات" permission="settings" profile={profile} />
         </nav>
-
         <div className="p-6 border-t border-slate-100 bg-slate-50/50">
           <div className="flex items-center gap-3 p-2 mb-4 bg-white rounded-2xl border border-slate-200/60 shadow-sm">
             <img src={user.photoURL || ''} className="w-10 h-10 rounded-xl border-2 border-white shadow-sm" referrerPolicy="no-referrer" />
@@ -1162,6 +1298,7 @@ function MainApp() {
           </Button>
         </div>
       </aside>
+
 
       {/* Main Content */}
       <main className="flex-1 p-4 md:p-10 overflow-auto">
@@ -1198,7 +1335,7 @@ function MainApp() {
             employees={employees}
             jobLabors={jobLabors}
             jobOtherCosts={jobOtherCosts}
-            companyInfo={companyInfo}
+            companyInfo={companySettings}
           />
         )}
         {activeTab === 'productionCosts' && (
@@ -1212,8 +1349,8 @@ function MainApp() {
             items={items}
           />
         )}
-        {activeTab === 'loading' && <LoadingManifests manifests={loadingManifests} companyInfo={companyInfo} />}
-        {activeTab === 'deliveryReceipts' && <DeliveryReceipts receipts={deliveryReceipts} companyInfo={companyInfo} />}
+        {activeTab === 'loading' && <LoadingManifests manifests={loadingManifests} companyInfo={companySettings} />}
+        {activeTab === 'deliveryReceipts' && <DeliveryReceipts receipts={deliveryReceipts} companyInfo={companySettings} />}
         {activeTab === 'purchases' && <Purchases items={items} suppliers={suppliers} purchases={purchases} />}
         {activeTab === 'issuances' && <Issuances items={items} issuances={issuances} costCenters={costCenters} />}
         {activeTab === 'returns' && <Returns items={items} suppliers={suppliers} costCenters={costCenters} />}
@@ -1234,6 +1371,7 @@ function MainApp() {
             loans={loans} 
             payrolls={payrolls} 
             productionRecords={productionRecords} 
+            companyInfo={companySettings}
           />
         )}
         {activeTab === 'archive' && <ArchiveView employees={employees} payrolls={payrolls} />}
@@ -1252,6 +1390,7 @@ function MainApp() {
             bladeSharpening={bladeSharpening}
             plateSharpening={plateSharpening}
             machineMaintenance={machineMaintenance}
+            companySettings={companySettings}
           />
         )}
         {activeTab === 'payrollMasterReport' && (
@@ -1262,15 +1401,18 @@ function MainApp() {
             attendance={attendance}
             loans={loans}
             productionRecords={productionRecords}
+            companyInfo={companySettings}
           />
         )}
-        {activeTab === 'settings' && <SettingsView items={items} suppliers={suppliers} warehouses={warehouses} units={units} costCenters={costCenters} companyInfo={companyInfo} setCompanyInfo={setCompanyInfo} />}
+        {activeTab === 'userManagement' && <UserManagement />}
+        {activeTab === 'settings' && <SettingsView items={items} suppliers={suppliers} warehouses={warehouses} units={units} costCenters={costCenters} companySettings={companySettings} setCompanySettings={setCompanySettings} handleSaveCompanySettings={handleSaveCompanySettings} />}
       </main>
     </div>
   );
 }
 
-function NavButton({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) {
+function NavButton({ active, onClick, icon, label, permission, profile }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string, permission?: string, profile?: UserProfile | null }) {
+  if (permission && profile && !profile.isAdmin && !profile.permissions[permission as keyof UserProfile['permissions']]) return null;
   return (
     <button
       onClick={onClick}
@@ -1289,7 +1431,8 @@ function NavButton({ active, onClick, icon, label }: { active: boolean, onClick:
   );
 }
 
-function SubNavButton({ active, onClick, label }: { active: boolean, onClick: () => void, label: string }) {
+function SubNavButton({ active, onClick, label, permission, profile }: { active: boolean, onClick: () => void, label: string, permission?: string, profile?: UserProfile | null }) {
+  if (permission && profile && !profile.isAdmin && !profile.permissions[permission as keyof UserProfile['permissions']]) return null;
   return (
     <button 
       onClick={onClick}
@@ -1301,6 +1444,183 @@ function SubNavButton({ active, onClick, label }: { active: boolean, onClick: ()
     >
       {label}
     </button>
+  );
+}
+
+function UserManagement() {
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const { profile } = useAuth();
+
+  useEffect(() => {
+    if (!profile?.isAdmin) return;
+    
+    const q = query(collection(db, 'users'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const usersData = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
+      setUsers(usersData);
+    }, (err) => handleFirestoreError(err, 'list', 'users'));
+    return () => unsubscribe();
+  }, [profile]);
+
+  const handleUpdatePermissions = async (uid: string, permissions: UserProfile['permissions'], isAdmin: boolean) => {
+    try {
+      await updateDoc(doc(db, 'users', uid), { permissions, isAdmin });
+      setEditingUser(null);
+      setIsModalOpen(false);
+    } catch (error) {
+      console.error("Error updating permissions:", error);
+    }
+  };
+
+  if (!profile?.isAdmin) return <div className="p-8 text-center text-red-500 font-bold">عذراً، لا تملك صلاحية الوصول لهذه الصفحة</div>;
+
+  return (
+    <div className="p-8 max-w-6xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl font-black text-slate-900 tracking-tight">إدارة المستخدمين</h2>
+          <p className="text-slate-500 font-medium">تحكم في صلاحيات الوصول لكل موديول في النظام</p>
+        </div>
+        <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center">
+          <ShieldAlert className="text-primary w-6 h-6" />
+        </div>
+      </div>
+
+      <Card className="border-slate-200 shadow-xl shadow-slate-200/50 overflow-hidden rounded-3xl">
+        <Table>
+          <TableHeader className="bg-slate-50/50 border-b border-slate-100">
+            <TableRow>
+              <TableHead className="text-right font-black text-slate-900 py-4">المستخدم</TableHead>
+              <TableHead className="text-right font-black text-slate-900">البريد الإلكتروني</TableHead>
+              <TableHead className="text-center font-black text-slate-900">المسؤول</TableHead>
+              <TableHead className="text-right font-black text-slate-900">الصلاحيات</TableHead>
+              <TableHead className="text-center font-black text-slate-900">الإجراءات</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {users.map((u) => (
+              <TableRow key={u.uid} className="hover:bg-slate-50/50 transition-colors border-b border-slate-100 last:border-0 grow">
+                <TableCell className="font-bold text-slate-700 py-5">{u.name}</TableCell>
+                <TableCell className="text-slate-500 font-medium font-mono text-sm">{u.email}</TableCell>
+                <TableCell className="text-center">
+                  <Badge variant={u.isAdmin ? "default" : "outline"} className={u.isAdmin ? "bg-primary" : "text-slate-400 border-slate-200"}>
+                    {u.isAdmin ? 'نعم' : 'لا'}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <div className="flex flex-wrap gap-1 max-w-xs">
+                    {Object.entries(u.permissions || {}).map(([key, val]) => (
+                      val && <Badge key={key} variant="secondary" className="bg-blue-50 text-blue-600 border-blue-100 text-[10px] py-0 px-2">
+                        {key === 'dashboard' ? 'لوحة التحكم' : 
+                         key === 'inventory' ? 'المخزن' : 
+                         key === 'production' ? 'الإنتاج' : 
+                         key === 'maintenance' ? 'الصيانة' : 
+                         key === 'purchases' ? 'المشتريات' : 
+                         key === 'hr' ? 'الأجور' : 
+                         key === 'reports' ? 'التقارير' : 
+                         key === 'suppliers' ? 'الموردين' : 'الإعدادات'}
+                      </Badge>
+                    ))}
+                  </div>
+                </TableCell>
+                <TableCell className="text-center">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => { setEditingUser(u); setIsModalOpen(true); }}
+                    className="rounded-xl border-slate-200 hover:bg-primary hover:text-white hover:border-primary transition-all font-bold"
+                  >
+                    تعديل الصلاحيات
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
+
+      {isModalOpen && editingUser && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+          <Card className="w-full max-w-lg bg-white rounded-[2.5rem] shadow-2xl p-8 border-0 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center">
+                  <ShieldCheck className="text-primary w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-900">صلاحيات: {editingUser.name}</h3>
+                  <p className="text-slate-400 text-sm font-medium">{editingUser.email}</p>
+                </div>
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => setIsModalOpen(false)} className="rounded-2xl hover:bg-slate-100">
+                <X size={24} />
+              </Button>
+            </div>
+
+            <div className="space-y-8">
+              <div className="p-5 bg-slate-50 rounded-3xl border border-slate-100">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <UserCircle className="text-primary w-5 h-5" />
+                    <span className="font-bold text-slate-700">دوره كمسؤول للنظام</span>
+                  </div>
+                  <input 
+                    type="checkbox" 
+                    checked={editingUser.isAdmin}
+                    onChange={(e) => setEditingUser({ ...editingUser, isAdmin: e.target.checked })}
+                    className="w-5 h-5 accent-primary rounded-lg"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                {Object.entries(editingUser.permissions).map(([key, val]) => (
+                  <label key={key} className="flex items-center justify-between p-4 bg-white border border-slate-100 rounded-2xl hover:border-primary/30 transition-all cursor-pointer group shadow-sm">
+                    <span className="font-bold text-slate-600 text-sm group-hover:text-primary transition-colors">
+                      {key === 'dashboard' ? 'لوحة التحكم' : 
+                       key === 'inventory' ? 'المخزن' : 
+                       key === 'production' ? 'الإنتاج' : 
+                       key === 'maintenance' ? 'الصيانة' : 
+                       key === 'purchases' ? 'المشتريات' : 
+                       key === 'hr' ? 'الأجور' : 
+                       key === 'reports' ? 'التقارير' : 
+                       key === 'suppliers' ? 'الموردين' : 'الإعدادات'}
+                    </span>
+                    <input 
+                      type="checkbox" 
+                      checked={val}
+                      onChange={(e) => setEditingUser({
+                        ...editingUser,
+                        permissions: { ...editingUser.permissions, [key]: e.target.checked }
+                      })}
+                      className="w-5 h-5 accent-primary rounded-lg"
+                    />
+                  </label>
+                ))}
+              </div>
+
+              <div className="flex gap-4 pt-4">
+                <Button 
+                  className="flex-1 rounded-2xl bg-primary hover:bg-primary/90 text-white font-black h-12 shadow-lg shadow-primary/20"
+                  onClick={() => handleUpdatePermissions(editingUser.uid, editingUser.permissions, editingUser.isAdmin)}
+                >
+                  حفظ التغييرات
+                </Button>
+                <Button 
+                  variant="outline" 
+                  className="rounded-2xl border-slate-200 text-slate-500 font-bold h-12 px-8"
+                  onClick={() => setIsModalOpen(false)}
+                >
+                  إلغاء
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -2194,7 +2514,7 @@ function Inventory({ items, warehouses, purchases, issuances, suppliers, getItem
   );
 }
 
-function PrintJobCard({ job, companyInfo }: { job: ProductionJob, companyInfo: any }) {
+function PrintJobCard({ job, companyInfo }: { job: ProductionJob, companyInfo: CompanySettings }) {
   return (
     <div className="hidden print:block p-8 bg-white text-slate-900 font-sans dir-rtl">
       <div className="flex justify-between items-start border-b-4 border-slate-900 pb-6 mb-8">
@@ -2306,7 +2626,7 @@ function PrintJobCard({ job, companyInfo }: { job: ProductionJob, companyInfo: a
   );
 }
 
-function PrintDeliveryReceipt({ receipt, companyInfo }: { receipt: DeliveryReceipt, companyInfo: any }) {
+function PrintDeliveryReceipt({ receipt, companyInfo }: { receipt: DeliveryReceipt, companyInfo: CompanySettings }) {
   return (
     <div className="hidden print:block p-8 bg-white text-slate-900 font-sans dir-rtl min-h-screen relative border-[12px] border-slate-900">
       {/* Header Section */}
@@ -2475,7 +2795,7 @@ function PrintDeliveryReceipt({ receipt, companyInfo }: { receipt: DeliveryRecei
   );
 }
 
-function PrintManifest({ manifest, companyInfo }: { manifest: LoadingManifest, companyInfo: any }) {
+function PrintManifest({ manifest, companyInfo }: { manifest: LoadingManifest, companyInfo: CompanySettings }) {
   return (
     <div className="hidden print:block p-10 bg-white text-slate-900 font-sans dir-rtl min-h-screen">
       <div className="flex justify-between items-start border-b-4 border-slate-900 pb-6 mb-8">
@@ -2584,7 +2904,7 @@ function ProductionLine({
   employees: Employee[],
   jobLabors: JobLabor[],
   jobOtherCosts: JobOtherCost[],
-  companyInfo: any
+  companyInfo: CompanySettings
 }) {
   const [showAdd, setShowAdd] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
@@ -3181,7 +3501,7 @@ function ProductionLine({
   );
 }
 
-function LoadingManifests({ manifests, companyInfo }: { manifests: LoadingManifest[], companyInfo: any }) {
+function LoadingManifests({ manifests, companyInfo }: { manifests: LoadingManifest[], companyInfo: CompanySettings }) {
   const [showAdd, setShowAdd] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -3585,7 +3905,7 @@ function LoadingManifests({ manifests, companyInfo }: { manifests: LoadingManife
   );
 }
 
-function DeliveryReceipts({ receipts, companyInfo }: { receipts: DeliveryReceipt[], companyInfo: any }) {
+function DeliveryReceipts({ receipts, companyInfo }: { receipts: DeliveryReceipt[], companyInfo: CompanySettings }) {
   const [showAdd, setShowAdd] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -5195,7 +5515,8 @@ function ReportsView({
   wasteRecords,
   bladeSharpening,
   plateSharpening,
-  machineMaintenance
+  machineMaintenance,
+  companySettings
 }: { 
   items: Item[], 
   suppliers: Supplier[], 
@@ -5208,7 +5529,8 @@ function ReportsView({
   wasteRecords: Waste[],
   bladeSharpening: BladeSharpening[],
   plateSharpening: PlateSharpening[],
-  machineMaintenance: MachineMaintenance[]
+  machineMaintenance: MachineMaintenance[],
+  companySettings: CompanySettings
 }) {
   // 1. Data for Warehouse Value Chart
   const warehouseData = warehouses.map(w => {
@@ -5311,7 +5633,7 @@ function ReportsView({
       </div>
 
       <div className="hidden print:block text-center mb-12">
-        <h1 className="text-3xl font-black text-slate-900">تقرير مصنع النجار للأثاث</h1>
+        <h1 className="text-3xl font-black text-slate-900">تقرير {companySettings.name}</h1>
         <p className="text-slate-500 font-bold mt-2">{format(new Date(), 'eeee, d MMMM yyyy', { locale: ar })}</p>
         <div className="mt-4 w-20 h-1 bg-primary mx-auto rounded-full" />
       </div>
@@ -7839,7 +8161,7 @@ function ProductionView({ employees, productionRecords }: { employees: Employee[
   );
 }
 
-function PayrollView({ employees, attendance, transactions, loans, payrolls, productionRecords }: { employees: Employee[], attendance: Attendance[], transactions: FinancialTransaction[], loans: Loan[], payrolls: Payroll[], productionRecords: ProductionRecord[] }) {
+function PayrollView({ employees, attendance, transactions, loans, payrolls, productionRecords, companyInfo }: { employees: Employee[], attendance: Attendance[], transactions: FinancialTransaction[], loans: Loan[], payrolls: Payroll[], productionRecords: ProductionRecord[], companyInfo: CompanySettings }) {
   const [showGenerate, setShowGenerate] = useState(false);
   const [selectedDept, setSelectedDept] = useState<string>('الكل');
   const [searchTerm, setSearchTerm] = useState('');
@@ -7925,19 +8247,21 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls, pro
         const totalDeductions = manualDeductions + Math.round(timeDeduction * 100) / 100;
         
         // Calculate Base Salary based on Pay Method
+        const empProduction = productionRecords.filter(r => 
+          r.employeeId === emp.id && 
+          r.date >= genData.startDate && 
+          r.date <= genData.endDate
+        );
+        const totalProduction = empProduction.reduce((sum, r) => sum + r.total, 0);
+
         let baseSalary = 0;
         if (emp.payMethod === 'production') {
-          const empProduction = productionRecords.filter(r => 
-            r.employeeId === emp.id && 
-            r.date >= genData.startDate && 
-            r.date <= genData.endDate
-          );
-          baseSalary = empProduction.reduce((sum, r) => sum + r.total, 0);
+          baseSalary = totalProduction;
         } else {
           baseSalary = emp.dailyRate * daysWorked;
         }
 
-        const earningsBeforeLoans = baseSalary + totalBonuses + totalOvertime - totalDeductions;
+        const earningsBeforeLoans = baseSalary + totalBonuses + totalOvertime - totalDeductions + (emp.payMethod === 'daily' ? totalProduction : 0);
         const availableForLoans = Math.max(0, earningsBeforeLoans);
 
         // Calculate loan deduction based on installments, capped by available earnings
@@ -7969,6 +8293,7 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls, pro
           baseSalary,
           totalBonuses,
           totalOvertime,
+          totalProduction,
           totalDeductions,
           totalLoans,
           netSalary,
@@ -8068,16 +8393,16 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls, pro
       return;
     }
 
-    const message = `*مصنع النجار للأثاث*
+    const message = `*${companyInfo.name}*
 *قسيمة صرف راتب أسبوعي*
 --------------------------
 *الاسم:* ${emp.name}
 *الأسبوع:* ${p.weekNumber} / ${p.year}
 *الفترة:* ${p.startDate} إلى ${p.endDate}
 --------------------------
-*اليومية:* ${p.dailyRate.toLocaleString()}
 *أيام العمل:* ${(p.daysWorked || 0).toFixed(2)}
-*إجمالي اليوميات:* ${p.baseSalary.toLocaleString()}
+*الأجر الأساسي:* ${p.baseSalary.toLocaleString()}
+*إنتاج (+):* ${p.totalProduction.toLocaleString()}
 *إضافي (+):* ${p.totalOvertime.toLocaleString()}
 *مكافآت (+):* ${p.totalBonuses.toLocaleString()}
 *خصومات (-):* ${p.totalDeductions.toLocaleString()}
@@ -8114,9 +8439,9 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls, pro
       'الأسبوع': `أسبوع ${p.weekNumber}`,
       'الفترة': `${p.startDate} - ${p.endDate}`,
       'اسم الموظف': employees.find(e => e.id === p.employeeId)?.name || 'غير معروف',
-      'اليومية': p.dailyRate,
       'أيام العمل': p.daysWorked,
-      'إجمالي اليوميات': p.baseSalary,
+      'إجمالي الأجر الأساسي': p.baseSalary,
+      'حوافز إنتاج': p.totalProduction,
       'إضافي': p.totalOvertime,
       'مكافآت': p.totalBonuses,
       'خصومات': p.totalDeductions,
@@ -8262,8 +8587,9 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls, pro
               <TableHead className="text-right font-black text-slate-900 py-5">الأسبوع</TableHead>
               <TableHead className="text-right font-black text-slate-900">الموظف</TableHead>
               <TableHead className="text-right font-black text-slate-900">سعر اليومية / القطعة</TableHead>
-              <TableHead className="text-right font-black text-slate-900">أيام العمل / الإنتاج</TableHead>
+              <TableHead className="text-right font-black text-slate-900">أيام العمل</TableHead>
               <TableHead className="text-right font-black text-slate-900">إجمالي الأجر الأساسي</TableHead>
+              <TableHead className="text-right font-black text-slate-900">إنتاجية</TableHead>
               <TableHead className="text-right font-black text-slate-900">إضافي</TableHead>
               <TableHead className="text-right font-black text-slate-900">مكافآت</TableHead>
               <TableHead className="text-right font-black text-slate-900">خصومات</TableHead>
@@ -8285,12 +8611,12 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls, pro
                 <TableCell className="font-black text-slate-900">{employees.find(e => e.id === p.employeeId)?.name}</TableCell>
                 <TableCell className="font-bold text-slate-600">{p.dailyRate?.toLocaleString()} ج.م</TableCell>
                 <TableCell className="font-black text-blue-600">
-                  {p.payMethod === 'production' 
-                    ? <Badge className="bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100">بالإنتاج</Badge>
-                    : `${(p.daysWorked || 0).toFixed(2)} يوم`
-                  }
+                  {`${(p.daysWorked || 0).toFixed(2)} يوم`}
                 </TableCell>
                 <TableCell className="font-bold text-slate-600">{p.baseSalary.toLocaleString()} ج.م</TableCell>
+                <TableCell className="font-black text-purple-600">
+                  {p.totalProduction > 0 ? `+${p.totalProduction.toLocaleString()}` : '0'}
+                </TableCell>
                 <TableCell className="font-bold text-blue-600">+{p.totalOvertime?.toLocaleString() || 0}</TableCell>
                 <TableCell className="font-bold text-green-600">+{p.totalBonuses.toLocaleString()}</TableCell>
                 <TableCell className="font-bold text-red-600">-{p.totalDeductions.toLocaleString()}</TableCell>
@@ -8358,7 +8684,7 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls, pro
                             <Package className="text-white" size={20} />
                           </div>
                           <div>
-                            <h4 className="font-black text-lg text-slate-900 print:text-[10px] print:leading-tight">مصنع النجار للأثاث</h4>
+                            <h4 className="font-black text-lg text-slate-900 print:text-[10px] print:leading-tight">{companyInfo.name}</h4>
                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest print:text-[6px] print:leading-tight">قسيمة صرف راتب أسبوعي</p>
                           </div>
                         </div>
@@ -8840,16 +9166,18 @@ function SettingsView({
   warehouses, 
   units, 
   costCenters,
-  companyInfo,
-  setCompanyInfo
+  companySettings,
+  setCompanySettings,
+  handleSaveCompanySettings
 }: { 
   items: Item[], 
   suppliers: Supplier[], 
   warehouses: Warehouse[], 
   units: Unit[], 
   costCenters: CostCenter[],
-  companyInfo: any,
-  setCompanyInfo: (info: any) => void
+  companySettings: CompanySettings,
+  setCompanySettings: (info: CompanySettings) => void,
+  handleSaveCompanySettings: () => Promise<void>
 }) {
   const [activeSettingTab, setActiveSettingTab] = useState('general');
 
@@ -9083,6 +9411,10 @@ function SettingsView({
                  <Users size={18} />
                  إدارة الموردين
               </button>
+              <button onClick={() => setActiveSettingTab('about')} className={`flex items-center gap-3 px-4 py-3 rounded-2xl font-bold transition-all ${activeSettingTab === 'about' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-slate-500 hover:bg-slate-100'}`}>
+                 <Code size={18} />
+                 عن النظام
+              </button>
               <button onClick={() => setActiveSettingTab('security')} className={`flex items-center gap-3 px-4 py-3 rounded-2xl font-bold transition-all ${activeSettingTab === 'security' ? 'bg-red-600 text-white shadow-lg shadow-red-600/20' : 'text-red-500 hover:bg-red-50'}`}>
                  <ShieldAlert size={18} />
                  الأمان والبيانات
@@ -9178,6 +9510,25 @@ function SettingsView({
             </div>
           )}
 
+          {activeSettingTab === 'about' && (
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
+              <Card className="dribbble-card border-none">
+                <CardHeader>
+                  <CardTitle className="text-2xl font-black text-slate-900">عن النظام</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="p-6 bg-blue-50 rounded-3xl border border-blue-100">
+                    <h3 className="font-black text-xl text-blue-900 mb-2">تطوير النظام</h3>
+                    <p className="font-bold text-blue-700">تم تطوير هذا النظام بواسطة الديفيلوبر: <span className="text-blue-950 font-black">معاذ رمضان</span></p>
+                  </div>
+                  <div className="text-slate-500 font-medium">
+                    <p>هذا النظام مخصص لإدارة العمليات والإنتاج بكفاءة.</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+          
           {activeSettingTab === 'company' && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
               <Card className="dribbble-card border-none">
@@ -9188,24 +9539,24 @@ function SettingsView({
                 <CardContent className="space-y-6">
                   <div className="space-y-2">
                     <label className="text-sm font-bold text-slate-700">اسم الشركة</label>
-                    <Input className="rounded-xl h-12" value={companyInfo.name} onChange={e => setCompanyInfo({...companyInfo, name: e.target.value})} />
+                    <Input className="rounded-xl h-12" value={companySettings.name} onChange={e => setCompanySettings({...companySettings, name: e.target.value})} />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-bold text-slate-700">العنوان</label>
-                    <Input className="rounded-xl h-12" value={companyInfo.address} onChange={e => setCompanyInfo({...companyInfo, address: e.target.value})} />
+                    <Input className="rounded-xl h-12" value={companySettings.address} onChange={e => setCompanySettings({...companySettings, address: e.target.value})} />
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-sm font-bold text-slate-700">رقم الهاتف</label>
-                      <Input className="rounded-xl h-12" value={companyInfo.phone} onChange={e => setCompanyInfo({...companyInfo, phone: e.target.value})} />
+                      <Input className="rounded-xl h-12" value={companySettings.phone} onChange={e => setCompanySettings({...companySettings, phone: e.target.value})} />
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-bold text-slate-700">الرقم الضريبي</label>
-                      <Input className="rounded-xl h-12" value={companyInfo.taxId} onChange={e => setCompanyInfo({...companyInfo, taxId: e.target.value})} />
+                      <Input className="rounded-xl h-12" value={companySettings.taxId} onChange={e => setCompanySettings({...companySettings, taxId: e.target.value})} />
                     </div>
                   </div>
                   <div className="flex justify-end pt-4">
-                    <Button className="btn-primary h-12 px-8 rounded-2xl font-black flex items-center gap-2">
+                    <Button onClick={handleSaveCompanySettings} className="btn-primary h-12 px-8 rounded-2xl font-black flex items-center gap-2">
                       <Save size={18} />
                       حفظ التغييرات
                     </Button>

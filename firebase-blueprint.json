@@ -369,9 +369,49 @@
         "notes": { "type": "string" }
       },
       "required": ["date", "clientName", "branch", "products"]
+    },
+    "User": {
+      "title": "User",
+      "description": "A system user with specific module permissions",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "isAdmin": { "type": "boolean" },
+        "permissions": {
+          "type": "object",
+          "properties": {
+            "dashboard": { "type": "boolean" },
+            "inventory": { "type": "boolean" },
+            "production": { "type": "boolean" },
+            "maintenance": { "type": "boolean" },
+            "purchases": { "type": "boolean" },
+            "hr": { "type": "boolean" },
+            "reports": { "type": "boolean" },
+            "suppliers": { "type": "boolean" },
+            "settings": { "type": "boolean" }
+          }
+        }
+      },
+      "required": ["email"]
+    },
+    "CompanySettings": {
+      "title": "CompanySettings",
+      "description": "General settings and company info",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "address": { "type": "string" },
+        "phone": { "type": "string" },
+        "taxId": { "type": "string" },
+        "email": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name"]
     }
   },
   "firestore": {
+    "/settings/{id}": { "schema": "CompanySettings", "description": "Company settings" },
     "/warehouses/{warehouseId}": { "schema": "Warehouse", "description": "Warehouses" },
     "/units/{unitId}": { "schema": "Unit", "description": "Units of measurement" },
     "/costCenters/{costCenterId}": { "schema": "CostCenter", "description": "Cost centers" },

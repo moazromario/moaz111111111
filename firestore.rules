@@ -59,9 +59,19 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
     function isAdmin() {
       return isAuthenticated() && 
-             (request.auth.token.email == "cfo.moaz@gmail.com" && request.auth.token.email_verified == true);
+             (request.auth.token.email == "cfo.moaz@gmail.com" || 
+              (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().isAdmin == true));
+    }
+
+    function hasPermission(module) {
+      return isAuthenticated() && 
+             (isAdmin() || getUserData().permissions[module] == true);
     }
 
     function hasOnlyAllowedFields(fields) {
@@ -72,119 +82,131 @@ service cloud.firestore {
     // Rules
     // ===============================================================
 
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow write: if isAdmin();
+      // Allow new users to create their own initial profile (simplified for first-time use)
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    match /settings/{id} {
+      allow read: if true;
+      allow write: if hasPermission('settings');
+    }
+
     match /warehouses/{warehouseId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if hasPermission('inventory') || hasPermission('reports');
+      allow write: if hasPermission('inventory');
     }
 
     match /units/{unitId} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow write: if hasPermission('inventory');
     }
 
     match /costCenters/{costCenterId} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow write: if hasPermission('inventory');
     }
 
     match /items/{itemId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if hasPermission('inventory') || hasPermission('reports');
+      allow write: if hasPermission('inventory');
     }
 
     match /suppliers/{supplierId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if hasPermission('suppliers') || hasPermission('reports');
+      allow write: if hasPermission('suppliers');
     }
 
     match /purchases/{purchaseId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if hasPermission('purchases') || hasPermission('reports');
+      allow write: if hasPermission('purchases');
     }
 
     match /issuances/{issuanceId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if hasPermission('inventory') || hasPermission('reports');
+      allow write: if hasPermission('inventory');
     }
 
     match /productionJobs/{jobId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if hasPermission('production') || hasPermission('reports');
+      allow write: if hasPermission('production');
     }
 
     match /loadingManifests/{manifestId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if hasPermission('production') || hasPermission('reports');
+      allow write: if hasPermission('production');
     }
 
     match /waste/{wasteId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if hasPermission('inventory') || hasPermission('reports');
+      allow write: if hasPermission('inventory');
     }
 
     match /bladeSharpening/{id} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if hasPermission('maintenance') || hasPermission('reports');
+      allow write: if hasPermission('maintenance');
     }
 
     match /plateSharpening/{id} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if hasPermission('maintenance') || hasPermission('reports');
+      allow write: if hasPermission('maintenance');
     }
 
     match /machineMaintenance/{id} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if hasPermission('maintenance') || hasPermission('reports');
+      allow write: if hasPermission('maintenance');
     }
 
     match /employees/{id} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if hasPermission('hr') || hasPermission('reports');
+      allow write: if hasPermission('hr');
     }
 
     match /attendance/{id} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if hasPermission('hr') || hasPermission('reports');
+      allow write: if hasPermission('hr');
     }
 
     match /hrTransactions/{id} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if hasPermission('hr') || hasPermission('reports');
+      allow write: if hasPermission('hr');
     }
 
     match /loans/{id} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if hasPermission('hr') || hasPermission('reports');
+      allow write: if hasPermission('hr');
     }
 
     match /payrolls/{id} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if hasPermission('hr') || hasPermission('reports');
+      allow write: if hasPermission('hr');
     }
 
     match /supplierPayments/{id} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if hasPermission('suppliers') || hasPermission('reports');
+      allow write: if hasPermission('suppliers');
     }
 
     match /productionRecords/{id} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if hasPermission('hr') || hasPermission('reports');
+      allow write: if hasPermission('hr');
     }
 
     match /jobLabors/{id} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if hasPermission('production') || hasPermission('reports');
+      allow write: if hasPermission('production');
     }
 
     match /jobOtherCosts/{id} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if hasPermission('production') || hasPermission('reports');
+      allow write: if hasPermission('production');
     }
 
     match /deliveryReceipts/{id} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if hasPermission('production') || hasPermission('reports');
+      allow write: if hasPermission('production');
     }
 
     match /test/{id} {
