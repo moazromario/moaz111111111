@@ -1165,6 +1165,9 @@ function MainApp() {
 
       {/* Main Content */}
       <main className="flex-1 p-4 md:p-10 overflow-auto">
+        {['employees', 'attendance', 'loans', 'payroll', 'hrTransactions', 'hrProduction'].includes(activeTab) && (
+          <HRWorkflowGuide activeTab={activeTab} onTabChange={setActiveTab} />
+        )}
         {activeTab === 'dashboard' && <Dashboard 
           items={items} 
           suppliers={suppliers} 
@@ -6298,18 +6301,105 @@ function EmployeesView({ employees }: { employees: Employee[] }) {
   );
 }
 
+
+function HRWorkflowGuide({ activeTab, onTabChange }: { activeTab: string, onTabChange: (tab: string) => void }) {
+  const steps = [
+    { id: 'attendance', label: 'الحضور اليومي', icon: <CheckCircle2 size={16} />, desc: 'تسجيل الحضور والانصراف لكل موظف يومياً.' },
+    { id: 'hrProduction', label: 'الإنتاجية', icon: <Layers size={16} />, desc: 'تسجيل إنتاج العمال لبدء حساب المستحقات.' },
+    { id: 'hrTransactions', label: 'تسوية الحسابات', icon: <DollarSign size={16} />, desc: 'إضافة المكافآت، الخصومات أو السلف الطارئة.' },
+    { id: 'payroll', label: 'إقفال الرواتب', icon: <History size={16} />, desc: 'مراجعة الكشوف النهائية وصرف الرواتب للموظفين.' },
+  ];
+
+  const currentIndex = steps.findIndex(s => s.id === activeTab);
+  if (currentIndex === -1 && activeTab !== 'employees' && activeTab !== 'loans') return null;
+
+  return (
+    <div className="mb-10 bg-white border border-slate-200 rounded-[2rem] p-4 shadow-sm">
+      <div className="flex flex-col md:flex-row items-stretch gap-2">
+        {steps.map((step, index) => {
+          const isActive = activeTab === step.id;
+          const isDone = currentIndex > index;
+          
+          return (
+            <div 
+              key={step.id}
+              onClick={() => onTabChange(step.id)}
+              className={`flex-1 relative cursor-pointer group transition-all duration-300 rounded-2xl p-4 ${
+                isActive ? 'bg-primary/5 border-2 border-primary/20 shadow-inner' : 'hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center gap-3 mb-2">
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${
+                  isActive ? 'bg-primary text-white scale-110 shadow-lg shadow-primary/30' : 
+                  isDone ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-400'
+                }`}>
+                  {isDone ? <CheckCircle2 size={16} /> : step.icon}
+                </div>
+                <div>
+                  <h4 className={`text-sm font-black transition-all ${isActive ? 'text-primary' : 'text-slate-600'}`}>
+                    {step.label}
+                  </h4>
+                  <p className="text-[10px] font-bold text-slate-400">الخطوة {index + 1}</p>
+                </div>
+              </div>
+              <p className={`text-[11px] font-medium leading-relaxed transition-all ${isActive ? 'text-slate-700' : 'text-slate-400 opacity-60'}`}>
+                {step.desc}
+              </p>
+              
+              {index < steps.length - 1 && (
+                <div className="hidden md:block absolute -left-1 top-1/2 -translate-y-1/2 z-10">
+                  <ChevronLeft className={`text-slate-200 ${isDone ? 'text-green-500' : ''}`} size={16} />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function AttendanceView({ employees, attendance }: { employees: Employee[], attendance: Attendance[] }) {
   const [showAdd, setShowAdd] = useState(false);
   const [editingAttendance, setEditingAttendance] = useState<Attendance | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [selectedDept, setSelectedDept] = useState<string>('الكل');
+  const [todayDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [formData, setFormData] = useState({
     employeeId: '',
-    date: format(new Date(), 'yyyy-MM-dd'),
+    date: todayDate,
     checkIn: '08:00',
     checkOut: '18:00',
     status: 'حضور' as const
   });
+
+  const todayAttendance = attendance.filter(a => a.date === todayDate);
+  const employeeStatus = employees.map(emp => {
+    const att = todayAttendance.find(a => a.employeeId === emp.id);
+    return {
+      ...emp,
+      attendance: att
+    };
+  });
+
+  const missingAttendance = employeeStatus.filter(e => !e.attendance);
+  const presentCount = employeeStatus.filter(e => e.attendance?.status === 'حضور' || e.attendance?.status === 'تأخير').length;
+  const absentCount = employeeStatus.filter(e => e.attendance?.status === 'غياب').length;
+
+  const quickMarkAllPresent = async () => {
+    const batch = writeBatch(db);
+    missingAttendance.forEach(emp => {
+      const newRef = doc(collection(db, 'attendance'));
+      batch.set(newRef, {
+        employeeId: emp.id,
+        date: todayDate,
+        checkIn: '08:00',
+        checkOut: '18:00',
+        status: 'حضور'
+      });
+    });
+    await batch.commit();
+  };
 
   const handleAdd = async () => {
     if (!formData.employeeId || !formData.date) return;
@@ -6400,6 +6490,109 @@ function AttendanceView({ employees, attendance }: { employees: Employee[], atte
             تسجيل حضور جديد
           </Button>
         </div>
+      </div>
+
+      {/* Today's Assistant */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <Card className="dribbble-card md:col-span-3 border-none shadow-xl shadow-slate-200/50 bg-white overflow-hidden">
+          <CardHeader className="bg-slate-50/50 border-b border-slate-100 flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-lg font-black text-slate-900">مساعد تسجيل الحضور لليوم</CardTitle>
+              <CardDescription className="font-bold">{format(new Date(), 'eeee, d MMMM yyyy', { locale: ar })}</CardDescription>
+            </div>
+            <Badge className="bg-primary/10 text-primary border-none font-black px-4 py-1.5 rounded-full">
+              {missingAttendance.length} موظف لم يسجل بعد
+            </Badge>
+          </CardHeader>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4 mb-6 p-4 bg-blue-50/50 rounded-2xl border border-blue-100/50">
+              <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
+                <MessageSquare size={20} />
+              </div>
+              <div>
+                <h4 className="font-black text-slate-800 text-sm">مهمة اليوم:</h4>
+                <p className="text-xs font-bold text-slate-500">تأكد من تسجيل "حضور" لكل من حضر بصمة الصباح، والغياب لمن لم يحضر.</p>
+              </div>
+            </div>
+
+            {missingAttendance.length > 0 ? (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between bg-slate-50 p-2 rounded-xl">
+                  <div className="flex items-center gap-4 pr-2">
+                    <span className="text-primary font-black text-xs">إجراء سريع:</span>
+                    <Button variant="ghost" size="sm" onClick={quickMarkAllPresent} className="rounded-lg text-primary font-black hover:bg-primary/10 transition-all">
+                      <CheckCircle2 size={16} className="ml-2" />
+                      تسجيل "حضور" للجميع (08:00 ص)
+                    </Button>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {missingAttendance.map(emp => (
+                    <div key={emp.id} className="p-3 bg-white border border-slate-100 rounded-xl flex flex-col items-center justify-center gap-2 group hover:border-primary/30 transition-all shadow-sm">
+                      <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-slate-400 group-hover:bg-primary/5 group-hover:text-primary transition-colors">
+                        <Users size={16} />
+                      </div>
+                      <span className="font-bold text-slate-700 text-xs text-center line-clamp-1">{emp.name}</span>
+                      <div className="flex gap-1 w-full mt-1">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="flex-1 h-7 text-[10px] bg-green-50 text-green-600 hover:bg-green-600 hover:text-white rounded-lg p-0"
+                          onClick={async () => {
+                            await addDoc(collection(db, 'attendance'), {
+                              employeeId: emp.id,
+                              date: todayDate,
+                              checkIn: '08:00',
+                              checkOut: '18:00',
+                              status: 'حضور'
+                            });
+                          }}
+                        >حضور</Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="flex-1 h-7 text-[10px] bg-red-50 text-red-600 hover:bg-red-600 hover:text-white rounded-lg p-0"
+                          onClick={async () => {
+                            await addDoc(collection(db, 'attendance'), {
+                              employeeId: emp.id,
+                              date: todayDate,
+                              status: 'غياب'
+                            });
+                          }}
+                        >غياب</Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-6 text-center">
+                <div className="w-12 h-12 bg-green-50 rounded-full flex items-center justify-center text-green-500 mb-3">
+                  <CheckCircle2 size={24} />
+                </div>
+                <h4 className="font-black text-slate-900">اكتمل تسجيل حضور الجميع!</h4>
+                <p className="text-sm text-slate-500 font-bold mt-1">تم تسجيل حالة حضور جميع الموظفين لهذا اليوم بنجاح.</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="dribbble-card border-none shadow-xl shadow-slate-200/50 bg-primary text-white">
+          <CardContent className="pt-8 flex flex-col items-center justify-center gap-4">
+            <div className="relative w-24 h-24 flex items-center justify-center">
+               <svg className="w-full h-full -rotate-90">
+                 <circle cx="48" cy="48" r="40" stroke="currentColor" strokeWidth="8" fill="transparent" className="text-white/20" />
+                 <circle cx="48" cy="48" r="40" stroke="currentColor" strokeWidth="8" fill="transparent" strokeDasharray={2 * Math.PI * 40} strokeDashoffset={2 * Math.PI * 40 * (1 - (presentCount / (employees.length || 1)))} className="text-white transition-all duration-1000" />
+               </svg>
+               <span className="absolute text-xl font-black">{Math.round((presentCount / (employees.length || 1)) * 100)}%</span>
+            </div>
+            <div className="text-center">
+              <p className="text-[10px] font-black uppercase tracking-widest opacity-80">نسبة الحضور اليوم</p>
+              <h3 className="text-xl font-black">{presentCount} من {employees.length}</h3>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <Card className="dribbble-card overflow-hidden border-none">
