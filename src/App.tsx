@@ -417,7 +417,7 @@ function PayrollMasterReport({ payrolls, employees, hrTransactions, attendance, 
     return acc;
   }, []);
 
-  const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
+  const COLORS = ['#2563eb', '#3b82f6', '#60a5fa', '#10b981', '#34d399', '#8b5cf6', '#a78bfa'];
 
   const tableData = filteredPayrolls.filter(p => {
     const emp = employees.find(e => e.id === p.employeeId);
@@ -560,7 +560,7 @@ function PayrollMasterReport({ payrolls, employees, hrTransactions, attendance, 
                     contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 40px rgba(0,0,0,0.1)', fontWeight: 'bold' }}
                     formatter={(value: number) => `${value.toLocaleString()} ج.م`}
                   />
-                  <Line type="monotone" dataKey="wages" stroke="#6366f1" strokeWidth={4} dot={{ r: 6, fill: '#6366f1', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 8 }} />
+                  <Line type="monotone" dataKey="wages" stroke="#2563eb" strokeWidth={4} dot={{ r: 6, fill: '#2563eb', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 8, fill: '#2563eb' }} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -1078,9 +1078,9 @@ function MainApp({
   };
 
   return (
-    <div className="flex min-h-screen bg-slate-50 font-sans text-right" dir="rtl">
+    <div className="flex min-h-screen font-sans text-right" dir="rtl">
       <aside className={`
-        fixed inset-y-0 right-0 w-72 bg-white border-l border-slate-200 flex flex-col shadow-2xl z-50 transition-transform duration-300 ease-in-out
+        fixed inset-y-0 right-0 w-72 bg-white/80 backdrop-blur-3xl border-l border-white/40 flex flex-col shadow-[0_0_40px_rgba(0,0,0,0.04)] z-50 transition-transform duration-300 ease-in-out
         md:relative md:translate-x-0 md:shadow-xl md:shadow-blue-500/5 md:z-20
         ${mobileMenuOpen ? 'translate-x-0' : 'translate-x-full'}
       `}>
@@ -1416,17 +1416,20 @@ function NavButton({ active, onClick, icon, label, permission, profile }: { acti
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all duration-300 group ${
+      className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-300 group relative active:scale-[0.98] ${
         active 
-          ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-[-4px]' 
-          : 'text-slate-500 hover:bg-blue-50 hover:text-primary'
+          ? 'bg-blue-50/80 text-primary shadow-[0_2px_10px_rgba(37,99,235,0.06)] ring-1 ring-blue-100/50 translate-x-[-4px]' 
+          : 'text-slate-500 hover:bg-blue-50/40 hover:text-primary hover:translate-x-[-4px] hover:shadow-sm'
       }`}
     >
-      <div className={`transition-transform duration-300 ${active ? 'scale-110' : 'group-hover:scale-110'}`}>
+      {active && (
+        <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-8 bg-primary rounded-l-lg" />
+      )}
+      <div className={`transition-all duration-300 flex items-center justify-center w-8 h-8 rounded-xl ${active ? 'bg-primary/10 text-primary scale-110 shadow-sm' : 'bg-transparent text-slate-400 group-hover:bg-white group-hover:text-primary group-hover:scale-110 group-hover:shadow-sm'}`}>
         {icon}
       </div>
-      <span className="font-bold text-sm tracking-tight">{label}</span>
-      {active && <div className="mr-auto w-1.5 h-1.5 bg-white rounded-full shadow-[0_0_8px_white]" />}
+      <span className={`font-bold text-sm tracking-tight ${active ? 'font-black' : ''}`}>{label}</span>
+      {active && <div className="mr-auto w-1.5 h-1.5 bg-primary rounded-full shadow-[0_0_8px_rgb(59,130,246,0.5)]" />}
     </button>
   );
 }
@@ -1436,13 +1439,15 @@ function SubNavButton({ active, onClick, label, permission, profile }: { active:
   return (
     <button 
       onClick={onClick}
-      className={`w-full flex items-center px-4 py-2.5 rounded-xl transition-all duration-200 text-xs font-bold ${
+      className={`w-full flex items-center px-4 py-2.5 rounded-xl transition-all duration-200 text-xs font-bold relative active:scale-[0.98] ${
         active 
-        ? 'text-primary bg-blue-50 shadow-sm' 
-        : 'text-slate-400 hover:text-slate-700 hover:bg-slate-50'
+          ? 'bg-blue-50/80 text-primary shadow-sm ring-1 ring-blue-100/50 translate-x-[-6px]' 
+          : 'text-slate-400 hover:bg-slate-50 hover:text-primary hover:translate-x-[-4px] hover:shadow-sm'
       }`}
     >
-      {label}
+      <div className={`w-1.5 h-1.5 rounded-full ml-2 transition-all duration-300 ${active ? 'bg-primary scale-125 shadow-[0_0_8px_rgb(59,130,246,0.5)]' : 'bg-slate-300 group-hover:bg-primary group-hover:scale-125'}`} />
+      <span className="flex-1 text-right">{label}</span>
+      {active && <div className="w-1 h-1 rounded-full bg-primary" />}
     </button>
   );
 }
@@ -1834,7 +1839,7 @@ function Dashboard({
           <CardContent className="p-4 md:p-8 pt-0">
             <div className="space-y-3 md:space-y-4">
               {lowStockItems.length > 0 ? lowStockItems.map(item => (
-                <div key={item.id} className="flex items-center justify-between p-3 md:p-5 bg-red-50/50 rounded-2xl border border-red-100/50 group hover:bg-red-50 transition-colors">
+                <div key={item.id} className="flex items-center justify-between p-3 md:p-4 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.02)] rounded-2xl border border-slate-100/80 group hover:shadow-[0_4px_16px_rgba(239,68,68,0.08)] transition-all duration-300 hover:-translate-y-0.5">
                   <div className="flex items-center gap-3 md:gap-4">
                     <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-white flex items-center justify-center shadow-sm font-bold text-red-500 text-sm md:text-base">
                       {item.currentBalance}
@@ -1870,7 +1875,7 @@ function Dashboard({
           <CardContent className="p-4 md:p-8 pt-0">
             <div className="space-y-3 md:space-y-4">
               {issuances.slice(-5).reverse().map(iss => (
-                <div key={iss.id} className="flex items-center justify-between p-3 md:p-5 bg-slate-50/50 rounded-2xl border border-slate-100/50 group hover:bg-slate-50 transition-colors">
+                <div key={iss.id} className="flex items-center justify-between p-3 md:p-4 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.02)] rounded-2xl border border-slate-100/80 group hover:shadow-[0_4px_16px_rgba(59,130,246,0.08)] transition-all duration-300 hover:-translate-y-0.5">
                   <div className="flex items-center gap-3 md:gap-4">
                     <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-white flex items-center justify-center shadow-sm font-bold text-primary text-sm md:text-base">
                       {iss.quantity}
@@ -1905,7 +1910,7 @@ function Dashboard({
           <CardContent className="p-4 md:p-8 pt-0">
             <div className="space-y-3 md:space-y-4">
               {productionJobs.slice(-5).reverse().map(job => (
-                <div key={job.id} className="flex items-center justify-between p-3 md:p-5 bg-emerald-50/30 rounded-2xl border border-emerald-100/50 group hover:bg-emerald-50/50 transition-colors">
+                <div key={job.id} className="flex items-center justify-between p-3 md:p-4 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.02)] rounded-2xl border border-slate-100/80 group hover:shadow-[0_4px_16px_rgba(16,185,129,0.08)] transition-all duration-300 hover:-translate-y-0.5">
                   <div className="flex items-center gap-3 md:gap-4">
                     <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-white flex items-center justify-center shadow-sm font-bold text-emerald-600 text-sm md:text-base">
                       {job.orderNo}
@@ -1937,7 +1942,7 @@ function Dashboard({
           <CardContent className="p-4 md:p-8 pt-0">
             <div className="space-y-3 md:space-y-4">
               {purchases.slice(-5).reverse().map(pur => (
-                <div key={pur.id} className="flex items-center justify-between p-3 md:p-5 bg-orange-50/30 rounded-2xl border border-orange-100/50 group hover:bg-orange-50/50 transition-colors">
+                <div key={pur.id} className="flex items-center justify-between p-3 md:p-4 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.02)] rounded-2xl border border-slate-100/80 group hover:shadow-[0_4px_16px_rgba(249,115,22,0.08)] transition-all duration-300 hover:-translate-y-0.5">
                   <div className="flex items-center gap-3 md:gap-4">
                     <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-white flex items-center justify-center shadow-sm font-bold text-orange-600 text-sm md:text-base">
                       {pur.quantity}
@@ -1972,7 +1977,7 @@ function Dashboard({
           <CardContent className="p-4 md:p-8 pt-0">
             <div className="space-y-3 md:space-y-4">
               {supplierPayments.slice(-5).reverse().map(payment => (
-                <div key={payment.id} className="flex items-center justify-between p-3 md:p-5 bg-purple-50/30 rounded-2xl border border-purple-100/50 group hover:bg-purple-50/50 transition-colors">
+                <div key={payment.id} className="flex items-center justify-between p-3 md:p-4 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.02)] rounded-2xl border border-slate-100/80 group hover:shadow-[0_4px_16px_rgba(168,85,247,0.08)] transition-all duration-300 hover:-translate-y-0.5">
                   <div className="flex items-center gap-3 md:gap-4">
                     <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-white flex items-center justify-center shadow-sm font-bold text-purple-600 text-sm md:text-base">
                       <DollarSign size={20} />
@@ -2007,7 +2012,7 @@ function Dashboard({
           <CardContent className="p-4 md:p-8 pt-0">
             <div className="space-y-3 md:space-y-4">
               {hrTransactions.slice(-5).reverse().map(trans => (
-                <div key={trans.id} className="flex items-center justify-between p-3 md:p-5 bg-indigo-50/30 rounded-2xl border border-indigo-100/50 group hover:bg-indigo-50/50 transition-colors">
+                <div key={trans.id} className="flex items-center justify-between p-3 md:p-4 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.02)] rounded-2xl border border-slate-100/80 group hover:shadow-[0_4px_16px_rgba(99,102,241,0.08)] transition-all duration-300 hover:-translate-y-0.5">
                   <div className="flex items-center gap-3 md:gap-4">
                     <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-white flex items-center justify-center shadow-sm font-bold text-indigo-600 text-sm md:text-base">
                       {trans.type === 'مكافأة' || trans.type === 'بدل' || trans.type === 'إضافي' ? '+' : '-'}
@@ -2035,17 +2040,35 @@ function Dashboard({
 }
 
 function StatCard({ title, value, icon, color = "text-primary" }: { title: string, value: string | number, icon: React.ReactNode, color?: string }) {
+  const bgColorMap: Record<string, string> = {
+    'text-primary': 'bg-blue-600',
+    'text-orange-500': 'bg-orange-500',
+    'text-emerald-600': 'bg-emerald-600',
+    'text-emerald-500': 'bg-emerald-500',
+    'text-red-500': 'bg-red-500',
+    'text-red-600': 'bg-red-600',
+    'text-blue-500': 'bg-blue-500',
+    'text-purple-500': 'bg-purple-500',
+    'text-slate-500': 'bg-slate-500'
+  };
+  const bgClass = bgColorMap[color] || 'bg-slate-500';
+
   return (
-    <Card className="dribbble-card overflow-hidden group">
-      <CardContent className="p-6">
-        <div className="flex items-center justify-between">
-          <div className="space-y-2">
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{title}</p>
-            <h3 className={`text-2xl font-black tracking-tight ${color}`}>{value}</h3>
-          </div>
-          <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center group-hover:scale-110 transition-transform duration-500 shadow-inner">
+    <Card className="dribbble-card overflow-hidden group relative">
+      <div className={`absolute -top-12 -right-12 w-32 h-32 ${bgClass} opacity-[0.04] rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700 pointer-events-none`} />
+      <CardContent className="p-6 relative z-10">
+        <div className="flex items-start justify-between mb-4">
+          <div className="w-12 h-12 rounded-[16px] bg-slate-50 border border-slate-100/80 flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300 shadow-sm">
             {icon}
           </div>
+          <div className="flex gap-1 opacity-40 group-hover:opacity-100 transition-opacity">
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest leading-none">{title}</p>
+          <h3 className={`data-stat ${color === 'text-primary' ? 'text-slate-800' : color}`}>{value}</h3>
         </div>
       </CardContent>
     </Card>
@@ -5615,7 +5638,7 @@ function ReportsView({
     { name: 'صيانة الماكينات', value: machineMaintenance.reduce((acc, s) => acc + s.cost, 0) },
   ];
 
-  const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
+  const COLORS = ['#2563eb', '#3b82f6', '#60a5fa', '#10b981', '#34d399', '#8b5cf6', '#a78bfa'];
 
   const exportToExcel = (data: any[], fileName: string) => {
     const ws = XLSX.utils.json_to_sheet(data);

@@ -1,0 +1,659 @@
+109-  return (
+110-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-[100]">
+111:      <Card className="dribbble-card w-full max-w-sm border-none shadow-2xl animate-in fade-in zoom-in duration-200">
+112-        <CardHeader className="pb-2">
+113-          <div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center mb-4">
+--
+157-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-400/5 rounded-full blur-3xl" />
+158-      
+159:      <Card className="w-full max-w-md dribbble-card border-none shadow-2xl shadow-primary/10 relative z-10">
+160-        <CardHeader className="text-center space-y-4 pt-12 pb-8">
+161-          <div className="mx-auto w-20 h-20 bg-primary rounded-[2rem] flex items-center justify-center mb-4 shadow-xl shadow-primary/30 rotate-3 hover:rotate-0 transition-transform duration-500">
+--
+477-
+478-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
+479:        <Card className="dribbble-card bg-primary text-white border-none shadow-2xl shadow-primary/20">
+480-          <CardContent className="pt-8">
+481-            <div className="flex flex-col gap-2">
+--
+489-        </Card>
+490-
+491:        <Card className="dribbble-card border-none shadow-xl shadow-slate-200/50">
+492-          <CardContent className="pt-8">
+493-            <div className="flex flex-col gap-2">
+--
+501-        </Card>
+502-
+503:        <Card className="dribbble-card border-none shadow-xl shadow-slate-200/50">
+504-          <CardContent className="pt-8">
+505-            <div className="flex flex-col gap-2">
+--
+513-        </Card>
+514-
+515:        <Card className="dribbble-card border-none shadow-xl shadow-slate-200/50">
+516-          <CardContent className="pt-8">
+517-            <div className="flex flex-col gap-2">
+--
+525-        </Card>
+526-
+527:        <Card className="dribbble-card border-none shadow-xl shadow-slate-200/50">
+528-          <CardContent className="pt-8">
+529-            <div className="flex flex-col gap-2">
+--
+540-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+541-        {/* Trend Chart */}
+542:        <Card className="dribbble-card lg:col-span-2 border-none shadow-2xl shadow-slate-200/50 overflow-hidden group">
+543-          <CardHeader className="bg-slate-50/50 border-b border-slate-100 flex flex-row items-center justify-between">
+544-            <div>
+--
+569-
+570-        {/* Composition Chart */}
+571:        <Card className="dribbble-card border-none shadow-2xl shadow-slate-200/50 overflow-hidden">
+572-          <CardHeader className="bg-slate-50/50 border-b border-slate-100">
+573-            <CardTitle className="text-xl font-black text-slate-900">هيكل الأجور</CardTitle>
+--
+614-
+615-        {/* Top Earners */}
+616:        <Card className="dribbble-card border-none shadow-2xl shadow-slate-200/50 overflow-hidden">
+617-          <CardHeader className="bg-slate-50/50 border-b border-slate-100">
+618-            <CardTitle className="text-xl font-black text-slate-900">الأكثر كسباً</CardTitle>
+--
+646-      </div>
+647-
+648:      <Card className="dribbble-card border-none shadow-2xl shadow-slate-200/50 overflow-hidden">
+649-        <CardHeader className="bg-slate-50/50 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+650-          <div>
+--
+1649-      </div>
+1650-
+1651:      <Card className="dribbble-card border-none p-6 print:hidden">
+1652-        <div className="flex flex-col md:flex-row gap-6 items-end">
+1653-          <div className="flex-1 space-y-2">
+--
+1688-          </div>
+1689-
+1690:          <Card className="dribbble-card border-none overflow-hidden print:shadow-none">
+1691-            <div className="overflow-x-auto">
+1692-              <Table>
+--
+1827-
+1828-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+1829:        <Card className="dribbble-card">
+1830-          <CardHeader className="p-4 md:p-8 pb-2 md:pb-4">
+1831-            <CardTitle className="text-lg md:text-xl font-black flex items-center gap-3 text-slate-900">
+--
+1863-        </Card>
+1864-
+1865:        <Card className="dribbble-card">
+1866-          <CardHeader className="p-4 md:p-8 pb-2 md:pb-4">
+1867-            <CardTitle className="text-lg md:text-xl font-black flex items-center gap-3 text-slate-900">
+--
+1898-        </Card>
+1899-
+1900:        <Card className="dribbble-card">
+1901-          <CardHeader className="p-4 md:p-8 pb-2 md:pb-4">
+1902-            <CardTitle className="text-lg md:text-xl font-black flex items-center gap-3 text-slate-900">
+--
+1930-        </Card>
+1931-
+1932:        <Card className="dribbble-card">
+1933-          <CardHeader className="p-4 md:p-8 pb-2 md:pb-4">
+1934-            <CardTitle className="text-lg md:text-xl font-black flex items-center gap-3 text-slate-900">
+--
+1965-        </Card>
+1966-
+1967:        <Card className="dribbble-card">
+1968-          <CardHeader className="p-4 md:p-8 pb-2 md:pb-4">
+1969-            <CardTitle className="text-lg md:text-xl font-black flex items-center gap-3 text-slate-900">
+--
+2000-        </Card>
+2001-
+2002:        <Card className="dribbble-card">
+2003-          <CardHeader className="p-4 md:p-8 pb-2 md:pb-4">
+2004-            <CardTitle className="text-lg md:text-xl font-black flex items-center gap-3 text-slate-900">
+--
+2054-
+2055-  return (
+2056:    <Card className="dribbble-card overflow-hidden group relative">
+2057-      <div className={`absolute -top-12 -right-12 w-32 h-32 ${bgClass} opacity-[0.04] rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700 pointer-events-none`} />
+2058-      <CardContent className="p-6 relative z-10">
+--
+2159-
+2160-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+2161:        <Card className="dribbble-card bg-primary text-white border-none shadow-xl shadow-primary/20">
+2162-          <CardContent className="p-6 flex items-center gap-4">
+2163-            <div className="w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center backdrop-blur-md">
+--
+2174-        </Card>
+2175-        
+2176:        <Card className="dribbble-card bg-emerald-600 text-white border-none shadow-xl shadow-emerald-600/20">
+2177-          <CardContent className="p-6 flex items-center gap-4">
+2178-            <div className="w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center backdrop-blur-md">
+--
+2189-        </Card>
+2190-
+2191:        <Card className="dribbble-card bg-slate-900 text-white border-none shadow-xl shadow-slate-900/20">
+2192-          <CardContent className="p-6 flex items-center gap-4">
+2193-            <div className="w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center backdrop-blur-md">
+--
+2234-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 print:hidden">
+2235-          {filtered.map(item => (
+2236:            <Card key={item.id} className="dribbble-card group overflow-hidden">
+2237-              <CardContent className="p-0">
+2238-                <div className="p-6 space-y-4">
+--
+2312-        </div>
+2313-      ) : (
+2314:        <Card className="dribbble-card border-none overflow-hidden print:shadow-none">
+2315-          <div className="overflow-x-auto">
+2316-            <Table>
+--
+2395-      {editingItem && (
+2396-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+2397:          <Card className="dribbble-card w-full max-w-md max-h-[90vh] overflow-auto">
+2398-            <CardHeader><CardTitle className="font-black">تعديل صنف: {editingItem.name}</CardTitle></CardHeader>
+2399-            <CardContent className="space-y-4">
+--
+2451-      {selectedItemCard && (
+2452-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+2453:          <Card className="dribbble-card w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+2454-            <CardHeader className="border-b border-slate-100 p-8">
+2455-              <div className="flex items-center justify-between">
+--
+3134-                              >
+3135-                                <Card
+3136:                                  className={`dribbble-card group ${snapshot.isDragging ? 'shadow-2xl ring-2 ring-primary rotate-2 scale-105' : ''}`}
+3137-                                >
+3138-                                  <CardContent className="p-5 space-y-4">
+--
+3282-      {editingJob && (
+3283-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+3284:          <Card className="dribbble-card w-full max-w-md max-h-[90vh] overflow-auto">
+3285-            <CardHeader>
+3286-              <CardTitle className="font-black text-2xl">تعديل أمر إنتاج</CardTitle>
+--
+3407-      {showAdd && (
+3408-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+3409:          <Card className="dribbble-card w-full max-w-md max-h-[90vh] overflow-auto">
+3410-            <CardHeader>
+3411-              <CardTitle className="font-black text-2xl">إضافة أمر إنتاج جديد</CardTitle>
+--
+3660-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+3661-        {filteredManifests.slice().reverse().map(m => (
+3662:          <Card key={m.id} className="dribbble-card group overflow-hidden">
+3663-            <CardHeader className="pb-4">
+3664-              <div className="flex justify-between items-start">
+--
+3711-      {showAdd && (
+3712-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+3713:          <Card className="dribbble-card w-full max-w-4xl max-h-[90vh] overflow-auto my-8">
+3714-            <CardHeader>
+3715-              <CardTitle className="font-black text-2xl">{editingId ? 'تعديل حمولة عربية' : 'إضافة حمولة عربية جديدة'}</CardTitle>
+--
+3843-        <>
+3844-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto print:hidden">
+3845:            <Card className="dribbble-card w-full max-w-4xl my-8 bg-white overflow-hidden">
+3846-              <CardHeader className="border-b border-slate-100 flex flex-row justify-between items-center bg-slate-50/50">
+3847-                <div className="text-right">
+--
+4073-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+4074-        {filteredReceipts.slice().reverse().map(r => (
+4075:          <Card key={r.id} className="dribbble-card group overflow-hidden">
+4076-            <CardHeader className="pb-4">
+4077-              <div className="flex justify-between items-start">
+--
+4120-      {showAdd && (
+4121-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+4122:          <Card className="dribbble-card w-full max-w-4xl max-h-[90vh] overflow-auto my-8">
+4123-            <CardHeader>
+4124-              <CardTitle className="font-black text-2xl">{editingId ? 'تعديل محضر استلام' : 'إضافة محضر استلام جديد'}</CardTitle>
+--
+4266-        <>
+4267-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto print:hidden">
+4268:            <Card className="dribbble-card w-full max-w-4xl my-8 bg-white overflow-hidden">
+4269-              <CardHeader className="border-b border-slate-100 flex flex-row justify-between items-center bg-slate-50/50">
+4270-                <div className="text-right">
+--
+4491-      </div>
+4492-
+4493:      <Card className="dribbble-card overflow-hidden border-none print:shadow-none">
+4494-        <div className="hidden print:block text-center mb-8">
+4495-          <h1 className="text-2xl font-black">تقرير المشتريات</h1>
+--
+4549-      {showAdd && (
+4550-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+4551:          <Card className="dribbble-card w-full max-w-lg max-h-[90vh] overflow-auto">
+4552-            <CardHeader>
+4553-              <CardTitle className="font-black">إضافة فاتورة شراء</CardTitle>
+--
+4804-      </div>
+4805-
+4806:      <Card className="dribbble-card overflow-hidden border-none print:shadow-none">
+4807-        <div className="hidden print:block text-center mb-8">
+4808-          <h1 className="text-2xl font-black">تقرير أذونات الصرف</h1>
+--
+4854-      {showAdd && (
+4855-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+4856:          <Card className="dribbble-card w-full max-w-2xl max-h-[90vh] overflow-auto my-8">
+4857-            <CardHeader>
+4858-              <CardTitle className="font-black text-2xl">إصدار إذن صرف خامات</CardTitle>
+--
+5017-      </div>
+5018-      
+5019:      <Card className="dribbble-card overflow-hidden border-none">
+5020-        <Table>
+5021-          <TableHeader className="bg-slate-50/50">
+--
+5151-      {showPaymentModal && (
+5152-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+5153:          <Card className="dribbble-card w-full max-w-md">
+5154-            <CardHeader>
+5155-              <CardTitle className="font-black text-2xl">تسديد دفعة للمورد</CardTitle>
+--
+5281-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+5282-        <Card 
+5283:          className="dribbble-card p-10 text-center border-none hover:shadow-2xl hover:shadow-blue-500/10 transition-all cursor-pointer group" 
+5284-          onClick={() => { setReturnType('cost_center'); setShowAdd(true); }}
+5285-        >
+--
+5292-
+5293-        <Card 
+5294:          className="dribbble-card p-10 text-center border-none hover:shadow-2xl hover:shadow-orange-500/10 transition-all cursor-pointer group" 
+5295-          onClick={() => { setReturnType('supplier'); setShowAdd(true); }}
+5296-        >
+--
+5306-      {showAdd && (
+5307-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+5308:          <Card className="dribbble-card w-full max-w-md max-h-[90vh] overflow-auto">
+5309-            <CardHeader>
+5310-              <CardTitle className="font-black text-2xl">{returnType === 'cost_center' ? 'مرتجع من مركز تكلفة' : 'مرتجع إلى مورد'}</CardTitle>
+--
+5435-      </div>
+5436-
+5437:      <Card className="dribbble-card overflow-hidden border-none">
+5438-        <Table>
+5439-          <TableHeader className="bg-slate-50/50">
+--
+5473-      {showAdd && (
+5474-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+5475:          <Card className="dribbble-card w-full max-w-md max-h-[90vh] overflow-auto">
+5476-            <CardHeader>
+5477-              <CardTitle className="font-black text-2xl">تسجيل هالك جديد</CardTitle>
+--
+5693-        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
+5694-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+5695:            <Card className="dribbble-card border-none bg-blue-50/50 shadow-sm">
+5696-              <CardContent className="pt-6">
+5697-                <div className="flex items-center gap-4">
+--
+5707-            </Card>
+5708-
+5709:            <Card className="dribbble-card border-none bg-red-50/50 shadow-sm">
+5710-              <CardContent className="pt-6">
+5711-                <div className="flex items-center gap-4">
+--
+5721-            </Card>
+5722-
+5723:            <Card className="dribbble-card border-none bg-emerald-50/50 shadow-sm">
+5724-              <CardContent className="pt-6">
+5725-                <div className="flex items-center gap-4">
+--
+5735-            </Card>
+5736-
+5737:            <Card className="dribbble-card border-none bg-orange-50/50 shadow-sm">
+5738-              <CardContent className="pt-6">
+5739-                <div className="flex items-center gap-4">
+--
+5751-
+5752-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+5753:            <Card className="dribbble-card border-none shadow-xl shadow-slate-200/50 overflow-hidden">
+5754-              <CardHeader className="bg-slate-50/50 border-b border-slate-100">
+5755-                <CardTitle className="text-xl font-black text-slate-900">توزيع المخزون</CardTitle>
+--
+5772-            </Card>
+5773-
+5774:            <Card className="dribbble-card border-none shadow-xl shadow-slate-200/50 overflow-hidden">
+5775-              <CardHeader className="bg-slate-50/50 border-b border-slate-100">
+5776-                <CardTitle className="text-xl font-black text-slate-900">استهلاك مراحل الإنتاج</CardTitle>
+--
+5803-            </Card>
+5804-
+5805:            <Card className="dribbble-card border-none shadow-xl shadow-slate-200/50 overflow-hidden lg:col-span-1">
+5806-              <CardHeader className="bg-slate-50/50 border-b border-slate-100">
+5807-                <CardTitle className="text-xl font-black text-slate-900">تكاليف الصيانة والسن</CardTitle>
+--
+5827-      {/* Summary Tables */}
+5828-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+5829:        <Card className="dribbble-card border-none overflow-hidden">
+5830-          <CardHeader>
+5831-            <CardTitle className="text-xl font-black text-slate-900">حالة المخزون الحالي</CardTitle>
+--
+5858-        </Card>
+5859-
+5860:        <Card className="dribbble-card border-none overflow-hidden">
+5861-          <CardHeader>
+5862-            <CardTitle className="text-xl font-black text-slate-900">تقرير مديونيات الموردين</CardTitle>
+--
+5898-      ) : (
+5899-        <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+5900:          <Card className="dribbble-card border-none">
+5901-            <CardHeader className="flex flex-row items-center justify-between">
+5902-              <CardTitle className="text-2xl font-black">تقرير جرد المخزن الشامل</CardTitle>
+--
+5978-      </div>
+5979-
+5980:      <Card className="dribbble-card overflow-hidden border-none">
+5981-        <Table>
+5982-          <TableHeader className="bg-slate-50/50">
+--
+6010-      {showAdd && (
+6011-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+6012:          <Card className="dribbble-card w-full max-w-md">
+6013-            <CardHeader>
+6014-              <CardTitle className="font-black text-2xl">تسجيل عملية سن صواني</CardTitle>
+--
+6084-      </div>
+6085-
+6086:      <Card className="dribbble-card overflow-hidden border-none">
+6087-        <Table>
+6088-          <TableHeader className="bg-slate-50/50">
+--
+6116-      {showAdd && (
+6117-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+6118:          <Card className="dribbble-card w-full max-w-md">
+6119-            <CardHeader>
+6120-              <CardTitle className="font-black text-2xl">تسجيل عملية سن صفايح</CardTitle>
+--
+6190-      </div>
+6191-
+6192:      <Card className="dribbble-card overflow-hidden border-none">
+6193-        <Table>
+6194-          <TableHeader className="bg-slate-50/50">
+--
+6222-      {showAdd && (
+6223-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+6224:          <Card className="dribbble-card w-full max-w-md">
+6225-            <CardHeader>
+6226-              <CardTitle className="font-black text-2xl">تسجيل صيانة ماكينة</CardTitle>
+--
+6359-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+6360-        {filteredEmployees.map(emp => (
+6361:          <Card key={emp.id} className="dribbble-card border-none overflow-hidden group">
+6362-            <CardHeader className="pb-4">
+6363-              <div className="flex items-center justify-between mb-2">
+--
+6426-      {showAdd && (
+6427-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+6428:          <Card className="dribbble-card w-full max-w-md">
+6429-            <CardHeader>
+6430-              <CardTitle className="font-black text-2xl">إضافة موظف جديد</CardTitle>
+--
+6498-      {editingEmployee && (
+6499-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+6500:          <Card className="dribbble-card w-full max-w-md">
+6501-            <CardHeader>
+6502-              <CardTitle className="font-black text-2xl">تعديل بيانات الموظف</CardTitle>
+--
+6574-      {deletingId && (
+6575-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+6576:          <Card className="dribbble-card w-full max-w-sm">
+6577-            <CardHeader>
+6578-              <CardTitle className="font-black text-xl text-red-600 text-right">تأكيد الحذف</CardTitle>
+--
+6783-      {/* Today's Assistant */}
+6784-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+6785:        <Card className="dribbble-card md:col-span-3 border-none shadow-xl shadow-slate-200/50 bg-white overflow-hidden">
+6786-          <CardHeader className="bg-slate-50/50 border-b border-slate-100 flex flex-row items-center justify-between">
+6787-            <div>
+--
+6867-        </Card>
+6868-
+6869:        <Card className="dribbble-card border-none shadow-xl shadow-slate-200/50 bg-primary text-white">
+6870-          <CardContent className="pt-8 flex flex-col items-center justify-center gap-4">
+6871-            <div className="relative w-24 h-24 flex items-center justify-center">
+--
+6884-      </div>
+6885-
+6886:      <Card className="dribbble-card overflow-hidden border-none">
+6887-        <Table>
+6888-          <TableHeader className="bg-slate-50/50">
+--
+6960-      {showAdd && (
+6961-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+6962:          <Card className="dribbble-card w-full max-w-md">
+6963-            <CardHeader>
+6964-              <CardTitle className="font-black text-2xl">تسجيل حضور</CardTitle>
+--
+7007-      {editingAttendance && (
+7008-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+7009:          <Card className="dribbble-card w-full max-w-md">
+7010-            <CardHeader>
+7011-              <CardTitle className="font-black text-2xl">تعديل سجل حضور</CardTitle>
+--
+7053-      {deletingId && (
+7054-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+7055:          <Card className="dribbble-card w-full max-w-sm">
+7056-            <CardHeader>
+7057-              <CardTitle className="font-black text-xl text-red-600">تأكيد الحذف</CardTitle>
+--
+7165-      </div>
+7166-
+7167:      <Card className="dribbble-card overflow-hidden border-none">
+7168-        <Table>
+7169-          <TableHeader className="bg-slate-50/50">
+--
+7236-      {showAdd && (
+7237-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+7238:          <Card className="dribbble-card w-full max-w-md">
+7239-            <CardHeader>
+7240-              <CardTitle className="font-black text-2xl">تسجيل سلفة</CardTitle>
+--
+7294-      {selectedEmployeeId && (
+7295-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+7296:          <Card className="dribbble-card w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+7297-            <CardHeader className="border-b border-slate-100 bg-slate-50/50">
+7298-              <div className="flex justify-between items-center">
+--
+7482-      {editingLoan && (
+7483-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+7484:          <Card className="dribbble-card w-full max-w-md">
+7485-            <CardHeader>
+7486-              <CardTitle className="font-black text-2xl">تعديل سلفة</CardTitle>
+--
+7648-      </div>
+7649-
+7650:      <Card className="dribbble-card overflow-hidden border-none">
+7651-        <Table>
+7652-          <TableHeader className="bg-slate-50/50">
+--
+7705-      {showAdd && (
+7706-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+7707:          <Card className="dribbble-card w-full max-w-md">
+7708-            <CardHeader>
+7709-              <CardTitle className="font-black text-2xl">إضافة حركة مالية</CardTitle>
+--
+7773-      {editingTransaction && (
+7774-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+7775:          <Card className="dribbble-card w-full max-w-md">
+7776-            <CardHeader>
+7777-              <CardTitle className="font-black text-2xl">تعديل حركة مالية</CardTitle>
+--
+7839-      {deletingId && (
+7840-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+7841:          <Card className="dribbble-card w-full max-w-sm">
+7842-            <CardHeader>
+7843-              <CardTitle className="font-black text-xl text-red-600">تأكيد الحذف</CardTitle>
+--
+7966-      </div>
+7967-
+7968:      <Card className="dribbble-card overflow-hidden border-none shadow-sm">
+7969-        <Table>
+7970-          <TableHeader className="bg-slate-50/50">
+--
+8001-      {showAdd && (
+8002-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto py-10">
+8003:          <Card className="dribbble-card w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+8004-            <CardHeader className="flex-shrink-0 border-b border-slate-100 flex flex-row items-center justify-between">
+8005-              <div>
+--
+8547-      </div>
+8548-
+8549:      <Card className="dribbble-card overflow-hidden border-none">
+8550-        <Table>
+8551-          <TableHeader className="bg-slate-50/50">
+--
+8737-      {editingPayroll && (
+8738-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-[70]">
+8739:          <Card className="dribbble-card w-full max-w-lg">
+8740-            <CardHeader>
+8741-              <CardTitle className="font-black text-2xl">تعديل كشف الراتب</CardTitle>
+--
+8800-      {deletingId && (
+8801-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-[80]">
+8802:          <Card className="dribbble-card w-full max-w-sm">
+8803-            <CardHeader>
+8804-              <CardTitle className="font-black text-xl text-red-600">تأكيد الحذف</CardTitle>
+--
+8815-      {showGenerate && (
+8816-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+8817:          <Card className="dribbble-card w-full max-w-md">
+8818-            <CardHeader>
+8819-              <CardTitle className="font-black text-2xl">إصدار رواتب أسبوعية</CardTitle>
+--
+8959-      </div>
+8960-
+8961:      <Card className="dribbble-card overflow-hidden border-none">
+8962-        <Table>
+8963-          <TableHeader className="bg-slate-50/50">
+--
+9014-      {selectedPayroll && (
+9015-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+9016:          <Card className="dribbble-card w-full max-w-md">
+9017-            <CardHeader className="border-b border-slate-100 pb-4">
+9018-              <div className="flex justify-between items-center">
+--
+9072-      {editingPayroll && (
+9073-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+9074:          <Card className="dribbble-card w-full max-w-md">
+9075-            <CardHeader>
+9076-              <CardTitle className="font-black text-2xl">تعديل كشف الراتب</CardTitle>
+--
+9402-          {activeSettingTab === 'general' && (
+9403-            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
+9404:              <Card className="dribbble-card border-none bg-slate-900 text-white overflow-hidden relative">
+9405-                <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-primary/20 via-transparent to-transparent pointer-events-none" />
+9406-                <CardHeader>
+--
+9448-              </Card>
+9449-
+9450:              <Card className="dribbble-card border-none bg-white shadow-sm">
+9451-                <CardHeader>
+9452-                  <CardTitle className="text-xl font-black text-slate-900">إحصائيات النظام</CardTitle>
+--
+9488-          {activeSettingTab === 'about' && (
+9489-            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
+9490:              <Card className="dribbble-card border-none">
+9491-                <CardHeader>
+9492-                  <CardTitle className="text-2xl font-black text-slate-900">عن النظام</CardTitle>
+--
+9507-          {activeSettingTab === 'company' && (
+9508-            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
+9509:              <Card className="dribbble-card border-none">
+9510-                <CardHeader>
+9511-                  <CardTitle className="text-2xl font-black text-slate-900">بيانات الشركة</CardTitle>
+--
+9544-          {activeSettingTab === 'items' && (
+9545-            <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+9546:              <Card className="dribbble-card border-none">
+9547-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-6">
+9548-              <div>
+--
+9608-      {activeSettingTab === 'suppliers' && (
+9609-        <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+9610:          <Card className="dribbble-card border-none">
+9611-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-6">
+9612-              <div>
+--
+9657-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+9658-            {/* Warehouse Management */}
+9659:            <Card className="dribbble-card border-none">
+9660-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-6">
+9661-                <div>
+--
+9693-
+9694-            {/* Units Management */}
+9695:            <Card className="dribbble-card border-none">
+9696-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-6">
+9697-                <div>
+--
+9729-
+9730-            {/* Cost Centers Management */}
+9731:            <Card className="dribbble-card border-none">
+9732-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-6">
+9733-                <div>
+--
+9800-      {activeSettingTab === 'security' && (
+9801-            <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+9802:              <Card className="dribbble-card border-red-100 bg-red-50/30">
+9803-                <CardHeader>
+9804-                  <CardTitle className="text-2xl font-black text-red-700 flex items-center gap-2">
+--
+9832-      {editingItem && (
+9833-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+9834:          <Card className="dribbble-card w-full max-w-md max-h-[90vh] overflow-auto">
+9835-            <CardHeader><CardTitle className="font-black text-2xl">تعديل صنف</CardTitle></CardHeader>
+9836-            <CardContent className="space-y-5">
+--
+9895-      {editingWarehouse && (
+9896-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+9897:          <Card className="dribbble-card w-full max-w-md max-h-[90vh] overflow-auto">
+9898-            <CardHeader><CardTitle className="font-black text-2xl">تعديل مخزن</CardTitle></CardHeader>
+9899-            <CardContent className="space-y-4">
+--
+9919-      {editingUnit && (
+9920-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+9921:          <Card className="dribbble-card w-full max-w-md max-h-[90vh] overflow-auto">
+9922-            <CardHeader><CardTitle className="font-black text-2xl">تعديل وحدة</CardTitle></CardHeader>
+9923-            <CardContent className="space-y-4">
+--
+9943-      {editingCostCenter && (
+9944-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+9945:          <Card className="dribbble-card w-full max-w-md max-h-[90vh] overflow-auto">
+9946-            <CardHeader><CardTitle className="font-black text-2xl">تعديل مركز تكلفة</CardTitle></CardHeader>
+9947-            <CardContent className="space-y-4">
+--
+9967-      {editingSupplier && (
+9968-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+9969:          <Card className="dribbble-card w-full max-w-sm">
+9970-            <CardHeader><CardTitle className="font-black">تعديل مورد</CardTitle></CardHeader>
+9971-            <CardContent className="space-y-4">
+--
+9991-      {showWarehouseAdd && (
+9992-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+9993:          <Card className="dribbble-card w-full max-w-md max-h-[90vh] overflow-auto">
+9994-            <CardHeader><CardTitle className="font-black text-2xl">إضافة مخزن جديد</CardTitle></CardHeader>
+9995-            <CardContent className="space-y-4">
+--
+10010-      {showUnitAdd && (
+10011-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+10012:          <Card className="dribbble-card w-full max-w-md max-h-[90vh] overflow-auto">
+10013-            <CardHeader><CardTitle className="font-black text-2xl">إضافة وحدة جديدة</CardTitle></CardHeader>
+10014-            <CardContent className="space-y-4">
+--
+10029-      {showCostCenterAdd && (
+10030-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+10031:          <Card className="dribbble-card w-full max-w-md max-h-[90vh] overflow-auto">
+10032-            <CardHeader><CardTitle className="font-black text-2xl">إضافة مركز تكلفة جديد</CardTitle></CardHeader>
+10033-            <CardContent className="space-y-4">
+--
+10048-      {showItemAdd && (
+10049-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+10050:          <Card className="dribbble-card w-full max-w-md max-h-[90vh] overflow-auto">
+10051-            <CardHeader><CardTitle className="font-black text-2xl">إضافة صنف جديد</CardTitle></CardHeader>
+10052-            <CardContent className="space-y-5">
+--
+10110-      {showSupplierAdd && (
+10111-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+10112:          <Card className="dribbble-card w-full max-w-sm max-h-[90vh] overflow-auto">
+10113-            <CardHeader><CardTitle className="font-black text-2xl">إضافة مورد جديد</CardTitle></CardHeader>
+10114-            <CardContent className="space-y-4">
