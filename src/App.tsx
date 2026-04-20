@@ -1081,7 +1081,7 @@ function MainApp({
     <div className="flex min-h-screen font-sans text-right" dir="rtl">
       <aside className={`
         fixed inset-y-0 right-0 w-72 bg-white/80 backdrop-blur-3xl border-l border-white/40 flex flex-col shadow-[0_0_40px_rgba(0,0,0,0.04)] z-50 transition-transform duration-300 ease-in-out
-        md:relative md:translate-x-0 md:shadow-xl md:shadow-blue-500/5 md:z-20
+        md:relative md:translate-x-0 md:shadow-xl md:shadow-blue-500/5 md:z-20 print:hidden
         ${mobileMenuOpen ? 'translate-x-0' : 'translate-x-full'}
       `}>
         <div className="p-8 hidden md:block">
@@ -1301,7 +1301,7 @@ function MainApp({
 
 
       {/* Main Content */}
-      <main className="flex-1 p-4 md:p-10 overflow-auto">
+      <main className="flex-1 p-4 md:p-10 overflow-auto print:hidden">
         {['employees', 'attendance', 'loans', 'payroll', 'hrTransactions', 'hrProduction'].includes(activeTab) && (
           <HRWorkflowGuide activeTab={activeTab} onTabChange={setActiveTab} />
         )}
@@ -2653,21 +2653,21 @@ function PrintDeliveryReceipt({ receipt, companyInfo }: { receipt: DeliveryRecei
   const productsText = receipt.products.map(p => `${p.name} (عدد ${p.quantity}) ${p.notes ? `[${p.notes}]` : ''}`).join(' + ');
 
   return (
-    <div className="hidden print:block p-0 bg-white text-slate-900 font-sans tracking-tight dir-rtl min-h-screen relative overflow-hidden" style={{ width: '210mm', height: '297mm' }}>
+    <div className="hidden print:block p-0 bg-white text-slate-900 font-sans tracking-tight dir-rtl relative overflow-hidden" style={{ width: '210mm', height: '297mm', maxHeight: '297mm' }}>
       {/* Red Corners - Triangles */}
       <div className="absolute top-0 left-0 w-40 h-40 bg-red-600" style={{ clipPath: 'polygon(0 0, 100% 0, 0 100%)' }} />
       <div className="absolute bottom-0 right-0 w-40 h-40 bg-red-600" style={{ clipPath: 'polygon(100% 100%, 0 100%, 100% 0)' }} />
 
-      <div className="relative z-10 p-12 h-full flex flex-col border-[20px] border-slate-100/50">
+      <div className="relative z-10 p-10 h-full flex flex-col border-[12px] border-slate-100/50">
         {/* Header Section */}
-        <div className="flex flex-col items-center mb-8">
+        <div className="flex flex-col items-center mb-6">
           <div className="border-4 border-black p-4 bg-white shadow-[10px_10px_0_0_rgba(0,0,0,1)] flex flex-col items-center">
             <Building2 className="text-red-600 mb-1" size={32} />
              <h1 className="text-4xl font-black text-black">النجار ديزاين</h1>
              <p className="text-[12px] font-black tracking-[0.4em] text-center mt-2">D E S I G N • G R O U P</p>
           </div>
           
-          <div className="mt-8 relative">
+          <div className="mt-6 relative">
             <div className="border-4 border-black px-16 py-3 bg-white rounded-2xl relative z-10">
               <h2 className="text-3xl font-black text-black">تقرير استلام المنتج</h2>
             </div>
@@ -2676,7 +2676,7 @@ function PrintDeliveryReceipt({ receipt, companyInfo }: { receipt: DeliveryRecei
         </div>
 
         {/* Metadata Grid */}
-        <div className="grid grid-cols-2 gap-x-12 gap-y-6 mb-8 text-base">
+        <div className="grid grid-cols-2 gap-x-12 gap-y-4 mb-6 text-base">
           <div className="flex items-center gap-3 border-b-2 border-slate-300 pb-1">
             <span className="font-black text-slate-500 whitespace-nowrap min-w-[120px]">تاريخ الاستلام :</span>
             <span className="flex-1 text-center font-black text-xl">{receipt.date.split('-').reverse().join(' / ')}</span>
@@ -2705,7 +2705,7 @@ function PrintDeliveryReceipt({ receipt, companyInfo }: { receipt: DeliveryRecei
         </div>
 
         {/* Main Product Area with Grid */}
-        <div className="flex-1 border-4 border-red-600 rounded-[32px] relative bg-white overflow-hidden mb-8 min-h-[450px]">
+        <div className="flex-1 border-4 border-red-600 rounded-[32px] relative bg-white overflow-hidden mb-6 min-h-[350px]">
           {/* Subtle Grid Background */}
           <div className="absolute inset-0 opacity-[0.03] pointer-events-none" 
                style={{ backgroundImage: 'linear-gradient(#000 2px, transparent 2px), linear-gradient(90deg, #000 2px, transparent 2px)', backgroundSize: '40px 40px' }} 
@@ -2717,7 +2717,7 @@ function PrintDeliveryReceipt({ receipt, companyInfo }: { receipt: DeliveryRecei
         </div>
 
         {/* Ratings Section - Designed for Manual Input */}
-        <div className="space-y-4 mb-8">
+        <div className="space-y-4 mb-6">
            <div className="flex items-center gap-6">
               <div className="bg-red-600 text-white px-6 py-2 rounded-xl font-black text-sm min-w-[180px] text-center">ما هو تقييمك للمنتج ؟</div>
               <div className="flex gap-10 font-black">
@@ -2743,36 +2743,36 @@ function PrintDeliveryReceipt({ receipt, companyInfo }: { receipt: DeliveryRecei
         </div>
 
         {/* Notes Line */}
-        <div className="flex items-center gap-6 mb-10">
+        <div className="flex items-center gap-6 mb-8">
           <div className="bg-red-600 text-white px-6 py-2 rounded-xl font-black text-sm whitespace-nowrap">ملاحظات أخرى :</div>
           <div className="flex-1 border-b-2 border-dotted border-black min-h-[40px] font-bold text-lg pt-2">{receipt.notes || "................................................................................................................"}</div>
         </div>
 
         {/* Final Declaration & Branches - EXACT WORDING FROM IMAGE */}
-        <div className="text-[11px] font-black tracking-tight mb-8">
-          <p className="border-t-2 border-black pt-4 text-right text-base mb-4 font-black">
+        <div className="text-[11px] font-black tracking-tight mb-6">
+          <p className="border-t-2 border-black pt-2 text-right text-base mb-2 font-black">
             أقر أنا الموقع أدناه بأنني قد استلمت كافة المستندات من شركة <span className="text-red-600">النجار ديزاين</span> وفروعها كالأتي :
           </p>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 px-4">
-             <div className="flex items-center gap-3">
-               <div className="w-5 h-5 rounded-full border-2 border-black flex items-center justify-center text-[10px] bg-red-50">📍</div>
-               <span>٨٤ جوزيف تيتو - النزهة الجديدة</span>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 px-4">
+             <div className="flex items-center gap-2">
+               <div className="w-4 h-4 rounded-full border-2 border-black flex items-center justify-center text-[9px] bg-red-50">📍</div>
+               <span className="text-[10px]">٨٤ جوزيف تيتو - النزهة الجديدة</span>
              </div>
-             <div className="flex items-center gap-3">
-               <div className="w-5 h-5 rounded-full border-2 border-black flex items-center justify-center text-[10px] bg-red-50">📍</div>
-               <span>٢٩ مكرم عبيد - مدينة نصر</span>
+             <div className="flex items-center gap-2">
+               <div className="w-4 h-4 rounded-full border-2 border-black flex items-center justify-center text-[9px] bg-red-50">📍</div>
+               <span className="text-[10px]">٢٩ مكرم عبيد - مدينة نصر</span>
              </div>
-             <div className="flex items-center gap-3">
-               <div className="w-5 h-5 rounded-full border-2 border-black flex items-center justify-center text-[10px] bg-red-50">📍</div>
-               <span>٥١ نبيل الوقاد - أرض الجولف</span>
+             <div className="flex items-center gap-2">
+               <div className="w-4 h-4 rounded-full border-2 border-black flex items-center justify-center text-[9px] bg-red-50">📍</div>
+               <span className="text-[10px]">٥١ نبيل الوقاد - أرض الجولف</span>
              </div>
-             <div className="flex items-center gap-3">
-               <div className="w-5 h-5 rounded-full border-2 border-black flex items-center justify-center text-[10px] bg-red-50">📍</div>
-               <span>طريق بورسعيد - دمياط</span>
+             <div className="flex items-center gap-2">
+               <div className="w-4 h-4 rounded-full border-2 border-black flex items-center justify-center text-[9px] bg-red-50">📍</div>
+               <span className="text-[10px]">طريق بورسعيد - دمياط</span>
              </div>
           </div>
           
-          <div className="mt-8 px-6 text-right font-black leading-relaxed text-[12px]">
+          <div className="mt-4 px-6 text-right font-black leading-relaxed text-[11px]">
             وإننى بالتوقيع على هذا الإقرار أخلى طرف الشركة من أى مستحقات أو خلافات تتعلق بالمنتجات المستلمة من الشركة شاملة وخالية من عيوب الصناعة.
             وبعد المعاينه والقبول وفى حالة جيدة وقد سددت القيمة المتفق عليها في العقد.
             <br />
@@ -2781,7 +2781,7 @@ function PrintDeliveryReceipt({ receipt, companyInfo }: { receipt: DeliveryRecei
         </div>
 
         {/* Signature Box Area */}
-        <div className="grid grid-cols-2 gap-20 px-8 mt-auto pt-6 border-t border-slate-100">
+        <div className="grid grid-cols-2 gap-20 px-8 mt-auto pt-4 border-t border-slate-100">
            <div className="space-y-6">
               <div className="flex items-center gap-3">
                 <span className="font-black text-xs text-slate-500 whitespace-nowrap">و هذا إقرار مني بذلك ، التوقيع :</span>
