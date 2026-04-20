@@ -2650,168 +2650,159 @@ function PrintJobCard({ job, companyInfo }: { job: ProductionJob, companyInfo: C
 }
 
 function PrintDeliveryReceipt({ receipt, companyInfo }: { receipt: DeliveryReceipt, companyInfo: CompanySettings }) {
+  const productsText = receipt.products.map(p => `${p.name} (عدد ${p.quantity}) ${p.notes ? `[${p.notes}]` : ''}`).join(' + ');
+
   return (
-    <div className="hidden print:block p-8 bg-white text-slate-900 font-sans dir-rtl min-h-screen relative border-[12px] border-slate-900">
-      {/* Header Section */}
-      <div className="flex justify-between items-center border-b-4 border-slate-900 pb-6 mb-6">
-        <div className="flex items-center gap-6">
-          <div className="w-20 h-20 bg-slate-900 flex items-center justify-center rounded-3xl rotate-3 shadow-xl">
-            <Building2 className="text-white -rotate-3" size={40} />
-          </div>
-          <div>
-            <h1 className="text-5xl font-black uppercase tracking-tighter leading-none">{companyInfo.name}</h1>
-            <p className="text-xs font-black text-red-600 mt-2 tracking-[0.3em]">PREMIUM FURNITURE & DESIGN STUDIO</p>
-          </div>
-        </div>
-        <div className="text-left">
-          <div className="bg-red-600 text-white px-8 py-3 rounded-2xl mb-3 shadow-lg shadow-red-200">
-            <h2 className="text-3xl font-black">تقرير استلام منتج</h2>
-          </div>
-          <div className="flex flex-col items-end gap-1">
-            <p className="text-xl font-black text-slate-900">التاريخ: {receipt.date}</p>
-            <p className="text-sm font-black text-slate-400">رقم المسلسل: {receipt.receiptNumber}</p>
-          </div>
-        </div>
-      </div>
+    <div className="hidden print:block p-0 bg-white text-slate-900 font-sans tracking-tight dir-rtl min-h-screen relative overflow-hidden" style={{ width: '210mm', height: '297mm' }}>
+      {/* Red Corners - Triangles */}
+      <div className="absolute top-0 left-0 w-40 h-40 bg-red-600" style={{ clipPath: 'polygon(0 0, 100% 0, 0 100%)' }} />
+      <div className="absolute bottom-0 right-0 w-40 h-40 bg-red-600" style={{ clipPath: 'polygon(100% 100%, 0 100%, 100% 0)' }} />
 
-      {/* Info Grid - Fixed Layout */}
-      <div className="grid grid-cols-12 gap-0 border-2 border-slate-900 mb-8 rounded-3xl overflow-hidden">
-        <div className="col-span-8 border-l-2 border-slate-900">
-          <div className="grid grid-cols-2">
-            <div className="p-4 border-b-2 border-l-2 border-slate-900 bg-slate-50">
-              <span className="text-[10px] font-black text-slate-400 uppercase block mb-1">اسم العميل</span>
-              <span className="text-xl font-black">{receipt.clientName}</span>
+      <div className="relative z-10 p-12 h-full flex flex-col border-[20px] border-slate-100/50">
+        {/* Header Section */}
+        <div className="flex flex-col items-center mb-8">
+          <div className="border-4 border-black p-4 bg-white shadow-[10px_10px_0_0_rgba(0,0,0,1)] flex flex-col items-center">
+            <Building2 className="text-red-600 mb-1" size={32} />
+             <h1 className="text-4xl font-black text-black">النجار ديزاين</h1>
+             <p className="text-[12px] font-black tracking-[0.4em] text-center mt-2">D E S I G N • G R O U P</p>
+          </div>
+          
+          <div className="mt-8 relative">
+            <div className="border-4 border-black px-16 py-3 bg-white rounded-2xl relative z-10">
+              <h2 className="text-3xl font-black text-black">تقرير استلام المنتج</h2>
             </div>
-            <div className="p-4 border-b-2 border-slate-900">
-              <span className="text-[10px] font-black text-slate-400 uppercase block mb-1">رقم العقد</span>
-              <span className="text-xl font-black">{receipt.orderNumber}</span>
-            </div>
-            <div className="p-4 border-l-2 border-slate-900">
-              <span className="text-[10px] font-black text-slate-400 uppercase block mb-1">العنوان بالتفصيل</span>
-              <span className="text-lg font-bold leading-tight">{receipt.address || '---'}</span>
-            </div>
-            <div className="p-4">
-              <span className="text-[10px] font-black text-slate-400 uppercase block mb-1">رقم الهاتف</span>
-              <span className="text-xl font-black">{receipt.phone || '---'}</span>
-            </div>
+            <div className="absolute -inset-1 bg-black rounded-2xl translate-x-2 translate-y-2 opacity-50 z-0"></div>
           </div>
         </div>
-        <div className="col-span-4 bg-slate-900 text-white p-6 flex flex-col justify-center gap-4">
-          <div>
-            <span className="text-[10px] font-black text-slate-400 uppercase block mb-1">الفرع</span>
-            <span className="text-2xl font-black">{receipt.branch}</span>
-          </div>
-          <div>
-            <span className="text-[10px] font-black text-slate-400 uppercase block mb-1">المسؤول / البائع</span>
-            <span className="text-xl font-bold">{receipt.salesPerson}</span>
-          </div>
-        </div>
-      </div>
 
-      {/* Products Table - Fixed Height Area */}
-      <div className="mb-8 border-2 border-slate-900 rounded-3xl overflow-hidden">
-        <div className="bg-slate-900 text-white p-4 flex justify-between items-center">
-          <h3 className="text-xl font-black">المنتجات المستلمة</h3>
-          <span className="text-xs font-bold opacity-60">يرجى مراجعة الكميات والمواصفات عند الاستلام</span>
+        {/* Metadata Grid */}
+        <div className="grid grid-cols-2 gap-x-12 gap-y-6 mb-8 text-base">
+          <div className="flex items-center gap-3 border-b-2 border-slate-300 pb-1">
+            <span className="font-black text-slate-500 whitespace-nowrap min-w-[120px]">تاريخ الاستلام :</span>
+            <span className="flex-1 text-center font-black text-xl">{receipt.date.split('-').reverse().join(' / ')}</span>
+          </div>
+          <div className="flex items-center gap-3 border-b-2 border-slate-300 pb-1">
+            <span className="font-black text-slate-500 whitespace-nowrap min-w-[120px]">اسم العميل :</span>
+            <span className="flex-1 font-black text-xl">{receipt.clientName}</span>
+          </div>
+          <div className="flex items-center gap-3 border-b-2 border-slate-300 pb-1">
+            <span className="font-black text-slate-500 whitespace-nowrap min-w-[120px]">الفرع :</span>
+            <span className="flex-1 font-black text-xl">{receipt.branch}</span>
+          </div>
+          <div className="flex items-center gap-3 border-b-2 border-slate-300 pb-1">
+            <span className="font-black text-slate-500 whitespace-nowrap min-w-[120px]">رقم الموبايل :</span>
+            <span className="flex-1 font-black text-xl">{receipt.phone}</span>
+          </div>
+          <div className="flex items-center gap-3 border-b-2 border-slate-300 pb-1 col-span-2">
+            <span className="font-black text-slate-500 whitespace-nowrap min-w-[120px]">عنوان العميل :</span>
+            <span className="flex-1 font-black text-xl">{receipt.address}</span>
+          </div>
         </div>
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="bg-slate-100 border-b-2 border-slate-900">
-              <th className="p-4 text-right font-black text-slate-500 w-16">م</th>
-              <th className="p-4 text-right font-black text-slate-900 text-lg">بيان المنتج</th>
-              <th className="p-4 text-center font-black text-slate-900 text-lg w-32">العدد</th>
-              <th className="p-4 text-right font-black text-slate-900 text-lg">ملاحظات فنية</th>
-            </tr>
-          </thead>
-          <tbody>
-            {receipt.products.map((p, i) => (
-              <tr key={i} className="border-b border-slate-200">
-                <td className="p-4 text-slate-400 font-black text-center">{i + 1}</td>
-                <td className="p-4 font-black text-2xl">{p.name}</td>
-                <td className="p-4 text-center font-black text-3xl">{p.quantity}</td>
-                <td className="p-4 font-bold text-slate-600">{p.notes || '---'}</td>
-              </tr>
-            ))}
-            {/* Fill empty rows to maintain fixed height if needed */}
-            {Array.from({ length: Math.max(0, 5 - receipt.products.length) }).map((_, i) => (
-              <tr key={`empty-${i}`} className="border-b border-slate-100 h-16">
-                <td className="p-4"></td>
-                <td className="p-4"></td>
-                <td className="p-4"></td>
-                <td className="p-4"></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
 
-      {/* Ratings Section */}
-      <div className="grid grid-cols-2 gap-6 mb-8">
-        <div className="p-6 border-2 border-slate-900 rounded-3xl bg-slate-50">
-          <p className="font-black text-slate-900 mb-4 text-lg border-b-2 border-slate-200 pb-2">تقييم جودة المنتج</p>
-          <div className="flex justify-between px-2">
-            {['ممتاز', 'جيد جداً', 'جيد', 'مقبول'].map(rating => (
-              <div key={rating} className="flex flex-col items-center gap-2">
-                <div className={`w-8 h-8 border-4 border-slate-300 rounded-xl flex items-center justify-center ${receipt.productRating === rating ? 'bg-red-600 border-red-600 text-white shadow-lg' : 'bg-white'}`}>
-                  {receipt.productRating === rating && <CheckCircle2 size={16} />}
-                </div>
-                <span className="text-xs font-black text-slate-600">{rating}</span>
+        {/* Products Header Bar */}
+        <div className="bg-red-600 text-white px-8 py-3 rounded-2xl mb-4 flex items-center justify-center shadow-lg">
+           <span className="font-black text-xl">المنتجات المستلمة عبارة عن :</span>
+        </div>
+
+        {/* Main Product Area with Grid */}
+        <div className="flex-1 border-4 border-red-600 rounded-[32px] relative bg-white overflow-hidden mb-8 min-h-[450px]">
+          {/* Subtle Grid Background */}
+          <div className="absolute inset-0 opacity-[0.03] pointer-events-none" 
+               style={{ backgroundImage: 'linear-gradient(#000 2px, transparent 2px), linear-gradient(90deg, #000 2px, transparent 2px)', backgroundSize: '40px 40px' }} 
+          />
+          
+          <div className="relative p-10 text-3xl font-black leading-[1.6]">
+            {productsText || "......................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................."}
+          </div>
+        </div>
+
+        {/* Ratings Section - Designed for Manual Input */}
+        <div className="space-y-4 mb-8">
+           <div className="flex items-center gap-6">
+              <div className="bg-red-600 text-white px-6 py-2 rounded-xl font-black text-sm min-w-[180px] text-center">ما هو تقييمك للمنتج ؟</div>
+              <div className="flex gap-10 font-black">
+                {['ممتاز', 'جيد جداً', 'جيد', 'مقبول'].map(r => (
+                  <div key={r} className="flex items-center gap-3">
+                    <span className="text-sm"> ( ) </span>
+                    <span className="text-sm">{r}</span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
-        <div className="p-6 border-2 border-slate-900 rounded-3xl bg-slate-50">
-          <p className="font-black text-slate-900 mb-4 text-lg border-b-2 border-slate-200 pb-2">تقييم فريق التوصيل ({receipt.deliveryTeam})</p>
-          <div className="flex justify-between px-2">
-            {['ممتاز', 'جيد جداً', 'جيد', 'مقبول'].map(rating => (
-              <div key={rating} className="flex flex-col items-center gap-2">
-                <div className={`w-8 h-8 border-4 border-slate-300 rounded-xl flex items-center justify-center ${receipt.teamRating === rating ? 'bg-slate-900 border-slate-900 text-white shadow-lg' : 'bg-white'}`}>
-                  {receipt.teamRating === rating && <CheckCircle2 size={16} />}
-                </div>
-                <span className="text-xs font-black text-slate-600">{rating}</span>
+           </div>
+           <div className="flex items-center gap-6">
+              <div className="bg-red-600 text-white px-6 py-2 rounded-xl font-black text-sm min-w-[180px] text-center">ما هو تقييمك للفريق ؟</div>
+              <div className="flex gap-10 font-black">
+                {['ممتاز', 'جيد جداً', 'جيد', 'مقبول'].map(r => (
+                  <div key={r} className="flex items-center gap-3">
+                    <span className="text-sm"> ( ) </span>
+                    <span className="text-sm">{r}</span>
+                  </div>
+                ))}
               </div>
-            ))}
+           </div>
+        </div>
+
+        {/* Notes Line */}
+        <div className="flex items-center gap-6 mb-10">
+          <div className="bg-red-600 text-white px-6 py-2 rounded-xl font-black text-sm whitespace-nowrap">ملاحظات أخرى :</div>
+          <div className="flex-1 border-b-2 border-dotted border-black min-h-[40px] font-bold text-lg pt-2">{receipt.notes || "................................................................................................................"}</div>
+        </div>
+
+        {/* Final Declaration & Branches - EXACT WORDING FROM IMAGE */}
+        <div className="text-[11px] font-black tracking-tight mb-8">
+          <p className="border-t-2 border-black pt-4 text-right text-base mb-4 font-black">
+            أقر أنا الموقع أدناه بأنني قد استلمت كافة المستندات من شركة <span className="text-red-600">النجار ديزاين</span> وفروعها كالأتي :
+          </p>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 px-4">
+             <div className="flex items-center gap-3">
+               <div className="w-5 h-5 rounded-full border-2 border-black flex items-center justify-center text-[10px] bg-red-50">📍</div>
+               <span>٨٤ جوزيف تيتو - النزهة الجديدة</span>
+             </div>
+             <div className="flex items-center gap-3">
+               <div className="w-5 h-5 rounded-full border-2 border-black flex items-center justify-center text-[10px] bg-red-50">📍</div>
+               <span>٢٩ مكرم عبيد - مدينة نصر</span>
+             </div>
+             <div className="flex items-center gap-3">
+               <div className="w-5 h-5 rounded-full border-2 border-black flex items-center justify-center text-[10px] bg-red-50">📍</div>
+               <span>٥١ نبيل الوقاد - أرض الجولف</span>
+             </div>
+             <div className="flex items-center gap-3">
+               <div className="w-5 h-5 rounded-full border-2 border-black flex items-center justify-center text-[10px] bg-red-50">📍</div>
+               <span>طريق بورسعيد - دمياط</span>
+             </div>
+          </div>
+          
+          <div className="mt-8 px-6 text-right font-black leading-relaxed text-[12px]">
+            وإننى بالتوقيع على هذا الإقرار أخلى طرف الشركة من أى مستحقات أو خلافات تتعلق بالمنتجات المستلمة من الشركة شاملة وخالية من عيوب الصناعة.
+            وبعد المعاينه والقبول وفى حالة جيدة وقد سددت القيمة المتفق عليها في العقد.
+            <br />
+            توقيع العميل أو تابعه (أو أي مستخدم ملحق بخدمته حتى هذا الان يكون مقام إمضاء العميل نفسه).
           </div>
         </div>
-      </div>
 
-      {/* Legal Acknowledgment - Fixed Box */}
-      <div className="p-8 border-4 border-red-600 rounded-[40px] mb-8 relative bg-red-50/30">
-        <div className="absolute -top-6 right-12 bg-red-600 text-white px-8 py-2 rounded-full font-black text-xl shadow-lg">إقرار استلام نهائي</div>
-        <p className="font-black text-slate-800 leading-[1.8] text-xl text-justify">
-          أقر أنا الموقع أدناه بأنني قد استلمت كافة المنتجات المذكورة أعلاه من شركة <span className="text-red-600 font-black underline decoration-2 underline-offset-4">{companyInfo.name}</span> وفروعها، 
-          وأنني قد قمت بمعاينة المنتجات معاينة تامة نافية للجهالة ووجدتها مطابقة للمواصفات المتفق عليها وخالية من أي عيوب صناعة ظاهرة. 
-          كما أقر بأنني قد سددت كامل القيمة المستحقة للشركة، وبناءً عليه أخلي طرف الشركة من أي مسؤولية تتعلق بالمنتجات المستلمة بعد التوقيع على هذا الإقرار.
-        </p>
-      </div>
-
-      {/* Signatures Section */}
-      <div className="grid grid-cols-3 gap-8 mt-12">
-        <div className="text-center space-y-8">
-          <p className="font-black text-slate-400 uppercase tracking-widest text-xs">توقيع العميل</p>
-          <div className="h-20 border-b-2 border-slate-900 mx-4" />
-          <p className="font-bold text-slate-900">{receipt.clientName}</p>
-        </div>
-        <div className="flex flex-col items-center justify-center">
-          <div className="w-32 h-32 border-4 border-slate-200 rounded-full flex items-center justify-center text-slate-200 font-black text-[10px] uppercase tracking-tighter text-center p-4 border-dashed">
-            ختم الشركة المعتمد
-          </div>
-        </div>
-        <div className="text-center space-y-8">
-          <p className="font-black text-slate-400 uppercase tracking-widest text-xs">توقيع مسؤول التسليم</p>
-          <div className="h-20 border-b-2 border-slate-900 mx-4" />
-          <p className="font-bold text-slate-900">{receipt.deliveryTeam}</p>
-        </div>
-      </div>
-
-      {/* Footer Info */}
-      <div className="absolute bottom-6 left-8 right-8 flex justify-between items-end border-t border-slate-200 pt-4">
-        <div className="text-[10px] font-black text-slate-400 space-y-1">
-          <p>المركز الرئيسي: 84 جوزيف تيتو - النزهة الجديدة</p>
-          <p>خدمة العملاء: {companyInfo.phone}</p>
-        </div>
-        <div className="text-[10px] font-black text-slate-300">
-          طبع بواسطة نظام {companyInfo.name} لإدارة الموارد - {new Date().toLocaleDateString('ar-EG')}
+        {/* Signature Box Area */}
+        <div className="grid grid-cols-2 gap-20 px-8 mt-auto pt-6 border-t border-slate-100">
+           <div className="space-y-6">
+              <div className="flex items-center gap-3">
+                <span className="font-black text-xs text-slate-500 whitespace-nowrap">و هذا إقرار مني بذلك ، التوقيع :</span>
+                <div className="flex-1 border-b-2 border-black h-4"></div>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="font-black text-xs text-slate-500 whitespace-nowrap">الرقم القومي (البطاقة) :</span>
+                <div className="flex-1 border-b-2 border-black h-4 font-extrabold">{receipt.nationalId || "........................."}</div>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="font-black text-xs text-slate-500 whitespace-nowrap">رقم الهاتف الجوال :</span>
+                <div className="flex-1 border-b-2 border-black h-4 font-extrabold">{receipt.phone || "........................."}</div>
+              </div>
+           </div>
+           
+           <div className="flex flex-col items-end justify-end space-y-4">
+              <div className="border-4 border-black/10 rounded-full w-24 h-24 flex items-center justify-center text-[10px] font-black text-slate-200 uppercase tracking-tighter text-center p-4 border-dashed">
+                ختم الشركة
+              </div>
+              <p className="font-black text-lg">تحريراً في : <span className="text-slate-500">{new Date().toLocaleDateString('ar-EG')}</span></p>
+           </div>
         </div>
       </div>
     </div>
@@ -3952,6 +3943,7 @@ function DeliveryReceipts({ receipts, companyInfo }: { receipts: DeliveryReceipt
     branch: '',
     address: '',
     phone: '',
+    nationalId: '',
     products: [{ name: '', quantity: 1, notes: '' }],
     productRating: 'ممتاز',
     teamRating: 'ممتاز',
@@ -4003,6 +3995,7 @@ function DeliveryReceipts({ receipts, companyInfo }: { receipts: DeliveryReceipt
         branch: '',
         address: '',
         phone: '',
+        nationalId: '',
         products: [{ name: '', quantity: 1, notes: '' }],
         productRating: 'ممتاز',
         teamRating: 'ممتاز',
@@ -4025,6 +4018,7 @@ function DeliveryReceipts({ receipts, companyInfo }: { receipts: DeliveryReceipt
       branch: receipt.branch,
       address: receipt.address || '',
       phone: receipt.phone || '',
+      nationalId: receipt.nationalId || '',
       products: receipt.products,
       productRating: receipt.productRating || 'ممتاز',
       teamRating: receipt.teamRating || 'ممتاز',
@@ -4044,7 +4038,10 @@ function DeliveryReceipts({ receipts, companyInfo }: { receipts: DeliveryReceipt
 
   const filteredReceipts = receipts.filter(r => 
     r.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    r.branch.toLowerCase().includes(searchTerm.toLowerCase())
+    r.branch.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (r.receiptNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (r.phone || '').includes(searchTerm) ||
+    (r.nationalId || '').includes(searchTerm)
   );
 
   return (
@@ -4174,6 +4171,10 @@ function DeliveryReceipts({ receipts, companyInfo }: { receipts: DeliveryReceipt
                   <label className="text-sm font-bold text-slate-700">رقم الهاتف</label>
                   <Input className="rounded-xl h-11" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
                 </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">الرقم القومي</label>
+                  <Input className="rounded-xl h-11" value={formData.nationalId} onChange={e => setFormData({...formData, nationalId: e.target.value})} />
+                </div>
               </div>
 
               <div className="space-y-6">
@@ -4217,35 +4218,6 @@ function DeliveryReceipts({ receipts, companyInfo }: { receipts: DeliveryReceipt
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-700">تقييم المنتج</label>
-                  <select 
-                    className="w-full h-11 rounded-xl border border-slate-200 px-4 font-bold"
-                    value={formData.productRating}
-                    onChange={e => setFormData({...formData, productRating: e.target.value as any})}
-                  >
-                    <option value="مقبول">مقبول</option>
-                    <option value="جيد">جيد</option>
-                    <option value="جيد جداً">جيد جداً</option>
-                    <option value="ممتاز">ممتاز</option>
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-700">تقييم فريق العمل</label>
-                  <select 
-                    className="w-full h-11 rounded-xl border border-slate-200 px-4 font-bold"
-                    value={formData.teamRating}
-                    onChange={e => setFormData({...formData, teamRating: e.target.value as any})}
-                  >
-                    <option value="مقبول">مقبول</option>
-                    <option value="جيد">جيد</option>
-                    <option value="جيد جداً">جيد جداً</option>
-                    <option value="ممتاز">ممتاز</option>
-                  </select>
-                </div>
-              </div>
-
               <div className="space-y-2">
                 <label className="text-sm font-bold text-slate-700">ملاحظات عامة</label>
                 <Input className="rounded-xl h-11" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} />
@@ -4280,41 +4252,48 @@ function DeliveryReceipts({ receipts, companyInfo }: { receipts: DeliveryReceipt
                   <Button variant="ghost" onClick={() => setSelectedReceipt(null)} className="rounded-xl font-bold text-slate-400">إغلاق</Button>
                 </div>
               </CardHeader>
-              <CardContent className="p-10">
-                <div className="border-2 border-slate-100 rounded-3xl p-8 space-y-8">
-                   <div className="grid grid-cols-2 gap-8">
-                      <div className="space-y-4">
-                        <p className="font-black text-slate-400 text-xs uppercase tracking-widest">بيانات العميل</p>
-                        <p className="text-xl font-black">{selectedReceipt.clientName}</p>
-                        <p className="font-bold text-slate-600">{selectedReceipt.branch}</p>
+              <CardContent className="p-0 overflow-auto max-h-[70vh]">
+                <div className="bg-slate-50 p-8">
+                  <div className="bg-white shadow-2xl rounded-[32px] overflow-hidden scale-[0.8] origin-top border-2 border-slate-200">
+                    <div className="p-12 relative overflow-hidden h-[800px] flex flex-col">
+                      <div className="absolute top-0 left-0 w-24 h-24 bg-red-600" style={{ clipPath: 'polygon(0 0, 100% 0, 0 100%)' }} />
+                      <div className="flex flex-col items-center mb-8 relative z-10">
+                        <div className="border-4 border-black p-3 bg-white">
+                           <h3 className="text-2xl font-black">النجار ديزاين</h3>
+                        </div>
+                        <h4 className="mt-4 border-2 border-black px-8 py-1 font-black">محضر استلام منتج</h4>
                       </div>
-                      <div className="text-left space-y-4">
-                        <p className="font-black text-slate-400 text-xs uppercase tracking-widest">التاريخ</p>
-                        <p className="text-xl font-black">{selectedReceipt.date}</p>
+                      <div className="grid grid-cols-2 gap-4 text-xs font-bold mb-4 relative z-10">
+                        <div className="border-b border-slate-200 pb-1">العميل: {selectedReceipt.clientName}</div>
+                        <div className="border-b border-slate-200 pb-1">التاريخ: {selectedReceipt.date}</div>
+                        <div className="border-b border-slate-200 pb-1">الفرع: {selectedReceipt.branch}</div>
+                        <div className="border-b border-slate-200 pb-1">الهاتف: {selectedReceipt.phone}</div>
                       </div>
-                   </div>
-                   
-                   <div className="space-y-4">
-                      <p className="font-black text-slate-400 text-xs uppercase tracking-widest">المنتجات</p>
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="text-right font-black">المنتج</TableHead>
-                            <TableHead className="text-center font-black">الكمية</TableHead>
-                            <TableHead className="text-right font-black">ملاحظات</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {selectedReceipt.products.map((p, i) => (
-                            <TableRow key={i}>
-                              <TableCell className="font-bold">{p.name}</TableCell>
-                              <TableCell className="text-center font-bold">{p.quantity}</TableCell>
-                              <TableCell className="text-slate-600">{p.notes || '---'}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                   </div>
+                      <div className="bg-red-600 text-white text-center py-1 rounded-lg font-black text-[10px] mb-2">المنتجات :</div>
+                      <div className="flex-1 border border-red-600 rounded-xl p-3 bg-white relative min-h-[150px]">
+                        <div className="absolute inset-0 opacity-5 pointer-events-none" style={{ backgroundImage: 'linear-gradient(#000 1px, transparent 1px), linear-gradient(90deg, #000 1px, transparent 1px)', backgroundSize: '15px 15px' }} />
+                        <div className="relative font-black text-sm">
+                          {selectedReceipt.products.map(p => `${p.name} (${p.quantity})`).join(' + ')}
+                        </div>
+                      </div>
+                      <div className="mt-4 text-[9px] space-y-2 relative z-10">
+                        <div className="flex items-center gap-2">
+                           <span className="font-black whitespace-nowrap">تقييم المنتج:</span>
+                           <span className="flex-1 border-b border-slate-200">( ) ممتاز ( ) جيد جدا ( ) جيد ( ) مقبول</span>
+                        </div>
+                        <p className="font-black text-right border-t border-slate-100 pt-2">
+                          أقر أنا الموقع أدناه بأنني قد استلمت كافة المستندات من شركة النجار ديزاين وفروعها...
+                        </p>
+                        <p className="text-[8px] italic opacity-70">
+                          وإننى بالتوقيع على هذا الإقرار أخلى طرف الشركة من أى مستحقات أو خلافات تتعلق بالمنتجات المستلمة...
+                        </p>
+                        <div className="mt-4 flex justify-between border-t border-slate-100 pt-2">
+                           <span>توقيع العميل: .....................</span>
+                           <span>تاريخ: {selectedReceipt.date}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </CardContent>
             </Card>

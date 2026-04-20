@@ -269,6 +269,7 @@ export interface DeliveryReceipt {
   branch: string;
   address?: string;
   phone?: string;
+  nationalId?: string;
   products: {
     name: string;
     quantity: number;
