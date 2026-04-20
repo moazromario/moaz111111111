@@ -281,6 +281,21 @@ export interface DeliveryReceipt {
   createdAt?: any;
 }
 
+export interface StockAudit {
+  id: string;
+  date: string;
+  warehouseId: string;
+  auditItems: {
+    itemId: string;
+    itemName: string;
+    systemStock: number;
+    actualStock: number;
+    difference: number;
+  }[];
+  notes: string;
+  createdBy: string;
+}
+
 export type OperationType = 'create' | 'update' | 'delete' | 'list' | 'get' | 'write';
 
 export interface FirestoreErrorInfo {

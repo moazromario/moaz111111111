@@ -49,6 +49,9 @@ service cloud.firestore {
     // Fields: date (string), clientName (string), branch (string), address (string), 
     //         phone (string), products (array), productRating (string), teamRating (string), notes (string)
     //
+    // Collection: stockAudits
+    // Fields: date (string), warehouseId (string), auditItems (array), notes (string), createdBy (string)
+    //
     // ===============================================================
 
     // ===============================================================
@@ -66,26 +69,36 @@ service cloud.firestore {
     function isAdmin() {
       return isAuthenticated() && 
              (request.auth.token.email == "cfo.moaz@gmail.com" || 
-              (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().isAdmin == true));
+              (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true));
+    }
+
+    function isVerified() {
+      return isAuthenticated() && request.auth.token.email_verified == true;
     }
 
     function hasPermission(module) {
-      return isAuthenticated() && 
-             (isAdmin() || getUserData().permissions[module] == true);
+      return isVerified() && 
+             (isAdmin() || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.permissions[module] == true));
     }
 
-    function hasOnlyAllowedFields(fields) {
-      return request.resource.data.keys().hasOnly(fields);
+    function isValidStockAudit(data) {
+      return data.date is string && 
+             data.warehouseId is string && 
+             data.auditItems is list &&
+             data.auditItems.size() <= 500;
     }
 
     // ===============================================================
     // Rules
     // ===============================================================
 
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
     match /users/{userId} {
       allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
       allow write: if isAdmin();
-      // Allow new users to create their own initial profile (simplified for first-time use)
       allow create: if isAuthenticated() && request.auth.uid == userId;
     }
 
@@ -207,6 +220,12 @@ service cloud.firestore {
     match /deliveryReceipts/{id} {
       allow read: if hasPermission('production') || hasPermission('reports');
       allow write: if hasPermission('production');
+    }
+
+    match /stockAudits/{id} {
+      allow read: if hasPermission('inventory') || hasPermission('reports');
+      allow create: if hasPermission('inventory') && isValidStockAudit(request.resource.data);
+      allow update, delete: if isAdmin();
     }
 
     match /test/{id} {

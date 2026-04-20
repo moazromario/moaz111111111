@@ -370,6 +370,31 @@
       },
       "required": ["date", "clientName", "branch", "products"]
     },
+    "StockAudit": {
+      "title": "StockAudit",
+      "description": "A warehouse stock audit record",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date" },
+        "warehouseId": { "type": "string" },
+        "auditItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "itemId": { "type": "string" },
+              "itemName": { "type": "string" },
+              "systemStock": { "type": "number" },
+              "actualStock": { "type": "number" },
+              "difference": { "type": "number" }
+            }
+          }
+        },
+        "notes": { "type": "string" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["date", "warehouseId", "auditItems"]
+    },
     "User": {
       "title": "User",
       "description": "A system user with specific module permissions",
@@ -434,6 +459,7 @@
     "/productionRecords/{id}": { "schema": "ProductionRecord", "description": "Production work records for piece-rate workers" },
     "/jobLabors/{id}": { "schema": "JobLabor", "description": "Job labor cost records" },
     "/jobOtherCosts/{id}": { "schema": "JobOtherCost", "description": "Job other cost records" },
-    "/deliveryReceipts/{id}": { "schema": "DeliveryReceipt", "description": "Client delivery receipts" }
+    "/deliveryReceipts/{id}": { "schema": "DeliveryReceipt", "description": "Client delivery receipts" },
+    "/stockAudits/{id}": { "schema": "StockAudit", "description": "Warehouse stock audit records" }
   }
 }

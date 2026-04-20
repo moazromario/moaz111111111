@@ -197,14 +197,23 @@
     margin: 0;
   }
   .print-only {
-    display: block;
+    display: block !important;
   }
   .no-print {
-    display: none;
+    display: none !important;
   }
   body {
-    background: white;
-    margin: 0;
-    padding: 0;
+    background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  /* Force containers to be visible if they contain print-only items */
+  .allow-print {
+    display: block !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
   }
 }

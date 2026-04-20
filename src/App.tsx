@@ -11,6 +11,8 @@ import {
   Package, 
   ShoppingCart, 
   ArrowUpRight, 
+  ArrowRight,
+  ClipboardCheck,
   Users, 
   Settings,
   LogOut,
@@ -76,9 +78,9 @@ import {
   Line,
   Legend
 } from 'recharts';
-import { db } from './firebase';
+import { db, auth } from './firebase';
 import { collection, onSnapshot, query, addDoc, updateDoc, deleteDoc, doc, increment, serverTimestamp, writeBatch, setDoc } from 'firebase/firestore';
-import { Item, Supplier, Purchase, Issuance, Warehouse, Unit, CostCenter, ProductionJob, LoadingManifest, DeliveryReceipt, Waste, BladeSharpening, PlateSharpening, MachineMaintenance, Employee, Attendance, FinancialTransaction, Loan, Payroll, SupplierPayment, JobLabor, JobOtherCost, ProductionRecord, CompanySettings, UserProfile } from './types';
+import { Item, Supplier, Purchase, Issuance, Warehouse, Unit, CostCenter, ProductionJob, LoadingManifest, DeliveryReceipt, Waste, BladeSharpening, PlateSharpening, MachineMaintenance, Employee, Attendance, FinancialTransaction, Loan, Payroll, SupplierPayment, JobLabor, JobOtherCost, ProductionRecord, CompanySettings, UserProfile, StockAudit } from './types';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import * as XLSX from 'xlsx';
@@ -799,6 +801,7 @@ function MainApp({
   const [jobLabors, setJobLabors] = useState<JobLabor[]>([]);
   const [jobOtherCosts, setJobOtherCosts] = useState<JobOtherCost[]>([]);
   const [deliveryReceipts, setDeliveryReceipts] = useState<DeliveryReceipt[]>([]);
+  const [stockAudits, setStockAudits] = useState<StockAudit[]>([]);
   const [hrMenuOpen, setHrMenuOpen] = useState(false);
   const [reportsMenuOpen, setReportsMenuOpen] = useState(false);
 
@@ -968,6 +971,13 @@ function MainApp({
       }, (err) => handleFirestoreError(err, 'list', 'deliveryReceipts'));
     }
 
+    let unsubStockAudits = () => {};
+    if (profile.isAdmin || profile.permissions.inventory || profile.permissions.reports) {
+      unsubStockAudits = onSnapshot(collection(db, 'stockAudits'), (snap) => {
+        setStockAudits(snap.docs.map(d => ({ id: d.id, ...d.data() } as StockAudit)));
+      }, (err) => handleFirestoreError(err, 'list', 'stockAudits'));
+    }
+
     return () => {
       unsubWarehouses();
       unsubUnits();
@@ -992,6 +1002,7 @@ function MainApp({
       unsubJobLabors();
       unsubJobOtherCosts();
       unsubDeliveryReceipts();
+      unsubStockAudits();
     };
   }, [user, profile]);
 
@@ -1078,10 +1089,10 @@ function MainApp({
   };
 
   return (
-    <div className="flex min-h-screen font-sans text-right" dir="rtl">
+    <div className="flex min-h-screen font-sans text-right print:block" dir="rtl">
       <aside className={`
         fixed inset-y-0 right-0 w-72 bg-white/80 backdrop-blur-3xl border-l border-white/40 flex flex-col shadow-[0_0_40px_rgba(0,0,0,0.04)] z-50 transition-transform duration-300 ease-in-out
-        md:relative md:translate-x-0 md:shadow-xl md:shadow-blue-500/5 md:z-20 print:hidden
+        md:relative md:translate-x-0 md:shadow-xl md:shadow-blue-500/5 md:z-20 no-print
         ${mobileMenuOpen ? 'translate-x-0' : 'translate-x-full'}
       `}>
         <div className="p-8 hidden md:block">
@@ -1139,6 +1150,7 @@ function MainApp({
                     <SubNavButton active={activeTab === 'itemCard'} onClick={() => handleNavClick('itemCard')} label="كارت الصنف" permission="inventory" profile={profile} />
                     <SubNavButton active={activeTab === 'issuances'} onClick={() => handleNavClick('issuances')} label="صرف الخامات" permission="inventory" profile={profile} />
                     <SubNavButton active={activeTab === 'returns'} onClick={() => handleNavClick('returns')} label="المرتجع" permission="inventory" profile={profile} />
+                    <SubNavButton active={activeTab === 'stockAudit'} onClick={() => handleNavClick('stockAudit')} label="جرد المخزن" permission="inventory" profile={profile} />
                     <SubNavButton active={activeTab === 'waste'} onClick={() => handleNavClick('waste')} label="الهالك" permission="inventory" profile={profile} />
                   </div>
                 </div>
@@ -1301,7 +1313,7 @@ function MainApp({
 
 
       {/* Main Content */}
-      <main className="flex-1 p-4 md:p-10 overflow-auto print:hidden">
+      <main className="flex-1 p-4 md:p-10 overflow-auto allow-print">
         {['employees', 'attendance', 'loans', 'payroll', 'hrTransactions', 'hrProduction'].includes(activeTab) && (
           <HRWorkflowGuide activeTab={activeTab} onTabChange={setActiveTab} />
         )}
@@ -1353,6 +1365,7 @@ function MainApp({
         {activeTab === 'deliveryReceipts' && <DeliveryReceipts receipts={deliveryReceipts} companyInfo={companySettings} />}
         {activeTab === 'purchases' && <Purchases items={items} suppliers={suppliers} purchases={purchases} />}
         {activeTab === 'issuances' && <Issuances items={items} issuances={issuances} costCenters={costCenters} />}
+        {activeTab === 'stockAudit' && <StockAuditView items={items} warehouses={warehouses} audits={stockAudits} />}
         {activeTab === 'returns' && <Returns items={items} suppliers={suppliers} costCenters={costCenters} />}
         {activeTab === 'waste' && <WastedItemsView items={items} wasteRecords={wasteRecords} />}
         {activeTab === 'bladeSharpening' && <BladeSharpeningView records={bladeSharpening} />}
@@ -3626,10 +3639,11 @@ function LoadingManifests({ manifests, companyInfo }: { manifests: LoadingManife
   );
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h2 className="text-2xl md:text-4xl font-black tracking-tight text-slate-900">حمولة العربية</h2>
+    <div className="allow-print">
+      <div className="space-y-8 no-print">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div>
+            <h2 className="text-2xl md:text-4xl font-black tracking-tight text-slate-900">حمولة العربية</h2>
           <p className="text-slate-500 mt-1 font-medium text-sm md:text-base">إدارة وطباعة كشوف تحميل السيارات</p>
         </div>
         <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
@@ -3689,6 +3703,7 @@ function LoadingManifests({ manifests, companyInfo }: { manifests: LoadingManife
           </Card>
         ))}
       </div>
+      </div> {/* no-print end */}
 
       {/* Confirm Delete Dialog */}
       <ConfirmDialog 
@@ -3832,10 +3847,10 @@ function LoadingManifests({ manifests, companyInfo }: { manifests: LoadingManife
 
       {/* Print Manifest Dialog */}
       {selectedManifest && (
-        <>
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto print:hidden">
+        <div className="allow-print">
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto no-print">
             <Card className="dribbble-card w-full max-w-4xl my-8 bg-white overflow-hidden">
-              <CardHeader className="border-b border-slate-100 flex flex-row justify-between items-center bg-slate-50/50">
+              <CardHeader className="border-b border-slate-100 flex flex-row justify-between items-center bg-slate-50/50 no-print">
                 <div className="text-right">
                   <CardTitle className="text-3xl font-black text-slate-900">كشف حمولة سيارة</CardTitle>
                   <CardDescription className="font-bold text-primary text-lg">{companyInfo.name}</CardDescription>
@@ -3921,7 +3936,7 @@ function LoadingManifests({ manifests, companyInfo }: { manifests: LoadingManife
             </Card>
           </div>
           <PrintManifest manifest={selectedManifest} companyInfo={companyInfo} />
-        </>
+        </div>
       )}
     </div>
   );
@@ -4045,10 +4060,11 @@ function DeliveryReceipts({ receipts, companyInfo }: { receipts: DeliveryReceipt
   );
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h2 className="text-2xl md:text-4xl font-black tracking-tight text-slate-900">محاضر الاستلام</h2>
+    <div className="allow-print">
+      <div className="space-y-8 no-print">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div>
+            <h2 className="text-2xl md:text-4xl font-black tracking-tight text-slate-900">محاضر الاستلام</h2>
           <p className="text-slate-500 mt-1 font-medium text-sm md:text-base">إدارة وطباعة تقارير استلام المنتجات</p>
         </div>
         <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
@@ -4104,19 +4120,22 @@ function DeliveryReceipts({ receipts, companyInfo }: { receipts: DeliveryReceipt
           </Card>
         ))}
       </div>
+      </div> {/* no-print end */}
 
       {/* Confirm Delete Dialog */}
-      <ConfirmDialog 
-        isOpen={!!showDeleteConfirm}
-        title="حذف المحضر"
-        message="هل أنت متأكد من حذف هذا المحضر؟ لا يمكن التراجع عن هذا الإجراء."
-        onConfirm={() => showDeleteConfirm && handleDelete(showDeleteConfirm)}
-        onCancel={() => setShowDeleteConfirm(null)}
-      />
+      <div className="no-print">
+        <ConfirmDialog 
+          isOpen={!!showDeleteConfirm}
+          title="حذف المحضر"
+          message="هل أنت متأكد من حذف هذا المحضر؟ لا يمكن التراجع عن هذا الإجراء."
+          onConfirm={() => showDeleteConfirm && handleDelete(showDeleteConfirm)}
+          onCancel={() => setShowDeleteConfirm(null)}
+        />
+      </div>
 
       {/* Add/Edit Dialog */}
       {showAdd && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto no-print">
           <Card className="dribbble-card w-full max-w-4xl max-h-[90vh] overflow-auto my-8">
             <CardHeader>
               <CardTitle className="font-black text-2xl">{editingId ? 'تعديل محضر استلام' : 'إضافة محضر استلام جديد'}</CardTitle>
@@ -4237,9 +4256,9 @@ function DeliveryReceipts({ receipts, companyInfo }: { receipts: DeliveryReceipt
       {/* Print Dialog */}
       {selectedReceipt && (
         <>
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto print:hidden">
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto no-print">
             <Card className="dribbble-card w-full max-w-4xl my-8 bg-white overflow-hidden">
-              <CardHeader className="border-b border-slate-100 flex flex-row justify-between items-center bg-slate-50/50">
+              <CardHeader className="border-b border-slate-100 flex flex-row justify-between items-center bg-slate-50/50 no-print">
                 <div className="text-right">
                   <CardTitle className="text-3xl font-black text-slate-900">محضر استلام منتج</CardTitle>
                   <CardDescription className="font-bold text-primary text-lg">{companyInfo.name}</CardDescription>
@@ -5173,6 +5192,327 @@ function Suppliers({ suppliers, purchases, items, supplierPayments }: { supplier
               </div>
             </CardContent>
           </Card>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StockAuditView({ items, warehouses, audits }: { items: Item[], warehouses: Warehouse[], audits: StockAudit[] }) {
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>('');
+  const [auditData, setAuditData] = useState<{[key: string]: number}>({});
+  const [auditDate, setAuditDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [notes, setNotes] = useState('');
+  const [isAuditing, setIsAuditing] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const warehouseItems = items.filter(i => i.warehouseId === selectedWarehouseId);
+  const filteredItems = warehouseItems.filter(i => i.name.toLowerCase().includes(searchTerm.toLowerCase()));
+
+  const startAudit = () => {
+    if (!selectedWarehouseId) {
+      alert('الرجاء اختيار المخزن أولاً');
+      return;
+    }
+    const initialData: {[key: string]: number} = {};
+    warehouseItems.forEach(item => {
+      initialData[item.id] = item.currentBalance;
+    });
+    setAuditData(initialData);
+    setIsAuditing(true);
+    setShowHistory(false);
+  };
+
+  const handleAuditChange = (itemId: string, value: string) => {
+    setAuditData(prev => ({
+      ...prev,
+      [itemId]: parseFloat(value) || 0
+    }));
+  };
+
+  const submitAudit = async () => {
+    try {
+      const audit: Omit<StockAudit, 'id'> = {
+        date: auditDate,
+        warehouseId: selectedWarehouseId,
+        auditItems: warehouseItems.map(item => ({
+          itemId: item.id,
+          itemName: item.name,
+          systemStock: item.currentBalance,
+          actualStock: auditData[item.id] ?? item.currentBalance,
+          difference: (auditData[item.id] ?? item.currentBalance) - item.currentBalance
+        })),
+        notes,
+        createdBy: auth.currentUser?.email || 'Unknown'
+      };
+
+      await addDoc(collection(db, 'stockAudits'), { ...audit, createdAt: serverTimestamp() });
+
+      // Update item stocks and create issuances for adjustments
+      for (const entry of audit.auditItems) {
+        if (entry.difference !== 0) {
+          const itemRef = doc(db, 'items', entry.itemId);
+          const item = items.find(i => i.id === entry.itemId);
+          if (item) {
+             const newBalance = entry.actualStock;
+             const update: Partial<Item> = {
+               currentBalance: newBalance
+             };
+             
+             if (entry.difference > 0) {
+               update.returned = (item.returned || 0) + entry.difference;
+             } else {
+               update.outward = (item.outward || 0) + Math.abs(entry.difference);
+             }
+             
+             await updateDoc(itemRef, update);
+
+             // Create an issuance record for the movement log
+             await addDoc(collection(db, 'issuances'), {
+                date: auditDate,
+                jobOrderNo: entry.difference > 0 ? 'RETURN' : 'AUDIT',
+                itemId: entry.itemId,
+                quantity: Math.abs(entry.difference),
+                unit: item.unit,
+                price: item.price,
+                total: Math.abs(entry.difference) * item.price,
+                costCenter: entry.difference > 0 ? `مرتجع من: زيادة جرد (${warehouses.find(w => w.id === selectedWarehouseId)?.name})` : `تسوية عجز جرد (${warehouses.find(w => w.id === selectedWarehouseId)?.name})`
+             });
+          }
+        }
+      }
+
+      alert('تم تسجيل الجرد بنجاح');
+      setIsAuditing(false);
+      setAuditData({});
+      setNotes('');
+    } catch (err) {
+      handleFirestoreError(err, 'write', 'stockAudits');
+    }
+  };
+
+  const [selectedAudit, setSelectedAudit] = useState<StockAudit | null>(null);
+
+  if (showHistory) {
+    return (
+      <div className="space-y-8 animate-in fade-in duration-500">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-3xl font-black text-slate-900">سجل الجرد</h2>
+            <p className="text-slate-500 font-bold">تاريخ عمليات الجرد السابقة</p>
+          </div>
+          <Button onClick={() => setShowHistory(false)} variant="outline" className="rounded-2xl border-slate-200">
+            <ArrowRight size={18} className="ml-2" />
+            العودة للجرد الحالي
+          </Button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {audits.slice().reverse().map(a => (
+            <Card key={a.id} className="dribbble-card group overflow-hidden border-none shadow-xl shadow-slate-200/40">
+              <CardHeader className="pb-4">
+                <div className="flex justify-between items-start">
+                  <Badge className="bg-blue-50 text-blue-600 border-none rounded-lg px-3 py-1 font-black text-[10px] uppercase tracking-widest">
+                    {warehouses.find(w => w.id === a.warehouseId)?.name}
+                  </Badge>
+                  <span className="text-xs font-bold text-slate-400">{format(new Date(a.date), 'dd/MM/yyyy')}</span>
+                </div>
+                <CardTitle className="mt-4 font-black text-slate-900">{a.notes || 'جرد دوري'}</CardTitle>
+                <CardDescription className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pt-1">
+                  المسؤول: {a.createdBy}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="p-4 bg-slate-50 rounded-2xl flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-500">عدد الأصناف</span>
+                  <span className="font-black text-primary">{a.auditItems.length}</span>
+                </div>
+                <Button onClick={() => setSelectedAudit(a)} variant="ghost" className="w-full mt-4 rounded-xl font-bold text-primary hover:bg-blue-50">
+                  عرض التفاصيل
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {selectedAudit && (
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-50 flex items-center justify-center p-4">
+            <Card className="w-full max-w-4xl bg-white rounded-[2.5rem] shadow-2xl p-8 border-0">
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h3 className="text-2xl font-black text-slate-900">تفاصيل الجرد: {format(new Date(selectedAudit.date), 'dd/MM/yyyy')}</h3>
+                  <p className="text-slate-500 font-bold">{warehouses.find(w => w.id === selectedAudit.warehouseId)?.name}</p>
+                </div>
+                <Button variant="ghost" size="icon" onClick={() => setSelectedAudit(null)} className="rounded-2xl hover:bg-slate-100">
+                  <X size={24} />
+                </Button>
+              </div>
+
+              <div className="max-h-[60vh] overflow-auto rounded-3xl border border-slate-100">
+                <Table>
+                  <TableHeader className="bg-slate-50">
+                    <TableRow>
+                      <TableHead className="font-black text-slate-900">الصنف</TableHead>
+                      <TableHead className="font-black text-slate-900 text-center">رصيد النظام</TableHead>
+                      <TableHead className="font-black text-slate-900 text-center">الرصيد الفعلي</TableHead>
+                      <TableHead className="font-black text-slate-900 text-center">الفارق</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {selectedAudit.auditItems.map((item, idx) => (
+                      <TableRow key={idx}>
+                        <TableCell className="font-bold text-slate-700">{item.itemName}</TableCell>
+                        <TableCell className="text-center font-bold text-slate-500">{item.systemStock}</TableCell>
+                        <TableCell className="text-center font-black text-slate-900">{item.actualStock}</TableCell>
+                        <TableCell className={`text-center font-black ${item.difference > 0 ? 'text-green-600' : item.difference < 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                          {item.difference > 0 ? `+${item.difference}` : item.difference}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              <div className="mt-8 flex justify-end">
+                <Button onClick={() => setSelectedAudit(null)} className="btn-primary rounded-2xl px-12 h-12 font-black">إغلاق</Button>
+              </div>
+            </Card>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8 animate-in fade-in duration-500">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+          <h2 className="text-3xl md:text-5xl font-black tracking-tighter text-slate-900 leading-none">جرد المخزن</h2>
+          <p className="text-slate-500 mt-2 font-bold text-lg">مطابقة الرصيد الفعلي مع رصيد النظام</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button onClick={() => setShowHistory(true)} variant="outline" className="h-10 md:h-12 px-6 rounded-xl md:rounded-2xl border-slate-200 font-bold">
+            <History size={18} className="ml-2" />
+            سجل الجرد
+          </Button>
+          {!isAuditing && (
+            <Button onClick={startAudit} className="btn-primary h-10 md:h-12 px-8 rounded-xl md:rounded-2xl font-black">
+              ابدأ عملية جرد جديدة
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {!isAuditing ? (
+        <Card className="dribbble-card border-none p-10 bg-white/50 backdrop-blur-xl">
+          <div className="max-w-2xl mx-auto space-y-10 text-center">
+            <div className="w-24 h-24 bg-primary/10 rounded-[2.5rem] flex items-center justify-center mx-auto text-primary animate-pulse">
+              <ClipboardCheck size={48} />
+            </div>
+            <div className="space-y-4">
+              <h3 className="text-2xl font-black text-slate-900">اختر المخزن لبدء الجرد</h3>
+              <p className="text-slate-500 font-medium">سيتم تحميل جميع الأصناف الموجودة في المخزن المختار لمقارنتها بالواقع</p>
+            </div>
+            
+            <div className="relative group">
+              <div className="absolute inset-0 bg-primary/5 rounded-3xl blur-xl group-hover:bg-primary/10 transition-all" />
+              <select 
+                value={selectedWarehouseId}
+                onChange={e => setSelectedWarehouseId(e.target.value)}
+                className="relative w-full h-16 rounded-[1.5rem] border-2 border-slate-100 bg-white px-8 font-black text-xl text-slate-700 shadow-xl shadow-slate-200/20 focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all outline-none appearance-none text-center"
+              >
+                <option value="">--- اختر المخزن من القائمة ---</option>
+                {warehouses.map(w => (
+                  <option key={w.id} value={w.id}>{w.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <Button onClick={startAudit} disabled={!selectedWarehouseId} className="w-full h-16 rounded-3xl bg-primary hover:bg-primary/90 text-white font-black text-lg shadow-2xl shadow-primary/30 disabled:opacity-50 disabled:grayscale transition-all hover:scale-[1.02] active:scale-[0.98]">
+              تأكيد الاختيار والبدء
+            </Button>
+          </div>
+        </Card>
+      ) : (
+        <div className="space-y-8 pb-20">
+          <Card className="dribbble-card border-none p-6 shadow-2xl shadow-slate-200/50">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-end">
+              <div className="space-y-2">
+                <label className="text-xs font-black text-slate-400 uppercase tracking-widest mr-1">تاريخ الجرد</label>
+                <Input type="date" value={auditDate} onChange={e => setAuditDate(e.target.value)} className="h-12 rounded-2xl border-slate-100 bg-slate-50 focus:ring-primary font-black text-slate-700" />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <label className="text-xs font-black text-slate-400 uppercase tracking-widest mr-1">ملاحظات العملية</label>
+                <Input value={notes} onChange={e => setNotes(e.target.value)} placeholder="مثال: جرد شهر أكتوبر - مخزن النزهة" className="h-12 rounded-2xl border-slate-100 bg-slate-50 focus:ring-primary font-bold text-slate-700" />
+              </div>
+            </div>
+          </Card>
+
+          <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
+             <div className="relative w-full md:w-96">
+                <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <Input 
+                  placeholder="بحث سريع عن صنف..." 
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  className="h-12 pr-12 rounded-2xl border-slate-200 shadow-sm font-bold"
+                />
+             </div>
+             <Badge className="bg-slate-900 text-white px-4 py-2 rounded-xl border-none font-black">
+                {warehouseItems.length} صنف قيد الجرد
+             </Badge>
+          </div>
+
+          <Card className="dribbble-card border-none overflow-hidden shadow-2xl shadow-slate-200/50">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader className="bg-slate-900">
+                  <TableRow className="hover:bg-slate-900 border-none">
+                    <TableHead className="font-black text-white py-5">اسم الصنف</TableHead>
+                    <TableHead className="font-black text-white text-center">الوحدة</TableHead>
+                    <TableHead className="font-black text-white text-center">رصيد النظام</TableHead>
+                    <TableHead className="font-black text-white text-center w-40">الرصيد الفعلي</TableHead>
+                    <TableHead className="font-black text-white text-center">الفارق</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredItems.map(item => {
+                    const actualValue = auditData[item.id] ?? item.currentBalance;
+                    const diff = actualValue - item.currentBalance;
+                    return (
+                      <TableRow key={item.id} className="hover:bg-slate-50 transition-colors border-b border-slate-100">
+                        <TableCell className="font-black text-slate-800">{item.name}</TableCell>
+                        <TableCell className="text-center font-bold text-slate-400">{item.unit}</TableCell>
+                        <TableCell className="text-center font-black text-blue-600 bg-blue-50/30">
+                          {item.currentBalance}
+                        </TableCell>
+                        <TableCell className="p-2">
+                           <Input 
+                             type="number"
+                             value={actualValue}
+                             onChange={e => handleAuditChange(item.id, e.target.value)}
+                             className="h-11 rounded-xl text-center font-black border-slate-200 bg-white focus:ring-4 focus:ring-primary/10 transition-all"
+                           />
+                        </TableCell>
+                        <TableCell className={`text-center font-black ${diff > 0 ? 'text-green-600' : diff < 0 ? 'text-red-600' : 'text-slate-300'}`}>
+                           {diff > 0 ? `+${diff}` : diff}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          </Card>
+
+          <div className="flex gap-4 justify-end">
+            <Button variant="ghost" onClick={() => setIsAuditing(false)} className="h-14 px-10 rounded-2xl font-bold text-slate-500 hover:bg-slate-100">إلغاء العملية</Button>
+            <Button onClick={submitAudit} className="h-14 px-16 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-lg shadow-xl shadow-emerald-600/20 transition-all hover:scale-[1.02] active:scale-[0.98]">
+              <CheckCircle2 size={24} className="ml-2" />
+              اعتماد الجرد وتحديث المخزون
+            </Button>
+          </div>
         </div>
       )}
     </div>
