@@ -702,7 +702,8 @@ function PayrollMasterReport({ payrolls, employees, hrTransactions, attendance, 
                 <TableHead className="font-black text-slate-900 text-right">الحالة</TableHead>
                 <TableHead className="font-black text-slate-900 text-right">الأساسي</TableHead>
                 <TableHead className="font-black text-slate-900 text-right">إنتاج</TableHead>
-                <TableHead className="font-black text-slate-900 text-right">علاوات</TableHead>
+                <TableHead className="font-black text-slate-900 text-right">مكافآت</TableHead>
+                <TableHead className="font-black text-slate-900 text-right">إضافي</TableHead>
                 <TableHead className="font-black text-slate-900 text-right">استقطاعات</TableHead>
                 <TableHead className="font-black text-slate-900 text-right">الصافي</TableHead>
               </TableRow>
@@ -733,7 +734,10 @@ function PayrollMasterReport({ payrolls, employees, hrTransactions, attendance, 
                       {p.totalProduction > 0 ? `+${p.totalProduction.toLocaleString()}` : '0'}
                     </TableCell>
                     <TableCell className="font-black text-green-600">
-                      +{( (p.totalBonuses || 0) + (p.totalOvertime || 0) ).toLocaleString()}
+                      +{ (p.totalBonuses || 0).toLocaleString() }
+                    </TableCell>
+                    <TableCell className="font-black text-blue-600">
+                      +{ (p.totalOvertime || 0).toLocaleString() }
                     </TableCell>
                     <TableCell className="font-black text-red-600">
                       -{( (p.totalDeductions || 0) + (p.totalLoans || 0) ).toLocaleString()}
@@ -8960,94 +8964,117 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls, pro
                   <p className="text-sm">قم بإصدار رواتب أسبوع جديد أولاً</p>
                 </div>
               ) : (
-                processedPayrolls.map((p, idx) => {
-                  const emp = employees.find(e => e.id === p.employeeId);
-                  return (
-                    <div key={p.id} className="bg-white p-8 rounded-3xl border-2 border-dashed border-slate-200 relative print:border-solid print:border-slate-300 print:rounded-none print:shadow-none print:mb-0 print:p-4 print:h-[16.66vh] print:border-collapse print:overflow-hidden">
-                      <div className="flex justify-between items-start mb-2 print:mb-1">
-                        <div className="flex items-center gap-2 print:gap-1">
-                          <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-lg print:w-6 print:h-6 print:rounded-md">
-                            <Package className="text-white" size={20} />
-                          </div>
+                    processedPayrolls.map((p, idx) => {
+                      const emp = employees.find(e => e.id === p.employeeId);
+                      const bonusDetails = transactions.filter(t => 
+                        t.employeeId === p.employeeId && 
+                        t.date >= p.startDate && 
+                        t.date <= p.endDate && 
+                        (t.type === 'مكافأة' || t.type === 'بدل' || t.type === 'إضافي') &&
+                        t.amount > 0
+                      );
+
+                      return (
+                        <div key={p.id} className="bg-white p-8 rounded-3xl border-2 border-dashed border-slate-200 relative print:border-solid print:border-slate-300 print:rounded-none print:shadow-none print:mb-0 print:p-4 print:h-[16.66vh] print:border-collapse print:overflow-hidden flex flex-col justify-between">
                           <div>
-                            <h4 className="font-black text-lg text-slate-900 print:text-[10px] print:leading-tight">{companyInfo.name}</h4>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest print:text-[6px] print:leading-tight">قسيمة صرف راتب أسبوعي</p>
-                          </div>
-                        </div>
-                        <div className="text-left bg-slate-50 p-2 rounded-xl border border-slate-100 print:p-1 print:rounded-md print:bg-transparent print:border-none">
-                          <button 
-                            onClick={() => handleWhatsApp(p)}
-                            className="absolute top-4 left-4 p-2 bg-green-50 text-green-600 rounded-full hover:bg-green-100 print:hidden"
-                            title="إرسال عبر واتساب"
-                          >
-                            <MessageSquare size={16} />
-                          </button>
-                          <p className="font-black text-slate-900 text-sm print:text-[8px]">#W{p.weekNumber}-{p.id.slice(-4)}</p>
-                          <p className="font-bold text-slate-600 text-[10px] print:text-[7px]">أسبوع {p.weekNumber} / {p.year}</p>
-                        </div>
-                      </div>
+                            <div className="flex justify-between items-start mb-2 print:mb-1">
+                              <div className="flex items-center gap-2 print:gap-1">
+                                <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-lg print:w-6 print:h-6 print:rounded-md">
+                                  <Package className="text-white" size={20} />
+                                </div>
+                                <div>
+                                  <h4 className="font-black text-lg text-slate-900 print:text-[10px] print:leading-tight">{companyInfo.name}</h4>
+                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest print:text-[6px] print:leading-tight">قسيمة صرف راتب أسبوعي</p>
+                                </div>
+                              </div>
+                              <div className="text-left bg-slate-50 p-2 rounded-xl border border-slate-100 print:p-1 print:rounded-md print:bg-transparent print:border-none">
+                                <button 
+                                  onClick={() => handleWhatsApp(p)}
+                                  className="absolute top-4 left-4 p-2 bg-green-50 text-green-600 rounded-full hover:bg-green-100 print:hidden"
+                                  title="إرسال عبر واتساب"
+                                >
+                                  <MessageSquare size={16} />
+                                </button>
+                                <p className="font-black text-slate-900 text-sm print:text-[8px]">#W{p.weekNumber}-{p.id.slice(-4)}</p>
+                                <p className="font-bold text-slate-600 text-[10px] print:text-[7px]">أسبوع {p.weekNumber} / {p.year}</p>
+                              </div>
+                            </div>
 
-                      <div className="grid grid-cols-2 gap-4 mb-4 print:gap-2 print:mb-1">
-                        <div className="space-y-2 print:space-y-0.5">
-                          <div className="flex justify-between border-b border-slate-100 pb-1 print:pb-0">
-                            <span className="text-slate-500 font-bold text-xs print:text-[7px]">الاسم:</span>
-                            <span className="font-black text-slate-900 text-sm print:text-[8px]">{emp?.name}</span>
+                            <div className="grid grid-cols-2 gap-4 mb-4 print:gap-2 print:mb-1">
+                              <div className="space-y-2 print:space-y-0.5">
+                                <div className="flex justify-between border-b border-slate-100 pb-1 print:pb-0">
+                                  <span className="text-slate-500 font-bold text-xs print:text-[7px]">الاسم:</span>
+                                  <span className="font-black text-slate-900 text-sm print:text-[8px]">{emp?.name}</span>
+                                </div>
+                                <div className="flex justify-between border-b border-slate-100 pb-1 print:pb-0">
+                                  <span className="text-slate-500 font-bold text-xs print:text-[7px]">المهنة:</span>
+                                  <span className="font-black text-slate-900 text-xs print:text-[7px]">{emp?.position}</span>
+                                </div>
+                                <div className="flex justify-between border-b border-slate-100 pb-1 print:pb-0">
+                                  <span className="text-slate-500 font-bold text-xs print:text-[7px]">أيام العمل:</span>
+                                  <span className="font-black text-blue-600 text-xs print:text-[7px]">{(p.daysWorked || 0).toFixed(2)}</span>
+                                </div>
+                                {bonusDetails.length > 0 && (
+                                  <div className="pt-1 print:hidden">
+                                    <p className="text-[10px] font-black text-slate-400 mb-1">تفاصيل الإضافي والمكافآت:</p>
+                                    <div className="space-y-1">
+                                      {bonusDetails.map((t, i) => (
+                                        <p key={i} className="text-[9px] font-bold text-slate-600 bg-slate-50 px-2 py-0.5 rounded-lg border border-slate-100 flex justify-between">
+                                          <span>{t.type}: {t.description || 'بدون وصف'}</span>
+                                          <span className="text-primary">{t.amount.toLocaleString()}</span>
+                                        </p>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                              
+                              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-inner space-y-1 print:p-1 print:rounded-md print:bg-transparent print:border-none print:shadow-none">
+                                <div className="flex justify-between text-[10px] print:text-[6px]">
+                                  <span className="text-slate-500 font-bold">إجمالي:</span>
+                                  <span className="font-black text-slate-900">{p.baseSalary.toLocaleString()}</span>
+                                </div>
+                                <div className="flex justify-between text-[10px] text-blue-600 print:text-[6px]">
+                                  <span className="font-bold">إضافي (+):</span>
+                                  <span className="font-black">{p.totalOvertime.toLocaleString()}</span>
+                                </div>
+                                <div className="flex justify-between text-[10px] text-green-600 print:text-[6px]">
+                                  <span className="font-bold">مكافآت (+):</span>
+                                  <span className="font-black">{p.totalBonuses.toLocaleString()}</span>
+                                </div>
+                                <div className="flex justify-between text-[10px] text-red-600 print:text-[6px]">
+                                  <span className="font-bold">خصوم (-):</span>
+                                  <span className="font-black">{p.totalDeductions.toLocaleString()}</span>
+                                </div>
+                                <div className="flex justify-between text-[10px] text-orange-600 print:text-[6px]">
+                                  <span className="font-bold">سلف (-):</span>
+                                  <span className="font-black">{p.totalLoans.toLocaleString()}</span>
+                                </div>
+                                <div className="pt-1 border-t border-slate-300 flex justify-between items-center print:pt-0.5">
+                                  <span className="font-black text-slate-900 text-xs print:text-[7px]">الصافي:</span>
+                                  <span className="text-lg font-black text-primary print:text-[10px]">{p.netSalary.toLocaleString()} ج.م</span>
+                                </div>
+                              </div>
+                            </div>
                           </div>
-                          <div className="flex justify-between border-b border-slate-100 pb-1 print:pb-0">
-                            <span className="text-slate-500 font-bold text-xs print:text-[7px]">المهنة:</span>
-                            <span className="font-black text-slate-900 text-xs print:text-[7px]">{emp?.position}</span>
-                          </div>
-                          <div className="flex justify-between border-b border-slate-100 pb-1 print:pb-0">
-                            <span className="text-slate-500 font-bold text-xs print:text-[7px]">اليومية:</span>
-                            <span className="font-black text-slate-900 text-xs print:text-[7px]">{p.dailyRate.toLocaleString()}</span>
-                          </div>
-                          <div className="flex justify-between border-b border-slate-100 pb-1 print:pb-0">
-                            <span className="text-slate-500 font-bold text-xs print:text-[7px]">أيام العمل:</span>
-                            <span className="font-black text-blue-600 text-xs print:text-[7px]">{(p.daysWorked || 0).toFixed(2)}</span>
-                          </div>
-                        </div>
-                        
-                        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-inner space-y-1 print:p-1 print:rounded-md print:bg-transparent print:border-none print:shadow-none">
-                          <div className="flex justify-between text-[10px] print:text-[6px]">
-                            <span className="text-slate-500 font-bold">إجمالي:</span>
-                            <span className="font-black text-slate-900">{p.baseSalary.toLocaleString()}</span>
-                          </div>
-                          <div className="flex justify-between text-[10px] text-green-600 print:text-[6px]">
-                            <span className="font-bold">إضافي (+):</span>
-                            <span className="font-black">{p.totalOvertime.toLocaleString()}</span>
-                          </div>
-                          <div className="flex justify-between text-[10px] text-red-600 print:text-[6px]">
-                            <span className="font-bold">خصم (-):</span>
-                            <span className="font-black">{p.totalDeductions.toLocaleString()}</span>
-                          </div>
-                          <div className="flex justify-between text-[10px] text-orange-600 print:text-[6px]">
-                            <span className="font-bold">سلف (-):</span>
-                            <span className="font-black">{p.totalLoans.toLocaleString()}</span>
-                          </div>
-                          <div className="pt-1 border-t border-slate-300 flex justify-between items-center print:pt-0.5">
-                            <span className="font-black text-slate-900 text-xs print:text-[7px]">الصافي:</span>
-                            <span className="text-lg font-black text-primary print:text-[10px]">{p.netSalary.toLocaleString()} ج.م</span>
-                          </div>
-                        </div>
-                      </div>
 
-                      <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100 print:pt-1 print:gap-1">
-                        <div className="text-center">
-                          <p className="text-[8px] font-black text-slate-900 print:text-[5px]">توقيع الموظف</p>
-                          <div className="border-b border-slate-200 w-full mx-auto h-4 print:h-2"></div>
+                          <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100 print:pt-1 print:gap-1">
+                            <div className="text-center">
+                              <p className="text-[8px] font-black text-slate-900 print:text-[5px]">توقيع الموظف</p>
+                              <div className="border-b border-slate-200 w-full mx-auto h-4 print:h-2"></div>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-[8px] font-black text-slate-900 print:text-[5px]">المحاسب</p>
+                              <div className="border-b border-slate-200 w-full mx-auto h-4 print:h-2"></div>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-[8px] font-black text-slate-900 print:text-[5px]">الاعتماد</p>
+                              <div className="border-b border-slate-200 w-full mx-auto h-4 print:h-2"></div>
+                            </div>
+                          </div>
                         </div>
-                        <div className="text-center">
-                          <p className="text-[8px] font-black text-slate-900 print:text-[5px]">المحاسب</p>
-                          <div className="border-b border-slate-200 w-full mx-auto h-4 print:h-2"></div>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-[8px] font-black text-slate-900 print:text-[5px]">الاعتماد</p>
-                          <div className="border-b border-slate-200 w-full mx-auto h-4 print:h-2"></div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
+                      );
+                    })
               )}
             </div>
           </div>
@@ -9285,6 +9312,8 @@ function ArchiveView({ employees, payrolls }: { employees: Employee[], payrolls:
               <TableHead className="text-right font-black text-slate-900 py-5">الموظف والمهنة</TableHead>
               <TableHead className="text-right font-black text-slate-900">تاريخ الأرشفة</TableHead>
               <TableHead className="text-right font-black text-slate-900">الفترة الأسبوعية</TableHead>
+              <TableHead className="text-right font-black text-slate-900">مكافآت</TableHead>
+              <TableHead className="text-right font-black text-slate-900">إضافي</TableHead>
               <TableHead className="text-right font-black text-slate-900">الصافي</TableHead>
               <TableHead className="text-right font-black text-slate-900">الإجراءات</TableHead>
             </TableRow>
@@ -9304,6 +9333,8 @@ function ArchiveView({ employees, payrolls }: { employees: Employee[], payrolls:
                   <TableCell className="font-bold text-slate-600">
                     {format(new Date(p.startDate), 'dd/MM/yyyy')} إلى {format(new Date(p.endDate), 'dd/MM/yyyy')}
                   </TableCell>
+                  <TableCell className="font-bold text-green-600">+{p.totalBonuses.toLocaleString()}</TableCell>
+                  <TableCell className="font-bold text-blue-600">+{p.totalOvertime.toLocaleString()}</TableCell>
                   <TableCell className="font-black text-primary">{p.netSalary.toLocaleString()} ج.م</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
