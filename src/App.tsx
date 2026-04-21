@@ -872,7 +872,8 @@ function MainApp({
         inward: 0,
         outward: 0,
         returned: 0,
-        currentBalance: itemForm.openingBalance
+        currentBalance: itemForm.openingBalance,
+        totalValue: itemForm.openingBalance * itemForm.price
       });
       setShowItemAdd(false);
       setItemForm({
@@ -971,7 +972,12 @@ function MainApp({
     if (!editingItem) return;
     try {
       const { id, ...data } = editingItem;
-      await updateDoc(doc(db, 'items', id), data);
+      // Sync totalValue if price or balance was manually edited
+      const updatedData = {
+        ...data,
+        totalValue: data.currentBalance * data.price
+      };
+      await updateDoc(doc(db, 'items', id), updatedData);
       setEditingItem(null);
     } catch (err) { handleFirestoreError(err, 'write', 'items'); }
   };
@@ -2829,13 +2835,13 @@ function Inventory({
       'اسم الصنف': i.name,
       'المخزن': warehouses.find(w => w.id === i.warehouseId)?.name,
       'الوحدة': i.unit,
-      'سعر الوحدة': i.price,
+      'متوسط السعر': i.price,
       'رصيد أول': i.openingBalance,
       'الوارد': i.inward,
       'المنصرف': i.outward,
       'المرتجع': i.returned,
       'الرصيد الحالي': i.currentBalance,
-      'إجمالي القيمة': i.currentBalance * i.price,
+      'إجمالي القيمة': i.totalValue || (i.currentBalance * i.price),
       'حد الأمان': i.safetyLimit
     }));
     const ws = XLSX.utils.json_to_sheet(data);
@@ -2913,7 +2919,7 @@ function Inventory({
             <div>
               <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 mb-1">إجمالي قيمة المخزون</p>
               <p className="text-3xl font-black">
-                {filtered.reduce((acc, item) => acc + (item.currentBalance * item.price), 0).toLocaleString()}
+                {filtered.reduce((acc, item) => acc + (item.totalValue || (item.currentBalance * item.price)), 0).toLocaleString()}
                 <span className="text-xs font-medium mr-2 opacity-80">ج.م</span>
               </p>
             </div>
@@ -3023,7 +3029,7 @@ function Inventory({
                       </p>
                     </div>
                     <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
-                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">سعر الوحدة</p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">متوسط السعر</p>
                       <p className="text-lg font-black text-primary">
                         {item.price.toLocaleString()} <span className="text-[10px] text-slate-400">ج.م</span>
                       </p>
@@ -3031,10 +3037,10 @@ function Inventory({
                   </div>
 
                   <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100/50">
-                    <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-1">إجمالي القيمة المادية</p>
+                    <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-1">إجمالي القيمة المادية (م.ط)</p>
                     <div className="flex items-baseline justify-between">
                       <p className="text-xl font-black text-emerald-700">
-                        {(item.currentBalance * item.price).toLocaleString()}
+                        {(item.totalValue || (item.currentBalance * item.price)).toLocaleString()}
                       </p>
                       <span className="text-[10px] font-bold text-emerald-600">جنيهاً مصرياً</span>
                     </div>
@@ -3084,7 +3090,7 @@ function Inventory({
                   <TableHead className="font-black text-slate-900">الوحدة</TableHead>
                   <TableHead className="font-black text-slate-900 text-center">الرصيد</TableHead>
                   <TableHead className="font-black text-slate-900 text-center">الهالك</TableHead>
-                  <TableHead className="font-black text-slate-900 text-center">سعر الوحدة</TableHead>
+                  <TableHead className="font-black text-slate-900 text-center">متوسط السعر</TableHead>
                   <TableHead className="font-black text-slate-900 text-center">إجمالي القيمة</TableHead>
                   <TableHead className="font-black text-slate-900 text-center print:hidden">الإجراءات</TableHead>
                 </TableRow>
@@ -3115,7 +3121,7 @@ function Inventory({
                     </TableCell>
                     <TableCell className="text-center">
                       <span className="font-black text-emerald-600">
-                        {(item.currentBalance * item.price).toLocaleString()}
+                        {(item.totalValue || (item.currentBalance * item.price)).toLocaleString()}
                       </span>
                     </TableCell>
                     <TableCell className="text-center print:hidden">
@@ -3140,7 +3146,7 @@ function Inventory({
                   </TableCell>
                   <TableCell className="text-center">---</TableCell>
                   <TableCell className="text-center text-emerald-700">
-                    {filtered.reduce((acc, i) => acc + (i.currentBalance * i.price), 0).toLocaleString()}
+                    {filtered.reduce((acc, i) => acc + (i.totalValue || (i.currentBalance * i.price)), 0).toLocaleString()}
                   </TableCell>
                   <TableCell className="print:hidden"></TableCell>
                 </TableRow>
@@ -5148,9 +5154,17 @@ function Purchases({ items, suppliers, purchases }: { items: Item[], suppliers: 
       });
 
       // Update Item Stock
+      const currentTotalValue = (item?.totalValue || (item ? item.currentBalance * item.price : 0));
+      const purchaseTotal = formData.quantity * formData.unitPrice;
+      const newTotalValue = currentTotalValue + purchaseTotal;
+      const newQuantity = (item?.currentBalance || 0) + formData.quantity;
+      const newAveragePrice = newQuantity > 0 ? newTotalValue / newQuantity : formData.unitPrice;
+
       await updateDoc(doc(db, 'items', formData.itemId), {
         inward: increment(formData.quantity),
-        currentBalance: increment(formData.quantity)
+        currentBalance: increment(formData.quantity),
+        totalValue: newTotalValue,
+        price: newAveragePrice
       });
 
       // Update Supplier Balance
@@ -5487,9 +5501,13 @@ function Issuances({ items, issuances, costCenters }: { items: Item[], issuances
         });
 
         // Update Item Stock
+        const currentAveragePrice = item.price || 0;
+        const issuanceValue = selectedItem.quantity * currentAveragePrice;
+        
         await updateDoc(doc(db, 'items', selectedItem.itemId), {
           outward: increment(selectedItem.quantity),
-          currentBalance: increment(-selectedItem.quantity)
+          currentBalance: increment(-selectedItem.quantity),
+          totalValue: increment(-issuanceValue)
         });
       }
 
@@ -6050,6 +6068,9 @@ function StockAuditView({ items, warehouses, audits }: { items: Item[], warehous
                update.outward = (item.outward || 0) + Math.abs(entry.difference);
              }
              
+             // Update total value based on average price
+             update.totalValue = entry.actualStock * (item.price || 0);
+             
              await updateDoc(itemRef, update);
 
              // Create an issuance record for the movement log
@@ -6330,20 +6351,24 @@ function Returns({ items, suppliers, costCenters }: { items: Item[], suppliers: 
 
       if (returnType === 'cost_center') {
         // Return from Cost Center to Inventory
+        const currentAveragePrice = item.price || 0;
         await updateDoc(doc(db, 'items', formData.itemId), {
           returned: increment(formData.quantity),
-          currentBalance: increment(formData.quantity)
+          currentBalance: increment(formData.quantity),
+          totalValue: increment(formData.quantity * currentAveragePrice)
         });
       } else {
         // Return from Inventory to Supplier
         // 1. Update Inventory
+        const currentAveragePrice = item.price || 0;
         await updateDoc(doc(db, 'items', formData.itemId), {
           outward: increment(formData.quantity),
-          currentBalance: increment(-formData.quantity)
+          currentBalance: increment(-formData.quantity),
+          totalValue: increment(-formData.quantity * currentAveragePrice)
         });
 
         // 2. Update Supplier Balance (Reduce debt)
-        const refundValue = formData.quantity * item.price;
+        const refundValue = formData.quantity * currentAveragePrice;
         await updateDoc(doc(db, 'suppliers', formData.supplierId), {
           totalPurchases: increment(-refundValue),
           balance: increment(-refundValue)
@@ -6513,9 +6538,13 @@ function WastedItemsView({ items, wasteRecords }: { items: Item[], wasteRecords:
       });
 
       // 2. Update Item Stock
+      const currentAveragePrice = item.price || 0;
+      const wasteValue = formData.quantity * currentAveragePrice;
+      
       await updateDoc(doc(db, 'items', formData.itemId), {
         wasted: increment(formData.quantity),
-        currentBalance: increment(-formData.quantity)
+        currentBalance: increment(-formData.quantity),
+        totalValue: increment(-wasteValue)
       });
 
       setShowAdd(false);

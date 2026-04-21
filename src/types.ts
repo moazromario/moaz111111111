@@ -11,6 +11,7 @@ export interface Item {
   returned: number;
   wasted: number;
   currentBalance: number;
+  totalValue: number;
   safetyLimit: number;
 }
 
