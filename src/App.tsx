@@ -824,6 +824,222 @@ function MainApp({
   const [hrMenuOpen, setHrMenuOpen] = useState(false);
   const [reportsMenuOpen, setReportsMenuOpen] = useState(false);
 
+  const [showItemAdd, setShowItemAdd] = useState(false);
+  const [showSupplierAdd, setShowSupplierAdd] = useState(false);
+  const [showWarehouseAdd, setShowWarehouseAdd] = useState(false);
+  const [showUnitAdd, setShowUnitAdd] = useState(false);
+  const [showCostCenterAdd, setShowCostCenterAdd] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [showDeleteConfirmBase, setShowDeleteConfirmBase] = useState<{ collection: string, id: string } | null>(null);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+
+  const [editingWarehouse, setEditingWarehouse] = useState<Warehouse | null>(null);
+  const [editingUnit, setEditingUnit] = useState<Unit | null>(null);
+  const [editingCostCenter, setEditingCostCenter] = useState<CostCenter | null>(null);
+  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
+  const [editingItem, setEditingItem] = useState<Item | null>(null);
+
+  const [itemForm, setItemForm] = useState({
+    name: '',
+    unit: '',
+    price: 0,
+    department: '',
+    warehouseId: '',
+    openingBalance: 0,
+    safetyLimit: 5
+  });
+
+  const [supplierForm, setSupplierForm] = useState({ name: '' });
+  const [warehouseForm, setWarehouseForm] = useState({ name: '' });
+  const [unitForm, setUnitForm] = useState({ name: '' });
+  const [costCenterForm, setCostCenterForm] = useState({ name: '' });
+
+  useEffect(() => {
+    if (units.length > 0 && !itemForm.unit) {
+      setItemForm(prev => ({ ...prev, unit: units[0].name }));
+    }
+    if (costCenters.length > 0 && !itemForm.department) {
+      setItemForm(prev => ({ ...prev, department: costCenters[0].name }));
+    }
+  }, [units, costCenters]);
+
+  const handleAddItem = async () => {
+    if (!itemForm.name || !itemForm.warehouseId || !itemForm.unit) return;
+    try {
+      await addDoc(collection(db, 'items'), {
+        ...itemForm,
+        inward: 0,
+        outward: 0,
+        returned: 0,
+        currentBalance: itemForm.openingBalance
+      });
+      setShowItemAdd(false);
+      setItemForm({
+        name: '',
+        unit: units[0]?.name || '',
+        price: 0,
+        department: costCenters[0]?.name || '',
+        warehouseId: '',
+        openingBalance: 0,
+        safetyLimit: 5
+      });
+    } catch (err) { handleFirestoreError(err, 'write', 'items'); }
+  };
+
+  const handleAddSupplier = async () => {
+    if (!supplierForm.name) return;
+    try {
+      await addDoc(collection(db, 'suppliers'), {
+        ...supplierForm,
+        totalPurchases: 0,
+        totalPayments: 0,
+        balance: 0
+      });
+      setShowSupplierAdd(false);
+      setSupplierForm({ name: '' });
+    } catch (err) { handleFirestoreError(err, 'write', 'suppliers'); }
+  };
+
+  const handleAddWarehouse = async () => {
+    if (!warehouseForm.name) return;
+    try {
+      await addDoc(collection(db, 'warehouses'), { ...warehouseForm });
+      setShowWarehouseAdd(false);
+      setWarehouseForm({ name: '' });
+    } catch (err) { handleFirestoreError(err, 'write', 'warehouses'); }
+  };
+
+  const handleAddUnit = async () => {
+    if (!unitForm.name) return;
+    try {
+      await addDoc(collection(db, 'units'), { ...unitForm });
+      setShowUnitAdd(false);
+      setUnitForm({ name: '' });
+    } catch (err) { handleFirestoreError(err, 'write', 'units'); }
+  };
+
+  const handleAddCostCenter = async () => {
+    if (!costCenterForm.name) return;
+    try {
+      await addDoc(collection(db, 'costCenters'), { ...costCenterForm });
+      setShowCostCenterAdd(false);
+      setCostCenterForm({ name: '' });
+    } catch (err) { handleFirestoreError(err, 'write', 'costCenters'); }
+  };
+
+  const handleDeleteEntity = async () => {
+    if (!showDeleteConfirmBase) return;
+    try {
+      await deleteDoc(doc(db, showDeleteConfirmBase.collection, showDeleteConfirmBase.id));
+      setShowDeleteConfirmBase(null);
+    } catch (err) { handleFirestoreError(err, 'delete', showDeleteConfirmBase.collection); }
+  };
+
+  const handleResetAllData = async () => {
+    setIsResetting(true);
+    const collectionsToClear = [
+      'purchases', 'issuances', 'productionJobs', 'loadingManifests', 
+      'waste', 'bladeSharpening', 'plateSharpening', 'machineMaintenance',
+      'attendance', 'hrTransactions', 'loans', 'payrolls', 'productionRecords',
+      'supplierPayments', 'deliveryReceipts', 'jobLabors', 'jobOtherCosts'
+    ];
+    try {
+      const { getDocs, query, collection, writeBatch } = await import('firebase/firestore');
+      for (const colName of collectionsToClear) {
+        const querySnapshot = await getDocs(query(collection(db, colName)));
+        const batch = writeBatch(db);
+        querySnapshot.forEach((doc) => { batch.delete(doc.ref); });
+        await batch.commit();
+      }
+      const itemsSnapshot = await getDocs(query(collection(db, 'items')));
+      const itemBatch = writeBatch(db);
+      itemsSnapshot.forEach((itemDoc) => {
+        const itemData = itemDoc.data() as Item;
+        itemBatch.update(itemDoc.ref, {
+          inward: 0, outward: 0, returned: 0, wasted: 0,
+          currentBalance: itemData.openingBalance
+        });
+      });
+      await itemBatch.commit();
+      setShowResetConfirm(false);
+      alert('تم تصفير كافة بيانات العمليات بنجاح، مع الاحتفاظ ببيانات الموظفين والأصناف والموردين');
+    } catch (err) { handleFirestoreError(err, 'delete', 'all'); } finally { setIsResetting(false); }
+  };
+
+  const handleUpdateItem = async () => {
+    if (!editingItem) return;
+    try {
+      const { id, ...data } = editingItem;
+      await updateDoc(doc(db, 'items', id), data);
+      setEditingItem(null);
+    } catch (err) { handleFirestoreError(err, 'write', 'items'); }
+  };
+
+  const handleUpdateSupplier = async () => {
+    if (!editingSupplier) return;
+    try {
+      await updateDoc(doc(db, 'suppliers', editingSupplier.id), { name: editingSupplier.name });
+      setEditingSupplier(null);
+    } catch (err) { handleFirestoreError(err, 'write', 'suppliers'); }
+  };
+
+  const handleUpdateWarehouse = async () => {
+    if (!editingWarehouse) return;
+    try {
+      await updateDoc(doc(db, 'warehouses', editingWarehouse.id), { name: editingWarehouse.name });
+      setEditingWarehouse(null);
+    } catch (err) { handleFirestoreError(err, 'write', 'warehouses'); }
+  };
+
+  const handleUpdateUnit = async () => {
+    if (!editingUnit) return;
+    try {
+      await updateDoc(doc(db, 'units', editingUnit.id), { name: editingUnit.name });
+      setEditingUnit(null);
+    } catch (err) { handleFirestoreError(err, 'write', 'units'); }
+  };
+
+  const handleUpdateCostCenter = async () => {
+    if (!editingCostCenter) return;
+    try {
+      await updateDoc(doc(db, 'costCenters', editingCostCenter.id), { name: editingCostCenter.name });
+      setEditingCostCenter(null);
+    } catch (err) { handleFirestoreError(err, 'write', 'costCenters'); }
+  };
+
+  const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsImporting(true);
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = XLSX.utils.sheet_to_json(ws) as any[];
+        for (const row of data) {
+          const warehouse = warehouses.find(w => w.name === row['المخزن']);
+          if (row['الاسم'] && warehouse) {
+            await addDoc(collection(db, 'items'), {
+              name: row['الاسم'],
+              unit: row['الوحدة'] || 'قطعة',
+              price: Number(row['السعر']) || 0,
+              warehouseId: warehouse.id,
+              openingBalance: Number(row['رصيد أول']) || 0,
+              safetyLimit: Number(row['حد الأمان']) || 5,
+              inward: 0, outward: 0, returned: 0, currentBalance: Number(row['رصيد أول']) || 0,
+              department: row['القسم'] || 'عام'
+            });
+          }
+        }
+      } catch (err) { console.error(err); } finally { setIsImporting(false); }
+    };
+    reader.readAsBinaryString(file);
+  };
+
 
 
   useEffect(() => {
@@ -1356,7 +1572,19 @@ function MainApp({
           jobLabors={jobLabors}
           jobOtherCosts={jobOtherCosts}
         />}
-        {activeTab === 'inventory' && <Inventory items={items} warehouses={warehouses} purchases={purchases} issuances={issuances} suppliers={suppliers} getItemMovements={getItemMovements} />}
+        {activeTab === 'inventory' && (
+          <Inventory 
+            items={items} 
+            warehouses={warehouses} 
+            purchases={purchases} 
+            issuances={issuances} 
+            suppliers={suppliers} 
+            getItemMovements={getItemMovements}
+            setShowItemAdd={setShowItemAdd}
+            setShowCostCenterAdd={setShowCostCenterAdd}
+            costCenters={costCenters}
+          />
+        )}
         {activeTab === 'itemCard' && <ItemCardView items={items} suppliers={suppliers} purchases={purchases} issuances={issuances} getItemMovements={getItemMovements} />}
         {activeTab === 'production' && (
           <ProductionLine 
@@ -1407,7 +1635,16 @@ function MainApp({
           />
         )}
         {activeTab === 'archive' && <ArchiveView employees={employees} payrolls={payrolls} transactions={hrTransactions} />}
-        {activeTab === 'suppliers' && <Suppliers suppliers={suppliers} purchases={purchases} items={items} supplierPayments={supplierPayments} />}
+        {activeTab === 'suppliers' && (
+          <Suppliers 
+            suppliers={suppliers} 
+            purchases={purchases} 
+            items={items} 
+            supplierPayments={supplierPayments} 
+            setEditingSupplier={setEditingSupplier}
+            setShowDeleteConfirm={setShowDeleteConfirmBase}
+          />
+        )}
         {activeTab === 'reports' && (
           <ReportsView 
             items={items} 
@@ -1436,9 +1673,441 @@ function MainApp({
             companyInfo={companySettings}
           />
         )}
-        {activeTab === 'userManagement' && <UserManagement />}
-        {activeTab === 'settings' && <SettingsView items={items} suppliers={suppliers} warehouses={warehouses} units={units} costCenters={costCenters} companySettings={companySettings} setCompanySettings={setCompanySettings} handleSaveCompanySettings={handleSaveCompanySettings} />}
+        {activeTab === 'settings' && (
+          <SettingsView 
+            items={items} 
+            suppliers={suppliers} 
+            warehouses={warehouses} 
+            units={units} 
+            costCenters={costCenters} 
+            companySettings={companySettings} 
+            setCompanySettings={setCompanySettings} 
+            handleSaveCompanySettings={handleSaveCompanySettings}
+            showItemAdd={showItemAdd}
+            setShowItemAdd={setShowItemAdd}
+            showSupplierAdd={showSupplierAdd}
+            setShowSupplierAdd={setShowSupplierAdd}
+            showWarehouseAdd={showWarehouseAdd}
+            setShowWarehouseAdd={setShowWarehouseAdd}
+            showUnitAdd={showUnitAdd}
+            setShowUnitAdd={setShowUnitAdd}
+            showCostCenterAdd={showCostCenterAdd}
+            setShowCostCenterAdd={setShowCostCenterAdd}
+            isImporting={isImporting}
+            setIsImporting={setIsImporting}
+            showDeleteConfirm={showDeleteConfirmBase}
+            setShowDeleteConfirm={setShowDeleteConfirmBase}
+            showResetConfirm={showResetConfirm}
+            setShowResetConfirm={setShowResetConfirm}
+            isResetting={isResetting}
+            setIsResetting={setIsResetting}
+            editingWarehouse={editingWarehouse}
+            setEditingWarehouse={setEditingWarehouse}
+            editingUnit={editingUnit}
+            setEditingUnit={setEditingUnit}
+            editingCostCenter={editingCostCenter}
+            setEditingCostCenter={setEditingCostCenter}
+            editingSupplier={editingSupplier}
+            setEditingSupplier={setEditingSupplier}
+            editingItem={editingItem}
+            setEditingItem={setEditingItem}
+            itemForm={itemForm}
+            setItemForm={setItemForm}
+            supplierForm={supplierForm}
+            setSupplierForm={setSupplierForm}
+            warehouseForm={warehouseForm}
+            setWarehouseForm={setWarehouseForm}
+            unitForm={unitForm}
+            setUnitForm={setUnitForm}
+            costCenterForm={costCenterForm}
+            setCostCenterForm={setCostCenterForm}
+            handleAddItem={handleAddItem}
+            handleAddSupplier={handleAddSupplier}
+            handleAddWarehouse={handleAddWarehouse}
+            handleAddUnit={handleAddUnit}
+            handleAddCostCenter={handleAddCostCenter}
+            handleDeleteEntity={handleDeleteEntity}
+            handleResetAllData={handleResetAllData}
+            handleImportExcel={handleImportExcel}
+          />
+        )}
       </main>
+
+      {/* Lifted Modals */}
+      {editingWarehouse && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <Card className="dribbble-card w-full max-w-sm">
+            <CardHeader><CardTitle className="font-black">تعديل مخزن</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">اسم المخزن</label>
+                <Input className="rounded-xl h-11" value={editingWarehouse.name} onChange={e => setEditingWarehouse({...editingWarehouse, name: e.target.value})} />
+              </div>
+              <div className="flex justify-end gap-3 pt-4">
+                <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setEditingWarehouse(null)}>إلغاء</Button>
+                <Button onClick={async () => {
+                  try {
+                    await updateDoc(doc(db, 'warehouses', editingWarehouse.id), { name: editingWarehouse.name });
+                    setEditingWarehouse(null);
+                  } catch (err) { handleFirestoreError(err, 'write', 'warehouses'); }
+                }} className="btn-primary px-8 h-11 font-black">حفظ</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {editingUnit && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <Card className="dribbble-card w-full max-w-sm">
+            <CardHeader><CardTitle className="font-black">تعديل وحدة</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">اسم الوحدة</label>
+                <Input className="rounded-xl h-11" value={editingUnit.name} onChange={e => setEditingUnit({...editingUnit, name: e.target.value})} />
+              </div>
+              <div className="flex justify-end gap-3 pt-4">
+                <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setEditingUnit(null)}>إلغاء</Button>
+                <Button onClick={async () => {
+                  try {
+                    await updateDoc(doc(db, 'units', editingUnit.id), { name: editingUnit.name });
+                    setEditingUnit(null);
+                  } catch (err) { handleFirestoreError(err, 'write', 'units'); }
+                }} className="btn-primary px-8 h-11 font-black">حفظ</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {editingCostCenter && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+          <Card className="dribbble-card w-full max-w-md max-h-[90vh] overflow-auto">
+            <CardHeader><CardTitle className="font-black text-2xl">تعديل مركز تكلفة</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">اسم مركز التكلفة</label>
+                <Input className="rounded-xl h-11" value={editingCostCenter.name} onChange={e => setEditingCostCenter({...editingCostCenter, name: e.target.value})} />
+              </div>
+              <div className="flex justify-end gap-3 pt-4">
+                <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setEditingCostCenter(null)}>إلغاء</Button>
+                <Button onClick={async () => {
+                  try {
+                    await updateDoc(doc(db, 'costCenters', editingCostCenter.id), { name: editingCostCenter.name });
+                    setEditingCostCenter(null);
+                  } catch (err) { handleFirestoreError(err, 'write', 'costCenters'); }
+                }} className="btn-primary px-8 h-11 font-black">حفظ</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {editingSupplier && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <Card className="dribbble-card w-full max-w-sm">
+            <CardHeader><CardTitle className="font-black">تعديل مورد</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">اسم المورد</label>
+                <Input className="rounded-xl h-11" value={editingSupplier.name} onChange={e => setEditingSupplier({...editingSupplier, name: e.target.value})} />
+              </div>
+              <div className="flex justify-end gap-3 pt-4">
+                <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setEditingSupplier(null)}>إلغاء</Button>
+                <Button onClick={async () => {
+                  try {
+                    await updateDoc(doc(db, 'suppliers', editingSupplier.id), { name: editingSupplier.name });
+                    setEditingSupplier(null);
+                  } catch (err) { handleFirestoreError(err, 'write', 'suppliers'); }
+                }} className="btn-primary px-8 h-11 font-black">حفظ</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {showWarehouseAdd && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+          <Card className="dribbble-card w-full max-w-md max-h-[90vh] overflow-auto">
+            <CardHeader><CardTitle className="font-black text-2xl">إضافة مخزن جديد</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">اسم المخزن</label>
+                <Input className="rounded-xl h-11" value={warehouseForm.name} onChange={e => setWarehouseForm({...warehouseForm, name: e.target.value})} placeholder="مثال: مخزن الخامات" />
+              </div>
+              <div className="flex justify-end gap-3 pt-4">
+                <Button variant="ghost" className="btn-ghost" onClick={() => setShowWarehouseAdd(false)}>إلغاء</Button>
+                <Button onClick={handleAddWarehouse} className="btn-primary px-8 h-11">حفظ المخزن</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {showUnitAdd && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+          <Card className="dribbble-card w-full max-w-md max-h-[90vh] overflow-auto">
+            <CardHeader><CardTitle className="font-black text-2xl">إضافة وحدة جديدة</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">اسم الوحدة</label>
+                <Input className="rounded-xl h-11" value={unitForm.name} onChange={e => setUnitForm({...unitForm, name: e.target.value})} placeholder="مثال: كيلو، متر، قطعة" />
+              </div>
+              <div className="flex justify-end gap-3 pt-4">
+                <Button variant="ghost" className="btn-ghost" onClick={() => setShowUnitAdd(false)}>إلغاء</Button>
+                <Button onClick={handleAddUnit} className="btn-primary px-8 h-11">حفظ الوحدة</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {showCostCenterAdd && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+          <Card className="dribbble-card w-full max-w-md max-h-[90vh] overflow-auto">
+            <CardHeader><CardTitle className="font-black text-2xl">إضافة مركز تكلفة جديد</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">اسم مركز التكلفة</label>
+                <Input className="rounded-xl h-11" value={costCenterForm.name} onChange={e => setCostCenterForm({...costCenterForm, name: e.target.value})} placeholder="مثال: ورشة النجارة" />
+              </div>
+              <div className="flex justify-end gap-3 pt-4">
+                <Button variant="ghost" className="btn-ghost" onClick={() => setShowCostCenterAdd(false)}>إلغاء</Button>
+                <Button onClick={handleAddCostCenter} className="btn-primary px-8 h-11">حفظ مركز التكلفة</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {showItemAdd && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+          <Card className="dribbble-card w-full max-w-md max-h-[90vh] overflow-auto">
+            <CardHeader><CardTitle className="font-black text-2xl">إضافة صنف جديد</CardTitle></CardHeader>
+            <CardContent className="space-y-5">
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">اسم الصنف</label>
+                <Input className="rounded-xl h-11" value={itemForm.name} onChange={e => setItemForm({...itemForm, name: e.target.value})} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">المخزن</label>
+                  <select 
+                    className="w-full h-11 rounded-xl border border-slate-200 px-3 font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 outline-none" 
+                    value={itemForm.warehouseId} 
+                    onChange={e => setItemForm({...itemForm, warehouseId: e.target.value})}
+                  >
+                    <option value="">اختر المخزن...</option>
+                    {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">الوحدة</label>
+                  <select className="w-full h-11 rounded-xl border border-slate-200 px-3 font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 outline-none" value={itemForm.unit} onChange={e => setItemForm({...itemForm, unit: e.target.value})}>
+                    <option value="">اختر الوحدة...</option>
+                    {units.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">السعر الافتراضي</label>
+                  <Input type="number" className="rounded-xl h-11" value={itemForm.price} onChange={e => setItemForm({...itemForm, price: Number(e.target.value)})} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">مركز التكلفة</label>
+                  <select className="w-full h-11 rounded-xl border border-slate-200 px-3 font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 outline-none" value={itemForm.department} onChange={e => setItemForm({...itemForm, department: e.target.value})}>
+                    <option value="">اختر مركز التكلفة...</option>
+                    {costCenters.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">الكمية (رصيد أول المدة)</label>
+                  <Input type="number" className="rounded-xl h-11" value={itemForm.openingBalance} onChange={e => setItemForm({...itemForm, openingBalance: Number(e.target.value)})} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">حد الأمان</label>
+                  <Input type="number" className="rounded-xl h-11" value={itemForm.safetyLimit} onChange={e => setItemForm({...itemForm, safetyLimit: Number(e.target.value)})} />
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 pt-4">
+                <Button variant="ghost" className="btn-ghost h-11 px-6" onClick={() => setShowItemAdd(false)}>إلغاء</Button>
+                <Button onClick={handleAddItem} className="btn-primary px-10 h-11">حفظ الصنف</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {showSupplierAdd && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+          <Card className="dribbble-card w-full max-w-sm max-h-[90vh] overflow-auto">
+            <CardHeader><CardTitle className="font-black text-2xl">إضافة مورد جديد</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">اسم المورد</label>
+                <Input className="rounded-xl h-11" value={supplierForm.name} onChange={e => setSupplierForm({...supplierForm, name: e.target.value})} />
+              </div>
+              <div className="flex justify-end gap-3 pt-4">
+                <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setShowSupplierAdd(false)}>إلغاء</Button>
+                <Button onClick={handleAddSupplier} className="btn-primary px-8 h-11 font-black">إضافة</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Edit Supplier Dialog */}
+      {editingSupplier && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <Card className="dribbble-card w-full max-w-sm">
+            <CardHeader><CardTitle className="font-black">تعديل مورد</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">اسم المورد</label>
+                <Input className="rounded-xl h-11" value={editingSupplier.name} onChange={e => setEditingSupplier({...editingSupplier, name: e.target.value})} />
+              </div>
+              <div className="flex justify-end gap-3 pt-4">
+                <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setEditingSupplier(null)}>إلغاء</Button>
+                <Button onClick={handleUpdateSupplier} className="btn-primary px-8 h-11 font-black">حفظ</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Edit Item Dialog */}
+      {editingItem && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+          <Card className="dribbble-card w-full max-w-md max-h-[90vh] overflow-auto">
+            <CardHeader><CardTitle className="font-black text-2xl">تعديل صنف</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">اسم الصنف</label>
+                <Input className="rounded-xl h-11" value={editingItem.name} onChange={e => setEditingItem({...editingItem, name: e.target.value})} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">المخزن</label>
+                  <select 
+                    className="w-full h-11 rounded-xl border border-slate-200 px-3 font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 outline-none" 
+                    value={editingItem.warehouseId} 
+                    onChange={e => setEditingItem({...editingItem, warehouseId: e.target.value})}
+                  >
+                    {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">الوحدة</label>
+                  <select 
+                    className="w-full h-11 rounded-xl border border-slate-200 px-3 font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 outline-none" 
+                    value={editingItem.unit} 
+                    onChange={e => setEditingItem({...editingItem, unit: e.target.value})}
+                  >
+                    {units.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">السعر</label>
+                  <Input type="number" className="rounded-xl h-11" value={editingItem.price} onChange={e => setEditingItem({...editingItem, price: Number(e.target.value)})} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">مركز التكلفة</label>
+                  <select 
+                    className="w-full h-11 rounded-xl border border-slate-200 px-3 font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 outline-none" 
+                    value={editingItem.department} 
+                    onChange={e => setEditingItem({...editingItem, department: e.target.value})}
+                  >
+                    {costCenters.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 pt-4">
+                <Button variant="ghost" className="rounded-xl font-bold h-11 px-6" onClick={() => setEditingItem(null)}>إلغاء</Button>
+                <Button onClick={handleUpdateItem} className="btn-primary px-10 h-11 font-black">حفظ التعديلات</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Edit Warehouse Dialog */}
+      {editingWarehouse && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+          <Card className="dribbble-card w-full max-w-md max-h-[90vh] overflow-auto">
+            <CardHeader><CardTitle className="font-black text-2xl">تعديل مخزن</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">اسم المخزن</label>
+                <Input className="rounded-xl h-11" value={editingWarehouse.name} onChange={e => setEditingWarehouse({...editingWarehouse, name: e.target.value})} />
+              </div>
+              <div className="flex justify-end gap-3 pt-4">
+                <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setEditingWarehouse(null)}>إلغاء</Button>
+                <Button onClick={handleUpdateWarehouse} className="btn-primary px-8 h-11 font-black">حفظ</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Edit Unit Dialog */}
+      {editingUnit && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+          <Card className="dribbble-card w-full max-w-md max-h-[90vh] overflow-auto">
+            <CardHeader><CardTitle className="font-black text-2xl">تعديل وحدة</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">اسم الوحدة</label>
+                <Input className="rounded-xl h-11" value={editingUnit.name} onChange={e => setEditingUnit({...editingUnit, name: e.target.value})} />
+              </div>
+              <div className="flex justify-end gap-3 pt-4">
+                <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setEditingUnit(null)}>إلغاء</Button>
+                <Button onClick={handleUpdateUnit} className="btn-primary px-8 h-11 font-black">حفظ</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Edit Cost Center Dialog */}
+      {editingCostCenter && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
+          <Card className="dribbble-card w-full max-w-md max-h-[90vh] overflow-auto">
+            <CardHeader><CardTitle className="font-black text-2xl">تعديل مركز تكلفة</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">اسم مركز التكلفة</label>
+                <Input className="rounded-xl h-11" value={editingCostCenter.name} onChange={e => setEditingCostCenter({...editingCostCenter, name: e.target.value})} />
+              </div>
+              <div className="flex justify-end gap-3 pt-4">
+                <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setEditingCostCenter(null)}>إلغاء</Button>
+                <Button onClick={handleUpdateCostCenter} className="btn-primary px-8 h-11 font-black">حفظ</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      <ConfirmDialog 
+        isOpen={showResetConfirm}
+        title="تصفير البرنامج بالكامل"
+        message="هل أنت متأكد من رغبتك في حذف كافة بيانات البرنامج؟ سيتم مسح الأصناف، الموردين، المخازن، وكافة العمليات المسجلة نهائياً. لا يمكن التراجع عن هذا الإجراء."
+        confirmText={isResetting ? "جاري التصفير..." : "نعم، تصفير الكل"}
+        onConfirm={handleResetAllData}
+        onCancel={() => !isResetting && setShowResetConfirm(false)}
+      />
+
+      <ConfirmDialog 
+        isOpen={!!showDeleteConfirmBase}
+        title="تأكيد الحذف"
+        message="هل أنت متأكد من حذف هذا العنصر؟ لا يمكن التراجع عن هذا الإجراء."
+        onConfirm={handleDeleteEntity}
+        onCancel={() => setShowDeleteConfirmBase(null)}
+      />
     </div>
   );
 }
@@ -2107,16 +2776,38 @@ function StatCard({ title, value, icon, color = "text-primary" }: { title: strin
   );
 }
 
-function Inventory({ items, warehouses, purchases, issuances, suppliers, getItemMovements }: { items: Item[], warehouses: Warehouse[], purchases: Purchase[], issuances: Issuance[], suppliers: Supplier[], getItemMovements: (id: string) => any[] }) {
+function Inventory({ 
+  items, 
+  warehouses, 
+  purchases, 
+  issuances, 
+  suppliers, 
+  getItemMovements,
+  setShowItemAdd,
+  setShowCostCenterAdd,
+  costCenters
+}: { 
+  items: Item[], 
+  warehouses: Warehouse[], 
+  purchases: Purchase[], 
+  issuances: Issuance[], 
+  suppliers: Supplier[], 
+  getItemMovements: (id: string) => any[],
+  setShowItemAdd: (v: boolean) => void,
+  setShowCostCenterAdd: (v: boolean) => void,
+  costCenters: CostCenter[]
+}) {
   const [search, setSearch] = useState('');
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>('all');
+  const [selectedCostCenter, setSelectedCostCenter] = useState<string>('all');
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [selectedItemCard, setSelectedItemCard] = useState<Item | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
 
   const filtered = items.filter(i => 
     i.name.toLowerCase().includes(search.toLowerCase()) && 
-    (selectedWarehouseId === 'all' || i.warehouseId === selectedWarehouseId)
+    (selectedWarehouseId === 'all' || i.warehouseId === selectedWarehouseId) &&
+    (selectedCostCenter === 'all' || i.department === selectedCostCenter)
   );
 
   const handleDelete = async (id: string) => {
@@ -2160,7 +2851,7 @@ function Inventory({ items, warehouses, purchases, issuances, suppliers, getItem
           <h2 className="text-2xl md:text-4xl font-black tracking-tight text-slate-900">المخزن</h2>
           <p className="text-slate-500 mt-1 font-medium text-sm md:text-base">إدارة الأصناف ومراقبة المخزون</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="flex bg-slate-100 p-1 rounded-xl mr-2">
             <Button 
               variant={viewMode === 'grid' ? 'secondary' : 'ghost'} 
@@ -2179,11 +2870,19 @@ function Inventory({ items, warehouses, purchases, issuances, suppliers, getItem
               <List size={16} />
             </Button>
           </div>
-          <Button onClick={() => window.print()} variant="outline" className="h-10 md:h-12 px-4 md:px-6 rounded-xl md:rounded-2xl border-slate-200 hover:bg-slate-50 font-bold text-sm md:text-base">
+          <Button onClick={() => setShowCostCenterAdd(true)} variant="outline" className="h-10 md:h-12 px-4 md:px-6 rounded-xl md:rounded-2xl border-slate-200 hover:bg-slate-50 font-bold text-sm md:text-base text-primary">
+            <Layers size={18} className="ml-2" />
+            إضافة تصنيف (مركز تكلفة)
+          </Button>
+          <Button onClick={() => setShowItemAdd(true)} className="btn-primary h-10 md:h-12 px-4 md:px-6 rounded-xl md:rounded-2xl font-bold text-sm md:text-base">
+            <Plus size={18} className="ml-2" />
+            إضافة صنف جديد
+          </Button>
+          <Button onClick={() => window.print()} variant="outline" className="h-10 md:h-12 px-4 md:px-6 rounded-xl md:rounded-2xl border-slate-200 hover:bg-slate-50 font-bold text-sm md:text-base hidden md:flex">
             <Printer size={18} className="ml-2" />
             طباعة
           </Button>
-          <Button onClick={exportExcel} variant="outline" className="h-10 md:h-12 px-4 md:px-6 rounded-xl md:rounded-2xl border-slate-200 hover:bg-slate-50 font-bold text-sm md:text-base">
+          <Button onClick={exportExcel} variant="outline" className="h-10 md:h-12 px-4 md:px-6 rounded-xl md:rounded-2xl border-slate-200 hover:bg-slate-50 font-bold text-sm md:text-base hidden md:flex">
             <FileText size={18} className="ml-2" />
             تصدير Excel
           </Button>
@@ -2234,30 +2933,52 @@ function Inventory({ items, warehouses, purchases, issuances, suppliers, getItem
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-2 bg-white rounded-2xl md:rounded-3xl border border-slate-200 shadow-sm print:hidden">
-        <div className="md:col-span-2 relative">
-          <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-          <Input 
-            placeholder="بحث عن صنف..." 
-            className="pr-12 h-10 md:h-12 rounded-xl md:rounded-2xl border-none bg-transparent focus-visible:ring-0 font-bold text-sm md:text-base" 
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-        </div>
-        <div className="md:col-span-2 flex gap-2 p-1 overflow-x-auto no-scrollbar">
-          <button 
-            onClick={() => setSelectedWarehouseId('all')}
-            className={`flex-none md:flex-1 h-9 md:h-10 px-4 md:px-0 rounded-lg md:rounded-xl text-[10px] md:text-xs font-black uppercase tracking-widest transition-all whitespace-nowrap ${selectedWarehouseId === 'all' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-slate-500 hover:bg-slate-50'}`}
-          >
-            الكل
-          </button>
-          {warehouses.map(w => (
+      <div className="flex flex-col space-y-4 p-2 bg-white rounded-2xl md:rounded-3xl border border-slate-200 shadow-sm print:hidden">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
+          <div className="md:col-span-2 relative">
+            <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <Input 
+              placeholder="بحث عن صنف..." 
+              className="pr-12 h-10 md:h-12 rounded-xl md:rounded-2xl border-none bg-slate-50/50 focus-visible:ring-0 font-bold text-sm md:text-base" 
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+          <div className="md:col-span-2 flex flex-wrap gap-2">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest w-full">المخزن:</label>
             <button 
-              key={w.id}
-              onClick={() => setSelectedWarehouseId(w.id)}
-              className={`flex-none md:flex-1 h-9 md:h-10 px-4 md:px-0 rounded-lg md:rounded-xl text-[10px] md:text-xs font-black uppercase tracking-widest transition-all whitespace-nowrap ${selectedWarehouseId === w.id ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-slate-500 hover:bg-slate-50'}`}
+              onClick={() => setSelectedWarehouseId('all')}
+              className={`h-9 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${selectedWarehouseId === 'all' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-slate-500 hover:bg-slate-50'}`}
             >
-              {w.name}
+              كل المخازن
+            </button>
+            {warehouses.map(w => (
+              <button 
+                key={w.id}
+                onClick={() => setSelectedWarehouseId(w.id)}
+                className={`h-9 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${selectedWarehouseId === w.id ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-slate-500 hover:bg-slate-50'}`}
+              >
+                {w.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest w-full">تصنيف مراكز التكلفة:</label>
+          <button 
+            onClick={() => setSelectedCostCenter('all')}
+            className={`h-9 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${selectedCostCenter === 'all' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' : 'text-slate-500 hover:bg-slate-50'}`}
+          >
+            كل التصنيفات
+          </button>
+          {costCenters.map(c => (
+            <button 
+              key={c.id}
+              onClick={() => setSelectedCostCenter(c.name)}
+              className={`h-9 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${selectedCostCenter === c.name ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' : 'text-slate-500 hover:bg-slate-50'}`}
+            >
+              {c.name}
             </button>
           ))}
         </div>
@@ -2272,9 +2993,17 @@ function Inventory({ items, warehouses, purchases, issuances, suppliers, getItem
                   <div className="flex justify-between items-start">
                     <div className="space-y-1">
                       <h3 className="font-black text-xl text-slate-900 group-hover:text-primary transition-colors">{item.name}</h3>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                        {warehouses.find(w => w.id === item.warehouseId)?.name} | {item.unit}
-                      </p>
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        <Badge variant="secondary" className="text-[9px] font-black uppercase tracking-widest bg-blue-50 text-blue-600 border-none">
+                          {warehouses.find(w => w.id === item.warehouseId)?.name}
+                        </Badge>
+                        <Badge variant="secondary" className="text-[9px] font-black uppercase tracking-widest bg-indigo-50 text-indigo-600 border-none">
+                          {item.department || 'غير مصنف'}
+                        </Badge>
+                        <Badge variant="outline" className="text-[9px] font-black uppercase tracking-widest text-slate-400 border-slate-200">
+                          {item.unit}
+                        </Badge>
+                      </div>
                     </div>
                     <div className="flex gap-1">
                       <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-slate-400 hover:text-primary hover:bg-blue-50" onClick={() => setEditingItem(item)}>
@@ -2351,6 +3080,7 @@ function Inventory({ items, warehouses, purchases, issuances, suppliers, getItem
                 <TableRow>
                   <TableHead className="font-black text-slate-900">اسم الصنف</TableHead>
                   <TableHead className="font-black text-slate-900">المخزن</TableHead>
+                  <TableHead className="font-black text-slate-900">مركز التكلفة</TableHead>
                   <TableHead className="font-black text-slate-900">الوحدة</TableHead>
                   <TableHead className="font-black text-slate-900 text-center">الرصيد</TableHead>
                   <TableHead className="font-black text-slate-900 text-center">الهالك</TableHead>
@@ -2365,6 +3095,9 @@ function Inventory({ items, warehouses, purchases, issuances, suppliers, getItem
                     <TableCell className="font-bold text-slate-700">{item.name}</TableCell>
                     <TableCell className="text-slate-500 font-medium">
                       {warehouses.find(w => w.id === item.warehouseId)?.name}
+                    </TableCell>
+                    <TableCell className="text-indigo-600 font-black text-xs">
+                      {item.department || '-'}
                     </TableCell>
                     <TableCell className="text-slate-500 font-medium">{item.unit}</TableCell>
                     <TableCell className="text-center">
@@ -2438,7 +3171,7 @@ function Inventory({ items, warehouses, purchases, issuances, suppliers, getItem
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-slate-700">المخزن</label>
                   <select 
-                    className="w-full h-11 rounded-xl border border-slate-200 px-3 bg-white" 
+                    className="w-full h-11 rounded-xl border border-slate-200 px-3 bg-white font-bold text-slate-700" 
                     value={editingItem.warehouseId} 
                     onChange={e => setEditingItem({...editingItem, warehouseId: e.target.value})}
                   >
@@ -2446,8 +3179,19 @@ function Inventory({ items, warehouses, purchases, issuances, suppliers, getItem
                   </select>
                 </div>
                 <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">مركز التكلفة</label>
+                  <select 
+                    className="w-full h-11 rounded-xl border border-slate-200 px-3 bg-white font-bold text-slate-700" 
+                    value={editingItem.department} 
+                    onChange={e => setEditingItem({...editingItem, department: e.target.value})}
+                  >
+                    <option value="">غير مصنف</option>
+                    {costCenters.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-2">
                   <label className="text-sm font-bold text-slate-700">الوحدة</label>
-                  <Input className="rounded-xl h-11" value={editingItem.unit} onChange={e => setEditingItem({...editingItem, unit: e.target.value})} />
+                  <Input className="rounded-xl h-11 font-bold text-slate-700" value={editingItem.unit} onChange={e => setEditingItem({...editingItem, unit: e.target.value})} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -2467,6 +3211,7 @@ function Inventory({ items, warehouses, purchases, issuances, suppliers, getItem
                     await updateDoc(doc(db, 'items', editingItem.id), {
                       name: editingItem.name,
                       warehouseId: editingItem.warehouseId,
+                      department: editingItem.department || '',
                       unit: editingItem.unit,
                       price: editingItem.price,
                       safetyLimit: editingItem.safetyLimit
@@ -4966,7 +5711,21 @@ function Issuances({ items, issuances, costCenters }: { items: Item[], issuances
   );
 }
 
-function Suppliers({ suppliers, purchases, items, supplierPayments }: { suppliers: Supplier[], purchases: Purchase[], items: Item[], supplierPayments: SupplierPayment[] }) {
+function Suppliers({ 
+  suppliers, 
+  purchases, 
+  items, 
+  supplierPayments,
+  setEditingSupplier,
+  setShowDeleteConfirm
+}: { 
+  suppliers: Supplier[], 
+  purchases: Purchase[], 
+  items: Item[], 
+  supplierPayments: SupplierPayment[],
+  setEditingSupplier: (s: Supplier) => void,
+  setShowDeleteConfirm: (info: { collection: string, id: string }) => void
+}) {
   const [search, setSearch] = useState('');
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -5072,6 +5831,12 @@ function Suppliers({ suppliers, purchases, items, supplierPayments }: { supplier
                     <Button variant="outline" size="sm" onClick={() => setSelectedSupplier(s)} className="rounded-xl border-slate-200 font-bold text-primary hover:bg-primary/5">
                       <FileText size={16} className="ml-1" />
                       كشف حساب
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => setEditingSupplier(s)} className="h-8 w-8 rounded-lg text-slate-400 hover:text-primary hover:bg-blue-50">
+                      <Edit2 size={16} />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => setShowDeleteConfirm({ collection: 'suppliers', id: s.id })} className="h-8 w-8 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50">
+                      <Trash2 size={16} />
                     </Button>
                   </div>
                 </TableCell>
@@ -9599,7 +10364,53 @@ function SettingsView({
   costCenters,
   companySettings,
   setCompanySettings,
-  handleSaveCompanySettings
+  handleSaveCompanySettings,
+  showItemAdd,
+  setShowItemAdd,
+  showSupplierAdd,
+  setShowSupplierAdd,
+  showWarehouseAdd,
+  setShowWarehouseAdd,
+  showUnitAdd,
+  setShowUnitAdd,
+  showCostCenterAdd,
+  setShowCostCenterAdd,
+  isImporting,
+  setIsImporting,
+  showDeleteConfirm,
+  setShowDeleteConfirm,
+  showResetConfirm,
+  setShowResetConfirm,
+  isResetting,
+  setIsResetting,
+  editingWarehouse,
+  setEditingWarehouse,
+  editingUnit,
+  setEditingUnit,
+  editingCostCenter,
+  setEditingCostCenter,
+  editingSupplier,
+  setEditingSupplier,
+  editingItem,
+  setEditingItem,
+  itemForm,
+  setItemForm,
+  supplierForm,
+  setSupplierForm,
+  warehouseForm,
+  setWarehouseForm,
+  unitForm,
+  setUnitForm,
+  costCenterForm,
+  setCostCenterForm,
+  handleAddItem,
+  handleAddSupplier,
+  handleAddWarehouse,
+  handleAddUnit,
+  handleAddCostCenter,
+  handleDeleteEntity,
+  handleResetAllData,
+  handleImportExcel
 }: { 
   items: Item[], 
   suppliers: Supplier[], 
@@ -9608,215 +10419,55 @@ function SettingsView({
   costCenters: CostCenter[],
   companySettings: CompanySettings,
   setCompanySettings: (info: CompanySettings) => void,
-  handleSaveCompanySettings: () => Promise<void>
+  handleSaveCompanySettings: () => Promise<void>,
+  showItemAdd: boolean,
+  setShowItemAdd: (v: boolean) => void,
+  showSupplierAdd: boolean,
+  setShowSupplierAdd: (v: boolean) => void,
+  showWarehouseAdd: boolean,
+  setShowWarehouseAdd: (v: boolean) => void,
+  showUnitAdd: boolean,
+  setShowUnitAdd: (v: boolean) => void,
+  showCostCenterAdd: boolean,
+  setShowCostCenterAdd: (v: boolean) => void,
+  isImporting: boolean,
+  setIsImporting: (v: boolean) => void,
+  showDeleteConfirm: { collection: string, id: string } | null,
+  setShowDeleteConfirm: (v: { collection: string, id: string } | null) => void,
+  showResetConfirm: boolean,
+  setShowResetConfirm: (v: boolean) => void,
+  isResetting: boolean,
+  setIsResetting: (v: boolean) => void,
+  editingWarehouse: Warehouse | null,
+  setEditingWarehouse: (v: Warehouse | null) => void,
+  editingUnit: Unit | null,
+  setEditingUnit: (v: Unit | null) => void,
+  editingCostCenter: CostCenter | null,
+  setEditingCostCenter: (v: CostCenter | null) => void,
+  editingSupplier: Supplier | null,
+  setEditingSupplier: (v: Supplier | null) => void,
+  editingItem: Item | null,
+  setEditingItem: (v: Item | null) => void,
+  itemForm: any,
+  setItemForm: (v: any) => void,
+  supplierForm: any,
+  setSupplierForm: (v: any) => void,
+  warehouseForm: any,
+  setWarehouseForm: (v: any) => void,
+  unitForm: any,
+  setUnitForm: (v: any) => void,
+  costCenterForm: any,
+  setCostCenterForm: (v: any) => void,
+  handleAddItem: () => Promise<void>,
+  handleAddSupplier: () => Promise<void>,
+  handleAddWarehouse: () => Promise<void>,
+  handleAddUnit: () => Promise<void>,
+  handleAddCostCenter: () => Promise<void>,
+  handleDeleteEntity: () => Promise<void>,
+  handleResetAllData: () => Promise<void>,
+  handleImportExcel: (e: React.ChangeEvent<HTMLInputElement>) => Promise<void>
 }) {
   const [activeSettingTab, setActiveSettingTab] = useState('general');
-
-  const [showItemAdd, setShowItemAdd] = useState(false);
-  const [showSupplierAdd, setShowSupplierAdd] = useState(false);
-  const [showWarehouseAdd, setShowWarehouseAdd] = useState(false);
-  const [showUnitAdd, setShowUnitAdd] = useState(false);
-  const [showCostCenterAdd, setShowCostCenterAdd] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState<{ collection: string, id: string } | null>(null);
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [isResetting, setIsResetting] = useState(false);
-
-  const [editingWarehouse, setEditingWarehouse] = useState<Warehouse | null>(null);
-  const [editingUnit, setEditingUnit] = useState<Unit | null>(null);
-  const [editingCostCenter, setEditingCostCenter] = useState<CostCenter | null>(null);
-  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
-  const [editingItem, setEditingItem] = useState<Item | null>(null);
-  
-  const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsImporting(true);
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      try {
-        const bstr = evt.target?.result;
-        const wb = XLSX.read(bstr, { type: 'binary' });
-        const wsname = wb.SheetNames[0];
-        const ws = wb.Sheets[wsname];
-        const data = XLSX.utils.sheet_to_json(ws) as any[];
-
-        for (const row of data) {
-          const warehouse = warehouses.find(w => w.name === row['المخزن']);
-          if (row['الاسم'] && warehouse) {
-            await addDoc(collection(db, 'items'), {
-              name: row['الاسم'],
-              unit: row['الوحدة'] || 'قطعة',
-              price: Number(row['السعر']) || 0,
-              warehouseId: warehouse.id,
-              openingBalance: Number(row['رصيد أول']) || 0,
-              safetyLimit: Number(row['حد الأمان']) || 5,
-              inward: 0,
-              outward: 0,
-              returned: 0,
-              currentBalance: Number(row['رصيد أول']) || 0,
-              department: row['القسم'] || 'عام'
-            });
-          }
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setIsImporting(false);
-      }
-    };
-    reader.readAsBinaryString(file);
-  };
-
-  const [itemForm, setItemForm] = useState({
-    name: '',
-    unit: '',
-    price: 0,
-    department: '',
-    warehouseId: '',
-    openingBalance: 0,
-    safetyLimit: 5
-  });
-
-  useEffect(() => {
-    if (units.length > 0 && !itemForm.unit) {
-      setItemForm(prev => ({ ...prev, unit: units[0].name }));
-    }
-    if (costCenters.length > 0 && !itemForm.department) {
-      setItemForm(prev => ({ ...prev, department: costCenters[0].name }));
-    }
-  }, [units, costCenters]);
-
-  const [supplierForm, setSupplierForm] = useState({
-    name: ''
-  });
-
-  const [warehouseForm, setWarehouseForm] = useState({
-    name: ''
-  });
-
-  const [unitForm, setUnitForm] = useState({
-    name: ''
-  });
-
-  const [costCenterForm, setCostCenterForm] = useState({
-    name: ''
-  });
-
-  const handleAddItem = async () => {
-    if (!itemForm.name || !itemForm.warehouseId || !itemForm.unit) return;
-    try {
-      await addDoc(collection(db, 'items'), {
-        ...itemForm,
-        inward: 0,
-        outward: 0,
-        returned: 0,
-        currentBalance: itemForm.openingBalance
-      });
-      setShowItemAdd(false);
-    } catch (err) { handleFirestoreError(err, 'write', 'items'); }
-  };
-
-  const handleAddSupplier = async () => {
-    if (!supplierForm.name) return;
-    try {
-      await addDoc(collection(db, 'suppliers'), {
-        ...supplierForm,
-        totalPurchases: 0,
-        totalPayments: 0,
-        balance: 0
-      });
-      setShowSupplierAdd(false);
-    } catch (err) { handleFirestoreError(err, 'write', 'suppliers'); }
-  };
-
-  const handleAddWarehouse = async () => {
-    if (!warehouseForm.name) return;
-    try {
-      await addDoc(collection(db, 'warehouses'), {
-        ...warehouseForm
-      });
-      setShowWarehouseAdd(false);
-      setWarehouseForm({ name: '' });
-    } catch (err) { handleFirestoreError(err, 'write', 'warehouses'); }
-  };
-
-  const handleAddUnit = async () => {
-    if (!unitForm.name) return;
-    try {
-      await addDoc(collection(db, 'units'), {
-        ...unitForm
-      });
-      setShowUnitAdd(false);
-      setUnitForm({ name: '' });
-    } catch (err) { handleFirestoreError(err, 'write', 'units'); }
-  };
-
-  const handleAddCostCenter = async () => {
-    if (!costCenterForm.name) return;
-    try {
-      await addDoc(collection(db, 'costCenters'), {
-        ...costCenterForm
-      });
-      setShowCostCenterAdd(false);
-      setCostCenterForm({ name: '' });
-    } catch (err) { handleFirestoreError(err, 'write', 'costCenters'); }
-  };
-
-  const handleDeleteEntity = async () => {
-    if (!showDeleteConfirm) return;
-    try {
-      await deleteDoc(doc(db, showDeleteConfirm.collection, showDeleteConfirm.id));
-      setShowDeleteConfirm(null);
-    } catch (err) { handleFirestoreError(err, 'delete', showDeleteConfirm.collection); }
-  };
-
-  const handleResetAllData = async () => {
-    setIsResetting(true);
-    const collectionsToClear = [
-      'purchases', 'issuances', 'productionJobs', 'loadingManifests', 
-      'waste', 'bladeSharpening', 'plateSharpening', 'machineMaintenance',
-      'attendance', 'hrTransactions', 'loans', 'payrolls', 'productionRecords',
-      'supplierPayments', 'deliveryReceipts', 'jobLabors', 'jobOtherCosts'
-    ];
-
-    try {
-      const { getDocs, query, collection, writeBatch, doc } = await import('firebase/firestore');
-
-      // 1. Clear transactional collections
-      for (const colName of collectionsToClear) {
-        const querySnapshot = await getDocs(query(collection(db, colName)));
-        const batch = writeBatch(db);
-        querySnapshot.forEach((doc) => {
-          batch.delete(doc.ref);
-        });
-        await batch.commit();
-      }
-
-      // 2. Reset item balances
-      const itemsSnapshot = await getDocs(query(collection(db, 'items')));
-      const itemBatch = writeBatch(db);
-      itemsSnapshot.forEach((itemDoc) => {
-        const itemData = itemDoc.data() as Item;
-        itemBatch.update(itemDoc.ref, {
-          inward: 0,
-          outward: 0,
-          returned: 0,
-          wasted: 0,
-          currentBalance: itemData.openingBalance
-        });
-      });
-      await itemBatch.commit();
-      
-      setShowResetConfirm(false);
-      alert('تم تصفير كافة بيانات العمليات بنجاح، مع الاحتفاظ ببيانات الموظفين والأصناف والموردين');
-    } catch (err) {
-      handleFirestoreError(err, 'delete', 'all');
-    } finally {
-      setIsResetting(false);
-    }
-  };
 
   return (
     <div className="space-y-8">
@@ -10293,321 +10944,6 @@ function SettingsView({
         </div>
       </div>
 
-      {/* Edit Item Dialog */}
-      {editingItem && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
-          <Card className="dribbble-card w-full max-w-md max-h-[90vh] overflow-auto">
-            <CardHeader><CardTitle className="font-black text-2xl">تعديل صنف</CardTitle></CardHeader>
-            <CardContent className="space-y-5">
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-slate-700">اسم الصنف</label>
-                <Input className="rounded-xl h-11" value={editingItem.name} onChange={e => setEditingItem({...editingItem, name: e.target.value})} />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-700">المخزن</label>
-                  <select 
-                    className="w-full h-11 rounded-xl border border-slate-200 px-3 font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 outline-none" 
-                    value={editingItem.warehouseId} 
-                    onChange={e => setEditingItem({...editingItem, warehouseId: e.target.value})}
-                  >
-                    {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-700">الوحدة</label>
-                  <select 
-                    className="w-full h-11 rounded-xl border border-slate-200 px-3 font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 outline-none" 
-                    value={editingItem.unit} 
-                    onChange={e => setEditingItem({...editingItem, unit: e.target.value})}
-                  >
-                    {units.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-700">السعر</label>
-                  <Input type="number" className="rounded-xl h-11" value={editingItem.price} onChange={e => setEditingItem({...editingItem, price: Number(e.target.value)})} />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-700">مركز التكلفة</label>
-                  <select 
-                    className="w-full h-11 rounded-xl border border-slate-200 px-3 font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 outline-none" 
-                    value={editingItem.department} 
-                    onChange={e => setEditingItem({...editingItem, department: e.target.value})}
-                  >
-                    {costCenters.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div className="flex justify-end gap-3 pt-4">
-                <Button variant="ghost" className="rounded-xl font-bold h-11 px-6" onClick={() => setEditingItem(null)}>إلغاء</Button>
-                <Button onClick={async () => {
-                  try {
-                    const { id, ...data } = editingItem;
-                    await updateDoc(doc(db, 'items', id), data);
-                    setEditingItem(null);
-                  } catch (err) { handleFirestoreError(err, 'write', 'items'); }
-                }} className="btn-primary px-10 h-11 font-black">حفظ التعديلات</Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Edit Warehouse Dialog */}
-      {editingWarehouse && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
-          <Card className="dribbble-card w-full max-w-md max-h-[90vh] overflow-auto">
-            <CardHeader><CardTitle className="font-black text-2xl">تعديل مخزن</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-slate-700">اسم المخزن</label>
-                <Input className="rounded-xl h-11" value={editingWarehouse.name} onChange={e => setEditingWarehouse({...editingWarehouse, name: e.target.value})} />
-              </div>
-              <div className="flex justify-end gap-3 pt-4">
-                <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setEditingWarehouse(null)}>إلغاء</Button>
-                <Button onClick={async () => {
-                  try {
-                    await updateDoc(doc(db, 'warehouses', editingWarehouse.id), { name: editingWarehouse.name });
-                    setEditingWarehouse(null);
-                  } catch (err) { handleFirestoreError(err, 'write', 'warehouses'); }
-                }} className="btn-primary px-8 h-11 font-black">حفظ</Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Edit Unit Dialog */}
-      {editingUnit && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
-          <Card className="dribbble-card w-full max-w-md max-h-[90vh] overflow-auto">
-            <CardHeader><CardTitle className="font-black text-2xl">تعديل وحدة</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-slate-700">اسم الوحدة</label>
-                <Input className="rounded-xl h-11" value={editingUnit.name} onChange={e => setEditingUnit({...editingUnit, name: e.target.value})} />
-              </div>
-              <div className="flex justify-end gap-3 pt-4">
-                <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setEditingUnit(null)}>إلغاء</Button>
-                <Button onClick={async () => {
-                  try {
-                    await updateDoc(doc(db, 'units', editingUnit.id), { name: editingUnit.name });
-                    setEditingUnit(null);
-                  } catch (err) { handleFirestoreError(err, 'write', 'units'); }
-                }} className="btn-primary px-8 h-11 font-black">حفظ</Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Edit Cost Center Dialog */}
-      {editingCostCenter && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
-          <Card className="dribbble-card w-full max-w-md max-h-[90vh] overflow-auto">
-            <CardHeader><CardTitle className="font-black text-2xl">تعديل مركز تكلفة</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-slate-700">اسم مركز التكلفة</label>
-                <Input className="rounded-xl h-11" value={editingCostCenter.name} onChange={e => setEditingCostCenter({...editingCostCenter, name: e.target.value})} />
-              </div>
-              <div className="flex justify-end gap-3 pt-4">
-                <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setEditingCostCenter(null)}>إلغاء</Button>
-                <Button onClick={async () => {
-                  try {
-                    await updateDoc(doc(db, 'costCenters', editingCostCenter.id), { name: editingCostCenter.name });
-                    setEditingCostCenter(null);
-                  } catch (err) { handleFirestoreError(err, 'write', 'costCenters'); }
-                }} className="btn-primary px-8 h-11 font-black">حفظ</Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Edit Supplier Dialog */}
-      {editingSupplier && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <Card className="dribbble-card w-full max-w-sm">
-            <CardHeader><CardTitle className="font-black">تعديل مورد</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-slate-700">اسم المورد</label>
-                <Input className="rounded-xl h-11" value={editingSupplier.name} onChange={e => setEditingSupplier({...editingSupplier, name: e.target.value})} />
-              </div>
-              <div className="flex justify-end gap-3 pt-4">
-                <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setEditingSupplier(null)}>إلغاء</Button>
-                <Button onClick={async () => {
-                  try {
-                    await updateDoc(doc(db, 'suppliers', editingSupplier.id), { name: editingSupplier.name });
-                    setEditingSupplier(null);
-                  } catch (err) { handleFirestoreError(err, 'write', 'suppliers'); }
-                }} className="btn-primary px-8 h-11 font-black">حفظ</Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Add Warehouse Dialog */}
-      {showWarehouseAdd && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
-          <Card className="dribbble-card w-full max-w-md max-h-[90vh] overflow-auto">
-            <CardHeader><CardTitle className="font-black text-2xl">إضافة مخزن جديد</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-slate-700">اسم المخزن</label>
-                <Input className="rounded-xl h-11" value={warehouseForm.name} onChange={e => setWarehouseForm({...warehouseForm, name: e.target.value})} placeholder="مثال: مخزن الخامات" />
-              </div>
-              <div className="flex justify-end gap-3 pt-4">
-                <Button variant="ghost" className="btn-ghost" onClick={() => setShowWarehouseAdd(false)}>إلغاء</Button>
-                <Button onClick={handleAddWarehouse} className="btn-primary px-8 h-11">حفظ المخزن</Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Add Unit Dialog */}
-      {showUnitAdd && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
-          <Card className="dribbble-card w-full max-w-md max-h-[90vh] overflow-auto">
-            <CardHeader><CardTitle className="font-black text-2xl">إضافة وحدة جديدة</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-slate-700">اسم الوحدة</label>
-                <Input className="rounded-xl h-11" value={unitForm.name} onChange={e => setUnitForm({...unitForm, name: e.target.value})} placeholder="مثال: كيلو، متر، قطعة" />
-              </div>
-              <div className="flex justify-end gap-3 pt-4">
-                <Button variant="ghost" className="btn-ghost" onClick={() => setShowUnitAdd(false)}>إلغاء</Button>
-                <Button onClick={handleAddUnit} className="btn-primary px-8 h-11">حفظ الوحدة</Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Add Cost Center Dialog */}
-      {showCostCenterAdd && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
-          <Card className="dribbble-card w-full max-w-md max-h-[90vh] overflow-auto">
-            <CardHeader><CardTitle className="font-black text-2xl">إضافة مركز تكلفة جديد</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-slate-700">اسم مركز التكلفة</label>
-                <Input className="rounded-xl h-11" value={costCenterForm.name} onChange={e => setCostCenterForm({...costCenterForm, name: e.target.value})} placeholder="مثال: ورشة النجارة" />
-              </div>
-              <div className="flex justify-end gap-3 pt-4">
-                <Button variant="ghost" className="btn-ghost" onClick={() => setShowCostCenterAdd(false)}>إلغاء</Button>
-                <Button onClick={handleAddCostCenter} className="btn-primary px-8 h-11">حفظ مركز التكلفة</Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Add Item Dialog */}
-      {showItemAdd && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
-          <Card className="dribbble-card w-full max-w-md max-h-[90vh] overflow-auto">
-            <CardHeader><CardTitle className="font-black text-2xl">إضافة صنف جديد</CardTitle></CardHeader>
-            <CardContent className="space-y-5">
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-slate-700">اسم الصنف</label>
-                <Input className="rounded-xl h-11" value={itemForm.name} onChange={e => setItemForm({...itemForm, name: e.target.value})} />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-700">المخزن</label>
-                  <select 
-                    className="w-full h-11 rounded-xl border border-slate-200 px-3 font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 outline-none" 
-                    value={itemForm.warehouseId} 
-                    onChange={e => setItemForm({...itemForm, warehouseId: e.target.value})}
-                  >
-                    <option value="">اختر المخزن...</option>
-                    {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-700">الوحدة</label>
-                  <select className="w-full h-11 rounded-xl border border-slate-200 px-3 font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 outline-none" value={itemForm.unit} onChange={e => setItemForm({...itemForm, unit: e.target.value})}>
-                    <option value="">اختر الوحدة...</option>
-                    {units.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-700">السعر الافتراضي</label>
-                  <Input type="number" className="rounded-xl h-11" value={itemForm.price} onChange={e => setItemForm({...itemForm, price: Number(e.target.value)})} />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-700">مركز التكلفة</label>
-                  <select className="w-full h-11 rounded-xl border border-slate-200 px-3 font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 outline-none" value={itemForm.department} onChange={e => setItemForm({...itemForm, department: e.target.value})}>
-                    <option value="">اختر مركز التكلفة...</option>
-                    {costCenters.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-700">الكمية (رصيد أول المدة)</label>
-                  <Input type="number" className="rounded-xl h-11" value={itemForm.openingBalance} onChange={e => setItemForm({...itemForm, openingBalance: Number(e.target.value)})} />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-700">حد الأمان</label>
-                  <Input type="number" className="rounded-xl h-11" value={itemForm.safetyLimit} onChange={e => setItemForm({...itemForm, safetyLimit: Number(e.target.value)})} />
-                </div>
-              </div>
-              <div className="flex justify-end gap-3 pt-4">
-                <Button variant="ghost" className="btn-ghost h-11 px-6" onClick={() => setShowItemAdd(false)}>إلغاء</Button>
-                <Button onClick={handleAddItem} className="btn-primary px-10 h-11">حفظ الصنف</Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Add Supplier Dialog */}
-      {showSupplierAdd && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
-          <Card className="dribbble-card w-full max-w-sm max-h-[90vh] overflow-auto">
-            <CardHeader><CardTitle className="font-black text-2xl">إضافة مورد جديد</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-slate-700">اسم المورد</label>
-                <Input className="rounded-xl h-11" value={supplierForm.name} onChange={e => setSupplierForm({...supplierForm, name: e.target.value})} />
-              </div>
-              <div className="flex justify-end gap-3 pt-4">
-                <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setShowSupplierAdd(false)}>إلغاء</Button>
-                <Button onClick={handleAddSupplier} className="btn-primary px-8 h-11 font-black">إضافة</Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Confirm Reset Dialog */}
-      <ConfirmDialog 
-        isOpen={showResetConfirm}
-        title="تصفير البرنامج بالكامل"
-        message="هل أنت متأكد من رغبتك في حذف كافة بيانات البرنامج؟ سيتم مسح الأصناف، الموردين، المخازن، وكافة العمليات المسجلة نهائياً. لا يمكن التراجع عن هذا الإجراء."
-        confirmText={isResetting ? "جاري التصفير..." : "نعم، تصفير الكل"}
-        onConfirm={handleResetAllData}
-        onCancel={() => !isResetting && setShowResetConfirm(false)}
-      />
-
-      {/* Confirm Delete Dialog */}
-      <ConfirmDialog 
-        isOpen={!!showDeleteConfirm}
-        title="تأكيد الحذف"
-        message="هل أنت متأكد من حذف هذا العنصر؟ لا يمكن التراجع عن هذا الإجراء."
-        onConfirm={handleDeleteEntity}
-        onCancel={() => setShowDeleteConfirm(null)}
-      />
     </div>
   );
 }
