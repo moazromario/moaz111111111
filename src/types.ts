@@ -198,7 +198,7 @@ export interface FinancialTransaction {
   id: string;
   employeeId: string;
   date: string;
-  type: 'مكافأة' | 'خصم' | 'بدل' | 'إضافي' | 'مصروف';
+  type: 'مكافأة' | 'خصم' | 'بدل' | 'إضافي' | 'مصروف' | 'خصم سلف';
   amount: number;
   description: string;
   overtimeHours?: number;
@@ -241,6 +241,7 @@ export interface Payroll {
   totalOvertime: number;
   totalProduction: number;
   totalDeductions: number;
+  totalExpenses: number;
   totalLoans: number;
   netSalary: number;
   status: 'مسودة' | 'مدفوع';

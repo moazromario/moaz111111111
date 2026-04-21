@@ -333,9 +333,11 @@ const calculateLivePayroll = (
   }, { daysWorked: 0, timeDeduction: 0 });
 
   const empTransactions = transactions.filter(t => t.employeeId === emp.id && t.date >= p.startDate && t.date <= p.endDate);
-  const totalOvertime = empTransactions.filter(t => t.type === 'إضافي').reduce((sum, t) => sum + t.amount, 0);
-  const totalBonuses = empTransactions.filter(t => t.type === 'مكافأة' || t.type === 'بدل').reduce((sum, t) => sum + t.amount, 0);
-  const manualDeductions = empTransactions.filter(t => t.type === 'خصم' || t.type === 'مصروف').reduce((sum, t) => sum + t.amount, 0);
+  const totalOvertime = empTransactions.filter(t => t.type === 'إضافي' || t.type === 'أوفرتايم').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+  const totalBonuses = empTransactions.filter(t => t.type === 'مكافأة' || t.type === 'مكافآت' || t.type === 'بدل').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+  const totalExpenses = empTransactions.filter(t => t.type === 'مصروف' || t.type === 'سلفة' || t.type === 'عهدة').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+  const manualLoanDeductions = empTransactions.filter(t => t.type === 'خصم سلف' || t.type === 'سلفة مستردة').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+  const manualDeductions = empTransactions.filter(t => t.type === 'خصم' || t.type === 'جزاء').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
   const totalDeductions = manualDeductions + Math.round(attendanceStats.timeDeduction * 100) / 100;
 
   const empProduction = productionRecords.filter(r => r.employeeId === emp.id && r.date >= p.startDate && r.date <= p.endDate);
@@ -348,18 +350,18 @@ const calculateLivePayroll = (
     baseSalary = emp.dailyRate * attendanceStats.daysWorked;
   }
 
-  const earningsBeforeLoans = baseSalary + totalBonuses + totalOvertime - totalDeductions + (emp.payMethod === 'daily' ? totalProduction : 0);
+  const earningsBeforeLoans = baseSalary + totalBonuses + totalOvertime - totalDeductions - totalExpenses + (emp.payMethod === 'daily' ? totalProduction : 0);
   const availableForLoans = Math.max(0, earningsBeforeLoans);
   const empLoans = loans.filter(l => l.employeeId === emp.id && l.status === 'نشط');
   const calculatedLoans = empLoans.reduce((sum, l) => {
     const weeklyInstallment = l.installments && l.installments > 0 ? l.amount / l.installments : (emp.dailyRate * (attendanceStats.daysWorked || 6)) * 0.1;
     return sum + Math.min(l.remainingAmount, weeklyInstallment);
-  }, 0);
+  }, 0) + manualLoanDeductions;
 
   const totalLoans = Math.min(calculatedLoans, availableForLoans);
   const netSalary = Math.max(0, earningsBeforeLoans - totalLoans);
 
-  return { ...p, daysWorked: attendanceStats.daysWorked, baseSalary, totalBonuses, totalOvertime, totalProduction, totalDeductions, totalLoans, netSalary };
+  return { ...p, daysWorked: attendanceStats.daysWorked, baseSalary, totalBonuses, totalOvertime, totalProduction, totalDeductions, totalExpenses, totalLoans, netSalary };
 };
 
 function PayrollMasterReport({ payrolls, employees, hrTransactions, attendance, loans, productionRecords, companyInfo }: { payrolls: Payroll[], employees: Employee[], hrTransactions: FinancialTransaction[], attendance: Attendance[], loans: Loan[], productionRecords: ProductionRecord[], companyInfo: CompanySettings }) {
@@ -385,6 +387,7 @@ function PayrollMasterReport({ payrolls, employees, hrTransactions, attendance, 
   const totalBonuses = filteredPayrolls.reduce((sum, p) => sum + (p.totalBonuses || 0), 0);
   const totalOvertime = filteredPayrolls.reduce((sum, p) => sum + (p.totalOvertime || 0), 0);
   const totalDeductions = filteredPayrolls.reduce((sum, p) => sum + (p.totalDeductions || 0), 0);
+  const totalExpenses = filteredPayrolls.reduce((sum, p) => sum + (p.totalExpenses || 0), 0);
   const totalLoansRecovered = filteredPayrolls.reduce((sum, p) => sum + (p.totalLoans || 0), 0);
   
   const paidEmployeeCount = new Set(filteredPayrolls.map(p => p.employeeId)).size;
@@ -437,7 +440,8 @@ function PayrollMasterReport({ payrolls, employees, hrTransactions, attendance, 
   const compositionData = [
     { name: 'الراتب الأساسي', value: totalBase, color: '#6366f1' },
     { name: 'حوافز وإضافي', value: totalBonuses + totalOvertime, color: '#10b981' },
-    { name: 'استقطاعات وسلف', value: totalDeductions + totalLoansRecovered, color: '#ef4444' }
+    { name: 'خصومات ومصاريف', value: totalDeductions + totalExpenses, color: '#f97316' },
+    { name: 'سلف مستردة', value: totalLoansRecovered, color: '#ef4444' }
   ];
 
   return (
@@ -532,8 +536,8 @@ function PayrollMasterReport({ payrolls, employees, hrTransactions, attendance, 
               <div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center text-red-600">
                 <AlertCircle size={24} />
               </div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">إجمالي الاستقطاعات</p>
-              <h3 className="text-2xl font-black text-slate-900">{(totalDeductions + totalLoansRecovered).toLocaleString()} <small className="text-xs">ج.م</small></h3>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">إجمالي الاستقطاعات والمصاريف</p>
+              <h3 className="text-2xl font-black text-slate-900">{(totalDeductions + totalExpenses + totalLoansRecovered).toLocaleString()} <small className="text-xs">ج.م</small></h3>
             </div>
           </CardContent>
         </Card>
@@ -679,6 +683,7 @@ function PayrollMasterReport({ payrolls, employees, hrTransactions, attendance, 
                     'مكافآت': p.totalBonuses,
                     'إضافي': p.totalOvertime,
                     'خصومات': p.totalDeductions,
+                    'مصروفات': p.totalExpenses || 0,
                     'سلف': p.totalLoans,
                     'الصافي': p.netSalary
                   };
@@ -733,11 +738,21 @@ function PayrollMasterReport({ payrolls, employees, hrTransactions, attendance, 
                     <TableCell className="font-black text-purple-600">
                       {p.totalProduction > 0 ? `+${p.totalProduction.toLocaleString()}` : '0'}
                     </TableCell>
-                    <TableCell className="font-black text-green-600">
-                      +{ (p.totalBonuses || 0).toLocaleString() }
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="font-black text-green-600">+{ (p.totalBonuses || 0).toLocaleString() }</span>
+                        {hrTransactions.filter(t => t.employeeId === p.employeeId && t.date >= p.startDate && t.date <= p.endDate && (t.type === 'مكافأة' || t.type === 'بدل') && t.amount > 0).map((t, i) => (
+                           <span key={i} className="text-[8px] text-green-400 font-bold truncate max-w-[80px]" title={t.description}>{t.description}</span>
+                        ))}
+                      </div>
                     </TableCell>
-                    <TableCell className="font-black text-blue-600">
-                      +{ (p.totalOvertime || 0).toLocaleString() }
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="font-black text-blue-600">+{ (p.totalOvertime || 0).toLocaleString() }</span>
+                        {hrTransactions.filter(t => t.employeeId === p.employeeId && t.date >= p.startDate && t.date <= p.endDate && t.type === 'إضافي' && t.amount > 0).map((t, i) => (
+                           <span key={i} className="text-[8px] text-blue-400 font-bold truncate max-w-[80px]" title={t.description}>{t.description}</span>
+                        ))}
+                      </div>
                     </TableCell>
                     <TableCell className="font-black text-red-600">
                       -{( (p.totalDeductions || 0) + (p.totalLoans || 0) ).toLocaleString()}
@@ -1391,7 +1406,7 @@ function MainApp({
             companyInfo={companySettings}
           />
         )}
-        {activeTab === 'archive' && <ArchiveView employees={employees} payrolls={payrolls} />}
+        {activeTab === 'archive' && <ArchiveView employees={employees} payrolls={payrolls} transactions={hrTransactions} />}
         {activeTab === 'suppliers' && <Suppliers suppliers={suppliers} purchases={purchases} items={items} supplierPayments={supplierPayments} />}
         {activeTab === 'reports' && (
           <ReportsView 
@@ -8050,6 +8065,7 @@ function HRTransactionsView({ employees, transactions }: { employees: Employee[]
                   <option value="مكافأة">مكافأة</option>
                   <option value="خصم">خصم</option>
                   <option value="مصروف">مصروف (سلفة أسبوعية)</option>
+                  <option value="خصم سلف">خصم سلف</option>
                   <option value="بدل">بدل</option>
                   <option value="إضافي">وقت إضافي</option>
                 </select>
@@ -8116,6 +8132,8 @@ function HRTransactionsView({ employees, transactions }: { employees: Employee[]
                 <select className="w-full h-11 rounded-xl border border-slate-200 px-3 bg-white font-bold" value={editingTransaction.type} onChange={e => setEditingTransaction({...editingTransaction, type: e.target.value as any})}>
                   <option value="مكافأة">مكافأة</option>
                   <option value="خصم">خصم</option>
+                  <option value="مصروف">مصروف</option>
+                  <option value="خصم سلف">خصم سلف</option>
                   <option value="بدل">بدل</option>
                   <option value="إضافي">وقت إضافي</option>
                 </select>
@@ -8529,11 +8547,13 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls, pro
           if (t.employeeId !== emp.id) return false;
           return t.date >= genData.startDate && t.date <= genData.endDate;
         });
-        const totalOvertime = empTransactions.filter(t => t.type === 'إضافي').reduce((sum, t) => sum + t.amount, 0);
+        const totalOvertime = empTransactions.filter(t => t.type === 'إضافي' || t.type === 'أوفرتايم').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
         
         // Basic logic for payroll calculation
-        const totalBonuses = empTransactions.filter(t => t.type === 'مكافأة' || t.type === 'بدل').reduce((sum, t) => sum + t.amount, 0);
-        const manualDeductions = empTransactions.filter(t => t.type === 'خصم' || t.type === 'مصروف').reduce((sum, t) => sum + t.amount, 0);
+        const totalBonuses = empTransactions.filter(t => t.type === 'مكافأة' || t.type === 'مكافآت' || t.type === 'بدل').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+        const totalExpenses = empTransactions.filter(t => t.type === 'مصروف' || t.type === 'سلفة' || t.type === 'عهدة').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+        const manualLoanDeductions = empTransactions.filter(t => t.type === 'خصم سلف' || t.type === 'سلفة مستردة').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+        const manualDeductions = empTransactions.filter(t => t.type === 'خصم' || t.type === 'جزاء').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
         const totalDeductions = manualDeductions + Math.round(timeDeduction * 100) / 100;
         
         // Calculate Base Salary based on Pay Method
@@ -8551,7 +8571,7 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls, pro
           baseSalary = emp.dailyRate * daysWorked;
         }
 
-        const earningsBeforeLoans = baseSalary + totalBonuses + totalOvertime - totalDeductions + (emp.payMethod === 'daily' ? totalProduction : 0);
+        const earningsBeforeLoans = baseSalary + totalBonuses + totalOvertime - totalDeductions - totalExpenses + (emp.payMethod === 'daily' ? totalProduction : 0);
         const availableForLoans = Math.max(0, earningsBeforeLoans);
 
         // Calculate loan deduction based on installments, capped by available earnings
@@ -8564,7 +8584,7 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls, pro
             weeklyInstallment = (emp.dailyRate * daysWorked) * 0.1; // Fallback
           }
           return sum + Math.min(l.remainingAmount, weeklyInstallment);
-        }, 0);
+        }, 0) + manualLoanDeductions;
 
         // Prevent negative salary by capping loan deductions
         const totalLoans = Math.min(calculatedLoans, availableForLoans);
@@ -8583,6 +8603,7 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls, pro
           baseSalary,
           totalBonuses,
           totalOvertime,
+          totalExpenses,
           totalProduction,
           totalDeductions,
           totalLoans,
@@ -8642,8 +8663,8 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls, pro
     if (!editingPayroll) return;
     try {
       const { id, ...data } = editingPayroll;
-      // Recalculate net salary
-      const netSalary = data.baseSalary + data.totalBonuses + data.totalOvertime - data.totalDeductions - data.totalLoans;
+      // Recalculate net salary from all inputs
+      const netSalary = (data.baseSalary || 0) + (data.totalBonuses || 0) + (data.totalOvertime || 0) - (data.totalDeductions || 0) - (data.totalExpenses || 0) - (data.totalLoans || 0);
       await updateDoc(doc(db, 'payrolls', id), { ...data, netSalary });
       setEditingPayroll(null);
     } catch (err) { handleFirestoreError(err, 'update', 'payrolls'); }
@@ -8735,6 +8756,7 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls, pro
       'إضافي': p.totalOvertime,
       'مكافآت': p.totalBonuses,
       'خصومات': p.totalDeductions,
+      'مصروفات': p.totalExpenses || 0,
       'سلف': p.totalLoans,
       'صافي الراتب': p.netSalary,
       'الحالة': p.status
@@ -8883,6 +8905,7 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls, pro
               <TableHead className="text-right font-black text-slate-900">إضافي</TableHead>
               <TableHead className="text-right font-black text-slate-900">مكافآت</TableHead>
               <TableHead className="text-right font-black text-slate-900">خصومات</TableHead>
+              <TableHead className="text-right font-black text-slate-900">مصروفات</TableHead>
               <TableHead className="text-right font-black text-slate-900">سلف</TableHead>
               <TableHead className="text-right font-black text-slate-900">صافي الراتب</TableHead>
               <TableHead className="text-right font-black text-slate-900">الحالة</TableHead>
@@ -8907,9 +8930,35 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls, pro
                 <TableCell className="font-black text-purple-600">
                   {p.totalProduction > 0 ? `+${p.totalProduction.toLocaleString()}` : '0'}
                 </TableCell>
-                <TableCell className="font-bold text-blue-600">+{p.totalOvertime?.toLocaleString() || 0}</TableCell>
-                <TableCell className="font-bold text-green-600">+{p.totalBonuses.toLocaleString()}</TableCell>
-                <TableCell className="font-bold text-red-600">-{p.totalDeductions.toLocaleString()}</TableCell>
+                <TableCell>
+                  <div className="flex flex-col">
+                    <span className="font-bold text-blue-600">+{p.totalOvertime?.toLocaleString() || 0}</span>
+                    {transactions.filter(t => t.employeeId === p.employeeId && t.date >= p.startDate && t.date <= p.endDate && t.type === 'إضافي' && t.amount > 0).map((t, i) => (
+                      <span key={i} className="text-[9px] text-blue-400 font-medium truncate max-w-[100px]" title={t.description}>{t.description}</span>
+                    ))}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div className="flex flex-col">
+                    <span className="font-bold text-green-600">+{p.totalBonuses.toLocaleString()}</span>
+                    {transactions.filter(t => t.employeeId === p.employeeId && t.date >= p.startDate && t.date <= p.endDate && (t.type === 'مكافأة' || t.type === 'بدل') && t.amount > 0).map((t, i) => (
+                      <span key={i} className="text-[9px] text-green-400 font-medium truncate max-w-[100px]" title={t.description}>{t.description}</span>
+                    ))}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div className="flex flex-col">
+                    <span className="font-bold text-red-600">-{p.totalDeductions.toLocaleString()}</span>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div className="flex flex-col">
+                    <span className="font-bold text-orange-600">-{p.totalExpenses?.toLocaleString() || 0}</span>
+                    {transactions.filter(t => t.employeeId === p.employeeId && t.date >= p.startDate && t.date <= p.endDate && t.type === 'مصروف' && t.amount > 0).map((t, i) => (
+                      <span key={i} className="text-[9px] text-orange-400 font-medium truncate max-w-[100px]" title={t.description}>{t.description}</span>
+                    ))}
+                  </div>
+                </TableCell>
                 <TableCell className="font-bold text-orange-600">-{p.totalLoans.toLocaleString()}</TableCell>
                 <TableCell className="font-black text-primary text-lg">{p.netSalary.toLocaleString()} ج.م</TableCell>
                 <TableCell>
@@ -8970,7 +9019,7 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls, pro
                         t.employeeId === p.employeeId && 
                         t.date >= p.startDate && 
                         t.date <= p.endDate && 
-                        (t.type === 'مكافأة' || t.type === 'بدل' || t.type === 'إضافي') &&
+                        (t.type === 'مكافأة' || t.type === 'بدل' || t.type === 'إضافي' || t.type === 'مصروف' || t.type === 'خصم سلف') &&
                         t.amount > 0
                       );
 
@@ -9045,6 +9094,10 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls, pro
                                 <div className="flex justify-between text-[10px] text-red-600 print:text-[6px]">
                                   <span className="font-bold">خصوم (-):</span>
                                   <span className="font-black">{p.totalDeductions.toLocaleString()}</span>
+                                </div>
+                                <div className="flex justify-between text-[10px] text-orange-400 print:text-[6px]">
+                                  <span className="font-bold">مصاريف (-):</span>
+                                  <span className="font-black">{p.totalExpenses?.toLocaleString() || 0}</span>
                                 </div>
                                 <div className="flex justify-between text-[10px] text-orange-600 print:text-[6px]">
                                   <span className="font-bold">سلف (-):</span>
@@ -9125,6 +9178,10 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls, pro
                   <Input type="number" className="rounded-xl h-11" value={editingPayroll.totalDeductions} onChange={e => setEditingPayroll({...editingPayroll, totalDeductions: Number(e.target.value)})} />
                 </div>
                 <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">المصروفات</label>
+                  <Input type="number" className="rounded-xl h-11" value={editingPayroll.totalExpenses} onChange={e => setEditingPayroll({...editingPayroll, totalExpenses: Number(e.target.value)})} />
+                </div>
+                <div className="space-y-2">
                   <label className="text-sm font-bold text-slate-700">السلف</label>
                   <Input type="number" className="rounded-xl h-11" value={editingPayroll.totalLoans} onChange={e => setEditingPayroll({...editingPayroll, totalLoans: Number(e.target.value)})} />
                 </div>
@@ -9132,7 +9189,7 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls, pro
               <div className="pt-4 border-t border-slate-100 flex justify-between items-center">
                 <div className="text-slate-500 font-bold">صافي الراتب المتوقع:</div>
                 <div className="text-2xl font-black text-primary">
-                  {(editingPayroll.baseSalary + editingPayroll.totalBonuses + editingPayroll.totalOvertime - editingPayroll.totalDeductions - editingPayroll.totalLoans).toLocaleString()} ج.م
+                  {(editingPayroll.baseSalary + editingPayroll.totalBonuses + editingPayroll.totalOvertime - editingPayroll.totalDeductions - (editingPayroll.totalExpenses || 0) - editingPayroll.totalLoans).toLocaleString()} ج.م
                 </div>
               </div>
               <div className="flex justify-end gap-3 pt-6">
@@ -9201,7 +9258,7 @@ function PayrollView({ employees, attendance, transactions, loans, payrolls, pro
   );
 }
 
-function ArchiveView({ employees, payrolls }: { employees: Employee[], payrolls: Payroll[] }) {
+function ArchiveView({ employees, payrolls, transactions }: { employees: Employee[], payrolls: Payroll[], transactions: FinancialTransaction[] }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPayroll, setSelectedPayroll] = useState<Payroll | null>(null);
   const [editingPayroll, setEditingPayroll] = useState<Payroll | null>(null);
@@ -9224,8 +9281,8 @@ function ArchiveView({ employees, payrolls }: { employees: Employee[], payrolls:
     if (!editingPayroll) return;
     try {
       const { id, ...data } = editingPayroll;
-      // Recalculate net salary
-      const netSalary = data.baseSalary + data.totalBonuses + data.totalOvertime - data.totalDeductions - data.totalLoans;
+      // Recalculate net salary for archived entries
+      const netSalary = (data.baseSalary || 0) + (data.totalBonuses || 0) + (data.totalOvertime || 0) - (data.totalDeductions || 0) - (data.totalExpenses || 0) - (data.totalLoans || 0);
       await updateDoc(doc(db, 'payrolls', id), { ...data, netSalary });
       setEditingPayroll(null);
     } catch (err) { handleFirestoreError(err, 'update', 'payrolls'); }
@@ -9251,6 +9308,7 @@ function ArchiveView({ employees, payrolls }: { employees: Employee[], payrolls:
       'إضافي': p.totalOvertime,
       'مكافآت': p.totalBonuses,
       'خصومات': p.totalDeductions,
+      'مصروفات': p.totalExpenses || 0,
       'سلف': p.totalLoans,
       'صافي الراتب': p.netSalary,
       'الحالة': p.status
@@ -9314,6 +9372,9 @@ function ArchiveView({ employees, payrolls }: { employees: Employee[], payrolls:
               <TableHead className="text-right font-black text-slate-900">الفترة الأسبوعية</TableHead>
               <TableHead className="text-right font-black text-slate-900">مكافآت</TableHead>
               <TableHead className="text-right font-black text-slate-900">إضافي</TableHead>
+              <TableHead className="text-right font-black text-slate-900">خصومات</TableHead>
+              <TableHead className="text-right font-black text-slate-900">مصروفات</TableHead>
+              <TableHead className="text-right font-black text-slate-900">سلف</TableHead>
               <TableHead className="text-right font-black text-slate-900">الصافي</TableHead>
               <TableHead className="text-right font-black text-slate-900">الإجراءات</TableHead>
             </TableRow>
@@ -9335,6 +9396,9 @@ function ArchiveView({ employees, payrolls }: { employees: Employee[], payrolls:
                   </TableCell>
                   <TableCell className="font-bold text-green-600">+{p.totalBonuses.toLocaleString()}</TableCell>
                   <TableCell className="font-bold text-blue-600">+{p.totalOvertime.toLocaleString()}</TableCell>
+                  <TableCell className="font-bold text-red-600">-{p.totalDeductions.toLocaleString()}</TableCell>
+                  <TableCell className="font-bold text-orange-600">-{ (p.totalExpenses || 0).toLocaleString() }</TableCell>
+                  <TableCell className="font-bold text-orange-600">-{p.totalLoans.toLocaleString()}</TableCell>
                   <TableCell className="font-black text-primary">{p.netSalary.toLocaleString()} ج.م</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
@@ -9353,7 +9417,7 @@ function ArchiveView({ employees, payrolls }: { employees: Employee[], payrolls:
               );
             }) : (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-10 font-bold text-slate-400">
+                <TableCell colSpan={8} className="text-center py-10 font-bold text-slate-400">
                   لا توجد بيانات مؤرشفة حالياً
                 </TableCell>
               </TableRow>
@@ -9387,23 +9451,73 @@ function ArchiveView({ employees, payrolls }: { employees: Employee[], payrolls:
               <div className="space-y-3">
                 <div className="flex justify-between items-center p-3 bg-slate-50 rounded-xl">
                   <span className="font-bold text-slate-600">أيام العمل</span>
-                  <span className="font-black text-slate-900">{selectedPayroll.daysWorked.toFixed(2)} يوم</span>
+                  <span className="font-black text-slate-900">{(selectedPayroll.daysWorked || 0).toFixed(2)} يوم</span>
+                </div>
+                <div className="flex justify-between items-center p-3 bg-slate-50 rounded-xl text-blue-600">
+                  <span className="font-bold">مكافآت (+)</span>
+                  <span className="font-black">{(selectedPayroll.totalBonuses || 0).toLocaleString()} ج.م</span>
+                </div>
+                <div className="flex justify-between items-center p-3 bg-slate-50 rounded-xl text-blue-600">
+                  <span className="font-bold">إضافي (+)</span>
+                  <span className="font-black">{(selectedPayroll.totalOvertime || 0).toLocaleString()} ج.م</span>
+                </div>
+                <div className="flex justify-between items-center p-3 bg-slate-50 rounded-xl text-red-600">
+                  <span className="font-bold">خصومات (-)</span>
+                  <span className="font-black">{(selectedPayroll.totalDeductions || 0).toLocaleString()} ج.م</span>
+                </div>
+                <div className="flex justify-between items-center p-3 bg-slate-50 rounded-xl text-orange-600">
+                  <span className="font-bold">مصروفات (-)</span>
+                  <span className="font-black">{(selectedPayroll.totalExpenses || 0).toLocaleString()} ج.م</span>
+                </div>
+                <div className="flex justify-between items-center p-3 bg-slate-50 rounded-xl text-orange-600">
+                  <span className="font-bold">خصم سلف (-)</span>
+                  <span className="font-black">{(selectedPayroll.totalLoans || 0).toLocaleString()} ج.م</span>
                 </div>
                 <div className="flex justify-between items-center p-3 bg-slate-50 rounded-xl">
                   <span className="font-bold text-slate-600">الراتب الأساسي</span>
                   <span className="font-black text-slate-900">{selectedPayroll.baseSalary.toLocaleString()} ج.م</span>
                 </div>
-                <div className="flex justify-between items-center p-3 bg-green-50 rounded-xl">
-                  <span className="font-bold text-green-700">مكافآت وبدلات</span>
-                  <span className="font-black text-green-700">+{selectedPayroll.totalBonuses.toLocaleString()} ج.م</span>
+                <div className="flex flex-col gap-2 p-3 bg-green-50 rounded-xl">
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-green-700">مكافآت وبدلات</span>
+                    <span className="font-black text-green-700">+{selectedPayroll.totalBonuses.toLocaleString()} ج.م</span>
+                  </div>
+                  {transactions.filter(t => t.employeeId === selectedPayroll.employeeId && t.date >= selectedPayroll.startDate && t.date <= selectedPayroll.endDate && (t.type === 'مكافأة' || t.type === 'بدل') && t.amount > 0).map((t, i) => (
+                    <div key={i} className="flex justify-between text-[10px] font-bold text-green-600 border-t border-green-100 pt-1">
+                      <span>{t.description || 'بدون وصف'}</span>
+                      <span>{t.amount.toLocaleString()}</span>
+                    </div>
+                  ))}
                 </div>
-                <div className="flex justify-between items-center p-3 bg-blue-50 rounded-xl">
-                  <span className="font-bold text-blue-700">وقت إضافي</span>
-                  <span className="font-black text-blue-700">+{selectedPayroll.totalOvertime.toLocaleString()} ج.م</span>
+                <div className="flex flex-col gap-2 p-3 bg-blue-50 rounded-xl">
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-blue-700">وقت إضافي</span>
+                    <span className="font-black text-blue-700">+{selectedPayroll.totalOvertime.toLocaleString()} ج.م</span>
+                  </div>
+                  {transactions.filter(t => t.employeeId === selectedPayroll.employeeId && t.date >= selectedPayroll.startDate && t.date <= selectedPayroll.endDate && t.type === 'إضافي' && t.amount > 0).map((t, i) => (
+                    <div key={i} className="flex justify-between text-[10px] font-bold text-blue-600 border-t border-blue-100 pt-1">
+                      <span>{t.description || 'بدون وصف'}</span>
+                      <span>{t.amount.toLocaleString()}</span>
+                    </div>
+                  ))}
                 </div>
-                <div className="flex justify-between items-center p-3 bg-red-50 rounded-xl">
-                  <span className="font-bold text-red-700">خصومات (تأخير + يدوي)</span>
-                  <span className="font-black text-red-700">-{selectedPayroll.totalDeductions.toLocaleString()} ج.م</span>
+                <div className="flex flex-col gap-2 p-3 bg-red-50 rounded-xl">
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-red-700">خصومات (تأخير + يدوي)</span>
+                    <span className="font-black text-red-700">-{selectedPayroll.totalDeductions.toLocaleString()} ج.م</span>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2 p-3 bg-orange-100 rounded-xl">
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-orange-700">مصاريف شخصية</span>
+                    <span className="font-black text-orange-700">-{selectedPayroll.totalExpenses?.toLocaleString() || 0} ج.م</span>
+                  </div>
+                  {transactions.filter(t => t.employeeId === selectedPayroll.employeeId && t.date >= selectedPayroll.startDate && t.date <= selectedPayroll.endDate && t.type === 'مصروف' && t.amount > 0).map((t, i) => (
+                    <div key={i} className="flex justify-between text-[10px] font-bold text-orange-600 border-t border-orange-200 pt-1">
+                      <span>{t.description || 'بدون وصف'}</span>
+                      <span>{t.amount.toLocaleString()}</span>
+                    </div>
+                  ))}
                 </div>
                 <div className="flex justify-between items-center p-3 bg-orange-50 rounded-xl">
                   <span className="font-bold text-orange-700">سداد سلف</span>
