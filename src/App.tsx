@@ -87,6 +87,7 @@ import * as XLSX from 'xlsx';
 import { handleFirestoreError } from './lib/firestore-utils';
 import { ProductionCostsView } from './components/ProductionCostsView';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
+import { motion, AnimatePresence } from 'motion/react';
 
 // --- Components ---
 
@@ -1332,128 +1333,168 @@ function MainApp({
   return (
     <div className="flex min-h-screen font-sans text-right print:block" dir="rtl">
       <aside className={`
-        fixed inset-y-0 right-0 w-72 bg-white/80 backdrop-blur-3xl border-l border-white/40 flex flex-col shadow-[0_0_40px_rgba(0,0,0,0.04)] z-50 transition-transform duration-300 ease-in-out
-        md:relative md:translate-x-0 md:shadow-xl md:shadow-blue-500/5 md:z-20 no-print
+        fixed inset-y-0 right-0 w-80 bg-slate-50 border-l border-slate-200 flex flex-col z-50 transition-transform duration-500 cubic-bezier(0.4, 0, 0.2, 1)
+        md:relative md:translate-x-0 no-print shadow-2xl shadow-slate-200/50
         ${mobileMenuOpen ? 'translate-x-0' : 'translate-x-full'}
       `}>
-        <div className="p-8 hidden md:block">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center shadow-lg shadow-primary/30">
-              <Package className="text-white w-6 h-6" />
-            </div>
-            <div>
-              <h1 className="font-bold text-xl tracking-tight text-slate-900">{companySettings.name || 'النجار للأثاث'}</h1>
-              <p className="text-[10px] text-primary font-bold uppercase tracking-widest">نظام الإدارة الذكي</p>
+        {/* Brand Header */}
+        <div className="p-8 pb-4">
+          <div className="flex items-center gap-4 group cursor-pointer" onClick={() => handleNavClick('dashboard')}>
+            <motion.div 
+              whileHover={{ rotate: 12, scale: 1.1 }}
+              className="w-14 h-14 bg-primary rounded-2xl flex items-center justify-center shadow-xl shadow-primary/30 text-white"
+            >
+              <Package size={30} />
+            </motion.div>
+            <div className="flex flex-col">
+              <h1 className="font-black text-2xl tracking-tighter text-slate-900 leading-tight">
+                {companySettings.name || 'النجار للأثاث'}
+              </h1>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em]">نظام الإدارة المتكامل</p>
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="p-6 md:hidden flex items-center justify-between border-b border-slate-100">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center">
-              <Package className="text-white w-5 h-5" />
-            </div>
-            <span className="font-bold text-slate-900">القائمة</span>
+        {/* Search / Context Area (Optional professional touch) */}
+        <div className="px-6 py-4">
+          <div className="relative group">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors" size={16} />
+            <input 
+              type="text" 
+              placeholder="البحث في القائمة..."
+              className="w-full bg-slate-100 border-none rounded-xl h-10 pr-10 text-xs font-bold text-slate-600 focus:ring-2 focus:ring-primary/20 transition-all"
+            />
           </div>
-          <Button variant="ghost" size="icon" onClick={() => setMobileMenuOpen(false)} className="rounded-xl">
-            <X size={20} />
-          </Button>
         </div>
         
-        <nav className="flex-1 px-4 py-6 md:py-0 space-y-1.5 overflow-y-auto font-sans">
+        <nav className="flex-1 px-4 pb-10 space-y-2 overflow-y-auto custom-scrollbar pt-2">
           <NavButton active={activeTab === 'dashboard'} onClick={() => handleNavClick('dashboard')} icon={<LayoutDashboard size={20} />} label="لوحة التحكم" permission="dashboard" profile={profile} />
           
           {(profile?.isAdmin || profile?.permissions?.inventory) && (
-            <>
-              <div className="pt-4 pb-2 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">المخازن والعمليات</div>
+            <div className="space-y-1">
+              <div className="pt-6 pb-2 px-6 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between">
+                <span>المخازن والمواد</span>
+                <div className="h-[1px] flex-1 bg-slate-100 mr-4" />
+              </div>
               
               <div>
-                <button 
+                <motion.button 
+                  whileTap={{ scale: 0.98 }}
                   onClick={() => setInventoryMenuOpen(!inventoryMenuOpen)}
                   className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all duration-300 group ${
-                    ['inventory', 'issuances', 'returns', 'itemCard', 'waste'].includes(activeTab) 
-                    ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-[-4px]' 
-                    : 'text-slate-500 hover:bg-blue-50 hover:text-primary'
+                    ['inventory', 'issuances', 'returns', 'itemCard', 'waste', 'stockAudit'].includes(activeTab) 
+                    ? 'bg-slate-900 text-white shadow-xl shadow-slate-900/10' 
+                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <div className={`transition-transform duration-300 ${['inventory', 'issuances', 'returns', 'itemCard', 'waste'].includes(activeTab) ? 'scale-110' : 'group-hover:scale-110'}`}>
-                      <Package size={20} />
-                    </div>
-                    <span className="font-bold text-sm tracking-tight">المخزن</span>
+                    <Package size={20} className={['inventory', 'issuances', 'returns', 'itemCard', 'waste', 'stockAudit'].includes(activeTab) ? 'text-primary' : ''} />
+                    <span className="font-black text-sm">المخازن</span>
                   </div>
-                  <ChevronDown size={16} className={`transition-transform duration-300 ${inventoryMenuOpen ? 'rotate-180' : ''}`} />
-                </button>
+                  <ChevronDown size={14} className={`transition-transform duration-300 ${inventoryMenuOpen ? 'rotate-180' : ''}`} />
+                </motion.button>
                 
-                <div className={`overflow-hidden transition-all duration-300 ease-in-out ${inventoryMenuOpen ? 'max-h-56 opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
-                  <div className="mr-4 pr-4 border-r-2 border-slate-100 space-y-1.5">
-                    <SubNavButton active={activeTab === 'inventory'} onClick={() => handleNavClick('inventory')} label="رصيد المخزن" permission="inventory" profile={profile} />
-                    <SubNavButton active={activeTab === 'itemCard'} onClick={() => handleNavClick('itemCard')} label="كارت الصنف" permission="inventory" profile={profile} />
-                    <SubNavButton active={activeTab === 'issuances'} onClick={() => handleNavClick('issuances')} label="صرف الخامات" permission="inventory" profile={profile} />
-                    <SubNavButton active={activeTab === 'returns'} onClick={() => handleNavClick('returns')} label="المرتجع" permission="inventory" profile={profile} />
-                    <SubNavButton active={activeTab === 'stockAudit'} onClick={() => handleNavClick('stockAudit')} label="جرد المخزن" permission="inventory" profile={profile} />
-                    <SubNavButton active={activeTab === 'waste'} onClick={() => handleNavClick('waste')} label="الهالك" permission="inventory" profile={profile} />
-                  </div>
-                </div>
+                <AnimatePresence>
+                  {inventoryMenuOpen && (
+                    <motion.div 
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="overflow-hidden bg-slate-100/50 rounded-2xl mt-1 mx-1"
+                    >
+                      <div className="p-2 space-y-1 pr-4 border-r-2 border-primary/20 mr-4">
+                        <SubNavButton active={activeTab === 'inventory'} onClick={() => handleNavClick('inventory')} label="أرصدة الأصناف" permission="inventory" profile={profile} />
+                        <SubNavButton active={activeTab === 'itemCard'} onClick={() => handleNavClick('itemCard')} label="كارت الحركة" permission="inventory" profile={profile} />
+                        <SubNavButton active={activeTab === 'issuances'} onClick={() => handleNavClick('issuances')} label="صرف المواد" permission="inventory" profile={profile} />
+                        <SubNavButton active={activeTab === 'returns'} onClick={() => handleNavClick('returns')} label="المرتجعات" permission="inventory" profile={profile} />
+                        <SubNavButton active={activeTab === 'stockAudit'} onClick={() => handleNavClick('stockAudit')} label="جرد المخزن" permission="inventory" profile={profile} />
+                        <SubNavButton active={activeTab === 'waste'} onClick={() => handleNavClick('waste')} label="سجل الهالك" permission="inventory" profile={profile} />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
-            </>
+            </div>
           )}
 
           {(profile?.isAdmin || profile?.permissions?.production) && (
-            <div>
-              <button 
-                onClick={() => setProductionMenuOpen(!productionMenuOpen)}
-                className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all duration-300 group ${
-                  ['production', 'productionCosts', 'loading', 'deliveryReceipts'].includes(activeTab) 
-                  ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-[-4px]' 
-                  : 'text-slate-500 hover:bg-blue-50 hover:text-primary'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className={`transition-transform duration-300 ${['production', 'productionCosts', 'loading', 'deliveryReceipts'].includes(activeTab) ? 'scale-110' : 'group-hover:scale-110'}`}>
-                    <Layers size={20} />
+            <div className="space-y-1">
+              <div>
+                <motion.button 
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setProductionMenuOpen(!productionMenuOpen)}
+                  className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all duration-300 group ${
+                    ['production', 'productionCosts', 'loading', 'deliveryReceipts'].includes(activeTab) 
+                    ? 'bg-slate-900 text-white shadow-xl shadow-slate-900/10' 
+                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Layers size={20} className={['production', 'productionCosts', 'loading', 'deliveryReceipts'].includes(activeTab) ? 'text-primary' : ''} />
+                    <span className="font-black text-sm">خط الإنتاج</span>
                   </div>
-                  <span className="font-bold text-sm tracking-tight">الإنتاج</span>
-                </div>
-                <ChevronDown size={16} className={`transition-transform duration-300 ${productionMenuOpen ? 'rotate-180' : ''}`} />
-              </button>
-              
-              <div className={`overflow-hidden transition-all duration-300 ease-in-out ${productionMenuOpen ? 'max-h-60 opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
-                <div className="mr-4 pr-4 border-r-2 border-slate-100 space-y-1.5">
-                  <SubNavButton active={activeTab === 'production'} onClick={() => handleNavClick('production')} label="أوامر الإنتاج" permission="production" profile={profile} />
-                  <SubNavButton active={activeTab === 'productionCosts'} onClick={() => handleNavClick('productionCosts')} label="تكاليف الإنتاج" permission="production" profile={profile} />
-                  <SubNavButton active={activeTab === 'loading'} onClick={() => handleNavClick('loading')} label="حمولة العربية" permission="production" profile={profile} />
-                  <SubNavButton active={activeTab === 'deliveryReceipts'} onClick={() => handleNavClick('deliveryReceipts')} label="محاضر الاستلام" permission="production" profile={profile} />
-                </div>
+                  <ChevronDown size={14} className={`transition-transform duration-300 ${productionMenuOpen ? 'rotate-180' : ''}`} />
+                </motion.button>
+                
+                <AnimatePresence>
+                  {productionMenuOpen && (
+                    <motion.div 
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="overflow-hidden bg-slate-100/50 rounded-2xl mt-1 mx-1"
+                    >
+                      <div className="p-2 space-y-1 pr-4 border-r-2 border-primary/20 mr-4">
+                        <SubNavButton active={activeTab === 'production'} onClick={() => handleNavClick('production')} label="أوامر الشغل" permission="production" profile={profile} />
+                        <SubNavButton active={activeTab === 'productionCosts'} onClick={() => handleNavClick('productionCosts')} label="تحليل التكاليف" permission="production" profile={profile} />
+                        <SubNavButton active={activeTab === 'loading'} onClick={() => handleNavClick('loading')} label="بيان التحميل" permission="production" profile={profile} />
+                        <SubNavButton active={activeTab === 'deliveryReceipts'} onClick={() => handleNavClick('deliveryReceipts')} label="محاضر الاستلام" permission="production" profile={profile} />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
           )}
 
           {(profile?.isAdmin || profile?.permissions?.maintenance) && (
-            <div>
-              <button 
-                onClick={() => setMaintenanceMenuOpen(!maintenanceMenuOpen)}
-                className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all duration-300 group ${
-                  ['bladeSharpening', 'plateSharpening', 'machineMaintenance'].includes(activeTab) 
-                  ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-[-4px]' 
-                  : 'text-slate-500 hover:bg-blue-50 hover:text-primary'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className={`transition-transform duration-300 ${['bladeSharpening', 'plateSharpening', 'machineMaintenance'].includes(activeTab) ? 'scale-110' : 'group-hover:scale-110'}`}>
-                    <Wrench size={20} />
+            <div className="space-y-1">
+              <div>
+                <motion.button 
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setMaintenanceMenuOpen(!maintenanceMenuOpen)}
+                  className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all duration-300 group ${
+                    ['bladeSharpening', 'plateSharpening', 'machineMaintenance'].includes(activeTab) 
+                    ? 'bg-slate-900 text-white shadow-xl shadow-slate-900/10' 
+                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Wrench size={20} className={['bladeSharpening', 'plateSharpening', 'machineMaintenance'].includes(activeTab) ? 'text-primary' : ''} />
+                    <span className="font-black text-sm">قسم الصيانة</span>
                   </div>
-                  <span className="font-bold text-sm tracking-tight">الصيانة</span>
-                </div>
-                <ChevronDown size={16} className={`transition-transform duration-300 ${maintenanceMenuOpen ? 'rotate-180' : ''}`} />
-              </button>
-              
-              <div className={`overflow-hidden transition-all duration-300 ease-in-out ${maintenanceMenuOpen ? 'max-h-60 opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
-                <div className="mr-4 pr-4 border-r-2 border-slate-100 space-y-1.5">
-                  <SubNavButton active={activeTab === 'bladeSharpening'} onClick={() => handleNavClick('bladeSharpening')} label="سن الصواني" permission="maintenance" profile={profile} />
-                  <SubNavButton active={activeTab === 'plateSharpening'} onClick={() => handleNavClick('plateSharpening')} label="سن الصفايح" permission="maintenance" profile={profile} />
-                  <SubNavButton active={activeTab === 'machineMaintenance'} onClick={() => handleNavClick('machineMaintenance')} label="صيانة الماكينات" permission="maintenance" profile={profile} />
-                </div>
+                  <ChevronDown size={14} className={`transition-transform duration-300 ${maintenanceMenuOpen ? 'rotate-180' : ''}`} />
+                </motion.button>
+                
+                <AnimatePresence>
+                  {maintenanceMenuOpen && (
+                    <motion.div 
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="overflow-hidden bg-slate-100/50 rounded-2xl mt-1 mx-1"
+                    >
+                      <div className="p-2 space-y-1 pr-4 border-r-2 border-primary/20 mr-4">
+                        <SubNavButton active={activeTab === 'bladeSharpening'} onClick={() => handleNavClick('bladeSharpening')} label="خدمات السن" permission="maintenance" profile={profile} />
+                        <SubNavButton active={activeTab === 'plateSharpening'} onClick={() => handleNavClick('plateSharpening')} label="سن الصفايح" permission="maintenance" profile={profile} />
+                        <SubNavButton active={activeTab === 'machineMaintenance'} onClick={() => handleNavClick('machineMaintenance')} label="صيانة الماكينات" permission="maintenance" profile={profile} />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
           )}
@@ -1461,94 +1502,138 @@ function MainApp({
           <NavButton active={activeTab === 'purchases'} onClick={() => handleNavClick('purchases')} icon={<ShoppingCart size={20} />} label="المشتريات" permission="purchases" profile={profile} />
           
           {(profile?.isAdmin || profile?.permissions?.hr) && (
-            <div>
-              <button 
-                onClick={() => setHrMenuOpen(!hrMenuOpen)}
-                className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all duration-300 group ${
-                  ['employees', 'attendance', 'loans', 'payroll', 'hrTransactions', 'hrProduction', 'archive'].includes(activeTab) 
-                  ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-[-4px]' 
-                  : 'text-slate-500 hover:bg-blue-50 hover:text-primary'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className={`transition-transform duration-300 ${['employees', 'attendance', 'loans', 'payroll', 'hrTransactions', 'hrProduction', 'archive'].includes(activeTab) ? 'scale-110' : 'group-hover:scale-110'}`}>
-                    <DollarSign size={20} />
+            <div className="space-y-1">
+               <div className="pt-6 pb-2 px-6 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between">
+                <span>الموارد البشرية</span>
+                <div className="h-[1px] flex-1 bg-slate-100 mr-4" />
+              </div>
+
+              <div>
+                <motion.button 
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setHrMenuOpen(!hrMenuOpen)}
+                  className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all duration-300 group ${
+                    ['employees', 'attendance', 'loans', 'payroll', 'hrTransactions', 'hrProduction', 'archive'].includes(activeTab) 
+                    ? 'bg-slate-900 text-white shadow-xl shadow-slate-900/10' 
+                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <DollarSign size={20} className={['employees', 'attendance', 'loans', 'payroll', 'hrTransactions', 'hrProduction', 'archive'].includes(activeTab) ? 'text-primary' : ''} />
+                    <span className="font-black text-sm">الأجور والمرتبات</span>
                   </div>
-                  <span className="font-bold text-sm tracking-tight">الأجور والمرتبات</span>
-                </div>
-                <ChevronDown size={16} className={`transition-transform duration-300 ${hrMenuOpen ? 'rotate-180' : ''}`} />
-              </button>
-              
-              <div className={`overflow-hidden transition-all duration-300 ease-in-out ${hrMenuOpen ? 'max-h-[400px] opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
-                <div className="mr-4 pr-4 border-r-2 border-slate-100 space-y-1.5">
-                  <SubNavButton active={activeTab === 'employees'} onClick={() => handleNavClick('employees')} label="الموظفين" permission="hr" profile={profile} />
-                  <SubNavButton active={activeTab === 'attendance'} onClick={() => handleNavClick('attendance')} label="الحضور والانصراف" permission="hr" profile={profile} />
-                  <SubNavButton active={activeTab === 'hrProduction'} onClick={() => handleNavClick('hrProduction')} label="سجل الإنتاج" permission="hr" profile={profile} />
-                  <SubNavButton active={activeTab === 'hrTransactions'} onClick={() => handleNavClick('hrTransactions')} label="الحركات المالية" permission="hr" profile={profile} />
-                  <SubNavButton active={activeTab === 'loans'} onClick={() => handleNavClick('loans')} label="إدارة السلف" permission="hr" profile={profile} />
-                  <SubNavButton active={activeTab === 'payroll'} onClick={() => handleNavClick('payroll')} label="كشوف الرواتب" permission="hr" profile={profile} />
-                  <SubNavButton active={activeTab === 'archive'} onClick={() => handleNavClick('archive')} label="الأرشيف" permission="hr" profile={profile} />
-                </div>
+                  <ChevronDown size={14} className={`transition-transform duration-300 ${hrMenuOpen ? 'rotate-180' : ''}`} />
+                </motion.button>
+                
+                <AnimatePresence>
+                  {hrMenuOpen && (
+                    <motion.div 
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="overflow-hidden bg-slate-100/50 rounded-2xl mt-1 mx-1"
+                    >
+                      <div className="p-2 space-y-1 pr-4 border-r-2 border-primary/20 mr-4">
+                        <SubNavButton active={activeTab === 'employees'} onClick={() => handleNavClick('employees')} label="ملفات الموظفين" permission="hr" profile={profile} />
+                        <SubNavButton active={activeTab === 'attendance'} onClick={() => handleNavClick('attendance')} label="دفتر الحضور" permission="hr" profile={profile} />
+                        <SubNavButton active={activeTab === 'hrProduction'} onClick={() => handleNavClick('hrProduction')} label="سجل الإنتاج" permission="hr" profile={profile} />
+                        <SubNavButton active={activeTab === 'hrTransactions'} onClick={() => handleNavClick('hrTransactions')} label="تسويات مالية" permission="hr" profile={profile} />
+                        <SubNavButton active={activeTab === 'loans'} onClick={() => handleNavClick('loans')} label="طلبات السلف" permission="hr" profile={profile} />
+                        <SubNavButton active={activeTab === 'payroll'} onClick={() => handleNavClick('payroll')} label="مسير الرواتب" permission="hr" profile={profile} />
+                        <SubNavButton active={activeTab === 'archive'} onClick={() => handleNavClick('archive')} label="الأرشيف" permission="hr" profile={profile} />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
           )}
 
           {(profile?.isAdmin || profile?.permissions?.reports || profile?.permissions?.suppliers) && (
-            <div className="pt-4 pb-2 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">الإدارة والتقارير</div>
+            <div className="pt-6 pb-2 px-6 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between">
+              <span>الإدارة العليا</span>
+              <div className="h-[1px] flex-1 bg-slate-100 mr-4" />
+            </div>
           )}
           
           {(profile?.isAdmin || profile?.permissions?.reports) && (
             <div>
-              <button 
+              <motion.button 
+                whileTap={{ scale: 0.98 }}
                 onClick={() => setReportsMenuOpen(!reportsMenuOpen)}
                 className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all duration-300 group ${
                   ['reports', 'payrollMasterReport'].includes(activeTab) 
-                  ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-[-4px]' 
-                  : 'text-slate-500 hover:bg-blue-50 hover:text-primary'
+                  ? 'bg-slate-900 text-white shadow-xl shadow-slate-900/10' 
+                  : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <div className={`transition-transform duration-300 ${['reports', 'payrollMasterReport'].includes(activeTab) ? 'scale-110' : 'group-hover:scale-110'}`}>
-                    <BarChart3 size={20} />
-                  </div>
-                  <span className="font-bold text-sm tracking-tight">تقارير النظام</span>
+                  <BarChart3 size={20} className={['reports', 'payrollMasterReport'].includes(activeTab) ? 'text-primary' : ''} />
+                  <span className="font-black text-sm">مركز التقارير</span>
                 </div>
-                <ChevronDown size={16} className={`transition-transform duration-300 ${reportsMenuOpen ? 'rotate-180' : ''}`} />
-              </button>
+                <ChevronDown size={14} className={`transition-transform duration-300 ${reportsMenuOpen ? 'rotate-180' : ''}`} />
+              </motion.button>
               
-              <div className={`overflow-hidden transition-all duration-300 ease-in-out ${reportsMenuOpen ? 'max-h-48 opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
-                <div className="mr-4 pr-4 border-r-2 border-slate-100 space-y-1.5">
-                  <SubNavButton active={activeTab === 'reports'} onClick={() => handleNavClick('reports')} label="التقارير العامة" permission="reports" profile={profile} />
-                  <SubNavButton active={activeTab === 'payrollMasterReport'} onClick={() => handleNavClick('payrollMasterReport')} label="تقرير الأجور الشامل" permission="reports" profile={profile} />
-                </div>
-              </div>
+              <AnimatePresence>
+                {reportsMenuOpen && (
+                  <motion.div 
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden bg-slate-100/50 rounded-2xl mt-1 mx-1"
+                  >
+                    <div className="p-2 space-y-1 pr-4 border-r-2 border-primary/20 mr-4">
+                      <SubNavButton active={activeTab === 'reports'} onClick={() => handleNavClick('reports')} label="التحليل العام" permission="reports" profile={profile} />
+                      <SubNavButton active={activeTab === 'payrollMasterReport'} onClick={() => handleNavClick('payrollMasterReport')} label="كشف الأجور المجمع" permission="reports" profile={profile} />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           )}
 
           <NavButton active={activeTab === 'suppliers'} onClick={() => handleNavClick('suppliers')} icon={<Users size={20} />} label="الموردين" permission="suppliers" profile={profile} />
           
-          {(profile?.isAdmin || profile?.permissions?.settings) && (
-            <div className="pt-6 pb-2 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">النظام</div>
-          )}
+          <div className="pt-8 pb-2 px-6 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between">
+            <span>النظام</span>
+            <div className="h-[1px] flex-1 bg-slate-100 mr-4" />
+          </div>
           
           {profile?.isAdmin && (
-            <NavButton active={activeTab === 'userManagement'} onClick={() => handleNavClick('userManagement')} icon={<ShieldAlert size={20} />} label="إدارة المستخدمين" />
+            <NavButton active={activeTab === 'userManagement'} onClick={() => handleNavClick('userManagement')} icon={<ShieldAlert size={20} />} label="المستخدمين" />
           )}
           
           <NavButton active={activeTab === 'settings'} onClick={() => handleNavClick('settings')} icon={<Settings size={20} />} label="الإعدادات" permission="settings" profile={profile} />
         </nav>
-        <div className="p-6 border-t border-slate-100 bg-slate-50/50">
-          <div className="flex items-center gap-3 p-2 mb-4 bg-white rounded-2xl border border-slate-200/60 shadow-sm">
-            <img src={user.photoURL || ''} className="w-10 h-10 rounded-xl border-2 border-white shadow-sm" referrerPolicy="no-referrer" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold truncate text-slate-900">{user.displayName}</p>
-              <p className="text-[10px] text-slate-500 truncate">{user.email}</p>
+
+        {/* User Profile Footer */}
+        <div className="p-4 bg-white border-t border-slate-100">
+          <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-[1.25rem] border border-slate-200 shadow-inner">
+            <div className="relative">
+              <img 
+                src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}&bg=2563eb&color=fff`} 
+                className="w-10 h-10 rounded-xl border-2 border-white shadow-sm" 
+                referrerPolicy="no-referrer" 
+              />
+              <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-white rounded-full" />
             </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-black truncate text-slate-900 uppercase tracking-tight">{user.displayName}</p>
+              <div className="flex items-center gap-1">
+                 <Badge variant="outline" className="text-[8px] px-1 py-0 border-primary/20 text-primary font-black uppercase">
+                   {profile?.isAdmin ? 'مدير النظام' : 'مستخدم'}
+                 </Badge>
+              </div>
+            </div>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={logout}
+              className="h-8 w-8 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+            >
+              <LogOut size={16} />
+            </Button>
           </div>
-          <Button variant="ghost" className="w-full justify-start text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-xl" onClick={logout}>
-            <LogOut size={18} className="ml-2" />
-            تسجيل الخروج
-          </Button>
         </div>
       </aside>
 
@@ -2121,41 +2206,55 @@ function MainApp({
 function NavButton({ active, onClick, icon, label, permission, profile }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string, permission?: string, profile?: UserProfile | null }) {
   if (permission && profile && !profile.isAdmin && !profile.permissions[permission as keyof UserProfile['permissions']]) return null;
   return (
-    <button
+    <motion.button
+      whileHover={{ x: -4 }}
+      whileTap={{ scale: 0.98 }}
       onClick={onClick}
-      className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-300 group relative active:scale-[0.98] ${
+      className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-300 group relative ${
         active 
-          ? 'bg-blue-50/80 text-primary shadow-[0_2px_10px_rgba(37,99,235,0.06)] ring-1 ring-blue-100/50 translate-x-[-4px]' 
-          : 'text-slate-500 hover:bg-blue-50/40 hover:text-primary hover:translate-x-[-4px] hover:shadow-sm'
+          ? 'bg-primary/10 text-primary' 
+          : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
       }`}
     >
       {active && (
-        <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-8 bg-primary rounded-l-lg" />
+        <motion.div 
+          layoutId="nav-active-indicator"
+          className="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-8 bg-primary rounded-l-lg shadow-[0_0_12px_rgba(37,99,235,0.4)]"
+        />
       )}
-      <div className={`transition-all duration-300 flex items-center justify-center w-8 h-8 rounded-xl ${active ? 'bg-primary/10 text-primary scale-110 shadow-sm' : 'bg-transparent text-slate-400 group-hover:bg-white group-hover:text-primary group-hover:scale-110 group-hover:shadow-sm'}`}>
+      <div className={`flex items-center justify-center w-9 h-9 rounded-xl transition-all duration-300 ${
+        active ? 'bg-primary text-white shadow-lg shadow-primary/20 scale-110' : 'bg-slate-100 text-slate-400 group-hover:bg-white group-hover:text-primary group-hover:shadow-sm'
+      }`}>
         {icon}
       </div>
-      <span className={`font-bold text-sm tracking-tight ${active ? 'font-black' : ''}`}>{label}</span>
-      {active && <div className="mr-auto w-1.5 h-1.5 bg-primary rounded-full shadow-[0_0_8px_rgb(59,130,246,0.5)]" />}
-    </button>
+      <span className={`font-bold text-sm tracking-tight flex-1 text-right ${active ? 'text-primary' : ''}`}>{label}</span>
+      {active && (
+        <motion.div 
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          className="w-1.5 h-1.5 bg-primary rounded-full" 
+        />
+      )}
+    </motion.button>
   );
 }
 
 function SubNavButton({ active, onClick, label, permission, profile }: { active: boolean, onClick: () => void, label: string, permission?: string, profile?: UserProfile | null }) {
   if (permission && profile && !profile.isAdmin && !profile.permissions[permission as keyof UserProfile['permissions']]) return null;
   return (
-    <button 
+    <motion.button 
+      whileHover={{ x: -6 }}
+      whileTap={{ scale: 0.97 }}
       onClick={onClick}
-      className={`w-full flex items-center px-4 py-2.5 rounded-xl transition-all duration-200 text-xs font-bold relative active:scale-[0.98] ${
+      className={`w-full flex items-center px-4 py-2.5 rounded-xl transition-all duration-200 text-xs font-bold relative group ${
         active 
-          ? 'bg-blue-50/80 text-primary shadow-sm ring-1 ring-blue-100/50 translate-x-[-6px]' 
-          : 'text-slate-400 hover:bg-slate-50 hover:text-primary hover:translate-x-[-4px] hover:shadow-sm'
+          ? 'bg-white text-primary shadow-sm border border-slate-100' 
+          : 'text-slate-400 hover:text-slate-600'
       }`}
     >
-      <div className={`w-1.5 h-1.5 rounded-full ml-2 transition-all duration-300 ${active ? 'bg-primary scale-125 shadow-[0_0_8px_rgb(59,130,246,0.5)]' : 'bg-slate-300 group-hover:bg-primary group-hover:scale-125'}`} />
+      <div className={`w-1 h-3 rounded-full ml-3 transition-all duration-300 ${active ? 'bg-primary' : 'bg-slate-200 group-hover:bg-slate-400'}`} />
       <span className="flex-1 text-right">{label}</span>
-      {active && <div className="w-1 h-1 rounded-full bg-primary" />}
-    </button>
+    </motion.button>
   );
 }
 

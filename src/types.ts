@@ -199,7 +199,7 @@ export interface FinancialTransaction {
   id: string;
   employeeId: string;
   date: string;
-  type: 'مكافأة' | 'خصم' | 'بدل' | 'إضافي' | 'مصروف' | 'خصم سلف';
+  type: 'مكافأة' | 'خصم' | 'بدل' | 'إضافي' | 'مصروف' | 'خصم سلف' | 'أوفرتايم' | 'مكافآت' | 'سلفة' | 'عهدة' | 'سلفة مستردة' | 'جزاء';
   amount: number;
   description: string;
   overtimeHours?: number;
