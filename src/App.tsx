@@ -78,6 +78,8 @@ import {
   Pie, 
   Cell,
   LineChart,
+  AreaChart,
+  Area,
   ComposedChart,
   Line,
   Legend
@@ -7242,9 +7244,35 @@ function ReportsView({
   machineMaintenance: MachineMaintenance[],
   companySettings: CompanySettings
 }) {
-  const [activeReportTab, setActiveReportTab] = useState('dashboard');
-  
-  // 1. Data for Warehouse Value Chart
+  const [activeReportTab, setActiveReportTab] = useState<'dashboard' | 'warehouse' | 'purchases'>('dashboard');
+
+  // Logic for Purchase Reports
+  const purchasesBySupplier = suppliers.map(s => ({
+    name: s.name,
+    amount: purchases.filter(p => p.supplierId === s.id).reduce((acc, p) => acc + p.total, 0)
+  })).filter(s => s.amount > 0).sort((a, b) => b.amount - a.amount);
+
+  const topPurchasedItems = issuances.reduce((acc: any[], iss) => {
+    // Note: User might mean items with most purchases, but standard purchase reports
+    // often look at what we are buying most.
+    return acc;
+  }, []);
+
+  // Alternative for Top Items by Purchase Value
+  const itemsByPurchaseValue = items.map(item => ({
+    name: item.name,
+    value: purchases.filter(p => p.itemId === item.id).reduce((acc, p) => acc + p.total, 0)
+  })).filter(i => i.value > 0).sort((a, b) => b.value - a.value).slice(0, 7);
+
+  const purchaseTrends = Array.from({ length: 6 }).map((_, i) => {
+    const date = new Date();
+    date.setMonth(date.getMonth() - i);
+    const monthStr = format(date, 'MMM yyyy');
+    const amount = purchases
+      .filter(p => format(new Date(p.date), 'MMM yyyy') === monthStr)
+      .reduce((acc, p) => acc + p.total, 0);
+    return { name: monthStr, amount };
+  }).reverse();
   const warehouseData = warehouses.map(w => {
     const value = items
       .filter(i => i.warehouseId === w.id)
@@ -7366,10 +7394,16 @@ function ReportsView({
           >
             جرد المخزن الشامل
           </button>
+          <button 
+            onClick={() => setActiveReportTab('purchases')}
+            className={`px-6 py-2 rounded-xl font-black transition-all ${activeReportTab === 'purchases' ? 'bg-white shadow-sm text-primary' : 'text-slate-500'}`}
+          >
+            تحليل المشتريات
+          </button>
         </div>
       </div>
 
-      {activeReportTab === 'dashboard' ? (
+      {activeReportTab === 'dashboard' && (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <Card className="dribbble-card border-none bg-blue-50/50 shadow-sm">
@@ -7575,7 +7609,9 @@ function ReportsView({
         </Card>
       </div>
       </div>
-      ) : (
+      )}
+
+      {activeReportTab === 'warehouse' && (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
           <Card className="dribbble-card border-none">
             <CardHeader className="flex flex-row items-center justify-between">
@@ -7614,6 +7650,115 @@ function ReportsView({
                   ))}
                 </TableBody>
               </Table>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {activeReportTab === 'purchases' && (
+        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Card className="dribbble-card border-none bg-blue-50/50 shadow-sm">
+              <CardContent className="pt-6">
+                <p className="text-xs font-black text-blue-600 uppercase tracking-widest mb-1">إجمالي المشتريات (6 أشهر)</p>
+                <h3 className="text-3xl font-black text-slate-900">
+                  {purchaseTrends.reduce((acc, t) => acc + t.amount, 0).toLocaleString()} 
+                  <small className="text-xs font-bold text-slate-400 mr-2">ج.م</small>
+                </h3>
+              </CardContent>
+            </Card>
+            <Card className="dribbble-card border-none bg-emerald-50/50 shadow-sm">
+              <CardContent className="pt-6">
+                <p className="text-xs font-black text-emerald-600 uppercase tracking-widest mb-1">متوسط قيمة الفاتورة</p>
+                <h3 className="text-3xl font-black text-slate-900">
+                  {(purchases.length > 0 ? (purchases.reduce((acc, p) => acc + p.total, 0) / purchases.length) : 0).toLocaleString()} 
+                  <small className="text-xs font-bold text-slate-400 mr-2">ج.م</small>
+                </h3>
+              </CardContent>
+            </Card>
+            <Card className="dribbble-card border-none bg-purple-50/50 shadow-sm">
+              <CardContent className="pt-6">
+                <p className="text-xs font-black text-purple-600 uppercase tracking-widest mb-1">عدد حركات الشراء</p>
+                <h3 className="text-3xl font-black text-slate-900">{purchases.length} <small className="text-xs font-bold text-slate-400 mr-2">حركة</small></h3>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <Card className="dribbble-card border-none shadow-xl shadow-slate-200/50">
+              <CardHeader>
+                <CardTitle className="text-xl font-black">تطور المشتريات شهرياً</CardTitle>
+              </CardHeader>
+              <CardContent className="h-[350px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={purchaseTrends}>
+                    <defs>
+                      <linearGradient id="colorPurchases" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }} />
+                    <Tooltip 
+                      contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px' }}
+                      formatter={(value: number) => [`${value.toLocaleString()} ج.م`, 'المشتريات']}
+                    />
+                    <Area type="monotone" dataKey="amount" stroke="#3b82f6" fillOpacity={1} fill="url(#colorPurchases)" strokeWidth={3} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card className="dribbble-card border-none shadow-xl shadow-slate-200/50">
+              <CardHeader>
+                <CardTitle className="text-xl font-black">أكثر الأصناف شراءً (كقيمة)</CardTitle>
+              </CardHeader>
+              <CardContent className="h-[350px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={itemsByPurchaseValue}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={100}
+                      paddingAngle={5}
+                      dataKey="value"
+                    >
+                      {itemsByPurchaseValue.map((_entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px' }}
+                      formatter={(value: number) => `${value.toLocaleString()} ج.م`} 
+                    />
+                    <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ paddingTop: '20px', fontWeight: 600 }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="dribbble-card border-none shadow-xl shadow-slate-200/50">
+            <CardHeader>
+              <CardTitle className="text-xl font-black">إجمالي المشتريات لكل مورد</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={purchasesBySupplier} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                  <XAxis type="number" hide />
+                  <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 700, fill: '#1e293b' }} width={120} />
+                  <Tooltip 
+                    contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px' }}
+                    formatter={(value: number) => [`${value.toLocaleString()} ج.م`, 'إجمالي الشراء']}
+                  />
+                  <Bar dataKey="amount" fill="#10b981" radius={[0, 8, 8, 0]} barSize={30} />
+                </BarChart>
+              </ResponsiveContainer>
             </CardContent>
           </Card>
         </div>
