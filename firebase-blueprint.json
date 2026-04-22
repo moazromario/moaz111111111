@@ -109,6 +109,8 @@
         "paintColor": { "type": "string" },
         "fabricType": { "type": "string" },
         "upholsteryDetails": { "type": "string" },
+        "technicalSpecs": { "type": "string" },
+        "cuttingListUrl": { "type": "string" },
         "sellingPrice": { "type": "number" },
         "estimatedCost": { "type": "number" },
         "contractDate": { "type": "string", "format": "date" },
@@ -117,7 +119,10 @@
         "status": { "type": "string" },
         "workflowStep": { "type": "number" },
         "priority": { "type": "string", "enum": ["منخفضة", "متوسطة", "عالية"] },
-        "notes": { "type": "string" }
+        "qualityStatus": { "type": "string", "enum": ["pending", "approved", "failed"] },
+        "qualityNotes": { "type": "string" },
+        "notes": { "type": "string" },
+        "readyForDelivery": { "type": "boolean" }
       },
       "required": ["orderNo", "productName", "status"]
     },
@@ -420,6 +425,102 @@
       },
       "required": ["email"]
     },
+    "BOM": {
+      "title": "BOM",
+      "description": "Bill of Materials for a product",
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string" },
+        "items": { "type": "array", "items": { "type": "object", "properties": { "itemId": { "type": "string" }, "quantity": { "type": "number" } } } },
+        "totalExpectedMaterialCost": { "type": "number" }
+      },
+      "required": ["productId", "items"]
+    },
+    "WorkCenter": {
+      "title": "WorkCenter",
+      "description": "Factory work center definition",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "hourlyRate": { "type": "number" }
+      },
+      "required": ["name", "hourlyRate"]
+    },
+    "ManufacturingOperation": {
+      "title": "ManufacturingOperation",
+      "description": "Logged production operation",
+      "type": "object",
+      "properties": {
+        "jobId": { "type": "string" },
+        "workCenterId": { "type": "string" },
+        "stageName": { "type": "string" },
+        "startTime": { "type": "string", "format": "date-time" },
+        "endTime": { "type": "string", "format": "date-time" },
+        "actualDurationHours": { "type": "number" }
+      },
+      "required": ["jobId", "workCenterId", "stageName", "actualDurationHours"]
+    },
+    "LostSale": {
+      "title": "LostSale",
+      "description": "Record of requested but unavailable items",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date-time" },
+        "showroomId": { "type": "string" },
+        "productName": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["date", "showroomId", "productName"]
+    },
+    "SalesOrder": {
+      "title": "SalesOrder",
+      "description": "Customer sales order",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date-time" },
+        "showroomId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "totalAmount": { "type": "number" },
+        "totalCost": { "type": "number" },
+        "netProfit": { "type": "number" }
+      },
+      "required": ["date", "showroomId", "customerName", "totalAmount"]
+    },
+    "TransferOrder": {
+      "title": "TransferOrder",
+      "description": "Factory to showroom transfer",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date-time" },
+        "fromWarehouse": { "type": "string" },
+        "toShowroomId": { "type": "string" },
+        "status": { "type": "string", "enum": ["تم التحويل", "تم الاستلام"] }
+      },
+      "required": ["date", "fromWarehouse", "toShowroomId"]
+    },
+    "Showroom": {
+      "title": "Showroom",
+      "description": "Showroom location",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "location": { "type": "string" }
+      },
+      "required": ["name"]
+    },
+    "ShowroomInventory": {
+      "title": "ShowroomInventory",
+      "description": "Stock in showroom",
+      "type": "object",
+      "properties": {
+        "showroomId": { "type": "string" },
+        "itemId": { "type": "string" },
+        "quantity": { "type": "number" },
+        "costPrice": { "type": "number" }
+      },
+      "required": ["showroomId", "itemId", "quantity"]
+    },
     "CompanySettings": {
       "title": "CompanySettings",
       "description": "General settings and company info",
@@ -460,6 +561,14 @@
     "/jobLabors/{id}": { "schema": "JobLabor", "description": "Job labor cost records" },
     "/jobOtherCosts/{id}": { "schema": "JobOtherCost", "description": "Job other cost records" },
     "/deliveryReceipts/{id}": { "schema": "DeliveryReceipt", "description": "Client delivery receipts" },
-    "/stockAudits/{id}": { "schema": "StockAudit", "description": "Warehouse stock audit records" }
+    "/stockAudits/{id}": { "schema": "StockAudit", "description": "Warehouse stock audit records" },
+    "/showrooms/{id}": { "schema": "Showroom", "description": "Showrooms list" },
+    "/showroomInventory/{id}": { "schema": "ShowroomInventory", "description": "Showroom inventory" },
+    "/transferOrders/{id}": { "schema": "TransferOrder", "description": "Factory to showroom transfers" },
+    "/salesOrders/{id}": { "schema": "SalesOrder", "description": "Customer sales orders" },
+    "/lostSales/{id}": { "schema": "LostSale", "description": "Records of missed opportunities" },
+    "/boms/{id}": { "schema": "BOM", "description": "Bill of Materials definitions" },
+    "/workCenters/{id}": { "schema": "WorkCenter", "description": "Factory work centers" },
+    "/manufacturingOperations/{id}": { "schema": "ManufacturingOperation", "description": "Logged production operations" }
   }
 }

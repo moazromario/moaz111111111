@@ -3,13 +3,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { SalesModule } from './components/SalesModule';
 import { AuthProvider, useAuth } from './AuthContext';
 import { loginWithGoogle, logout } from './firebase';
 import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, 
   Package, 
-  ShoppingCart, 
+  ShoppingCart,
+  ShoppingBag, 
   ArrowUpRight, 
   ArrowRight,
   ClipboardCheck,
@@ -26,6 +28,8 @@ import {
   Truck,
   Calendar,
   CheckCircle2,
+  PackageCheck,
+  RotateCcw,
   Printer,
   History,
   ChevronRight,
@@ -80,7 +84,7 @@ import {
 } from 'recharts';
 import { db, auth } from './firebase';
 import { collection, onSnapshot, query, addDoc, updateDoc, deleteDoc, doc, increment, serverTimestamp, writeBatch, setDoc } from 'firebase/firestore';
-import { Item, Supplier, Purchase, Issuance, Warehouse, Unit, CostCenter, ProductionJob, LoadingManifest, DeliveryReceipt, Waste, BladeSharpening, PlateSharpening, MachineMaintenance, Employee, Attendance, FinancialTransaction, Loan, Payroll, SupplierPayment, JobLabor, JobOtherCost, ProductionRecord, CompanySettings, UserProfile, StockAudit } from './types';
+import { Item, Supplier, Purchase, Issuance, Warehouse, Unit, CostCenter, ProductionJob, LoadingManifest, DeliveryReceipt, Waste, BladeSharpening, PlateSharpening, MachineMaintenance, Employee, Attendance, FinancialTransaction, Loan, Payroll, SupplierPayment, JobLabor, JobOtherCost, ProductionRecord, CompanySettings, UserProfile, StockAudit, BOM, WorkCenter, ManufacturingOperation, LostSale, SalesOrder } from './types';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import * as XLSX from 'xlsx';
@@ -822,6 +826,11 @@ function MainApp({
   const [jobOtherCosts, setJobOtherCosts] = useState<JobOtherCost[]>([]);
   const [deliveryReceipts, setDeliveryReceipts] = useState<DeliveryReceipt[]>([]);
   const [stockAudits, setStockAudits] = useState<StockAudit[]>([]);
+  const [boms, setBoms] = useState<BOM[]>([]);
+  const [workCenters, setWorkCenters] = useState<WorkCenter[]>([]);
+  const [manufacturingOperations, setManufacturingOperations] = useState<ManufacturingOperation[]>([]);
+  const [lostSales, setLostSales] = useState<LostSale[]>([]);
+  const [salesOrders, setSalesOrders] = useState<SalesOrder[]>([]);
   const [hrMenuOpen, setHrMenuOpen] = useState(false);
   const [reportsMenuOpen, setReportsMenuOpen] = useState(false);
 
@@ -1220,6 +1229,41 @@ function MainApp({
       }, (err) => handleFirestoreError(err, 'list', 'stockAudits'));
     }
 
+    let unsubBoms = () => {};
+    if (profile.isAdmin || profile.permissions.production || profile.permissions.reports) {
+      unsubBoms = onSnapshot(collection(db, 'boms'), (snap) => {
+        setBoms(snap.docs.map(d => ({ id: d.id, ...d.data() } as BOM)));
+      }, (err) => handleFirestoreError(err, 'list', 'boms'));
+    }
+
+    let unsubWorkCenters = () => {};
+    if (profile.isAdmin || profile.permissions.production || profile.permissions.reports) {
+      unsubWorkCenters = onSnapshot(collection(db, 'workCenters'), (snap) => {
+        setWorkCenters(snap.docs.map(d => ({ id: d.id, ...d.data() } as WorkCenter)));
+      }, (err) => handleFirestoreError(err, 'list', 'workCenters'));
+    }
+
+    let unsubManufacturingOperations = () => {};
+    if (profile.isAdmin || profile.permissions.production || profile.permissions.reports) {
+      unsubManufacturingOperations = onSnapshot(collection(db, 'manufacturingOperations'), (snap) => {
+        setManufacturingOperations(snap.docs.map(d => ({ id: d.id, ...d.data() } as ManufacturingOperation)));
+      }, (err) => handleFirestoreError(err, 'list', 'manufacturingOperations'));
+    }
+
+    let unsubLostSales = () => {};
+    if (profile.isAdmin || profile.permissions.dashboard || profile.permissions.reports) {
+      unsubLostSales = onSnapshot(collection(db, 'lostSales'), (snap) => {
+        setLostSales(snap.docs.map(d => ({ id: d.id, ...d.data() } as LostSale)));
+      }, (err) => handleFirestoreError(err, 'list', 'lostSales'));
+    }
+
+    let unsubSalesOrders = () => {};
+    if (profile.isAdmin || profile.permissions.dashboard || profile.permissions.reports) {
+      unsubSalesOrders = onSnapshot(collection(db, 'salesOrders'), (snap) => {
+        setSalesOrders(snap.docs.map(d => ({ id: d.id, ...d.data() } as SalesOrder)));
+      }, (err) => handleFirestoreError(err, 'list', 'salesOrders'));
+    }
+
     return () => {
       unsubWarehouses();
       unsubUnits();
@@ -1245,6 +1289,11 @@ function MainApp({
       unsubJobOtherCosts();
       unsubDeliveryReceipts();
       unsubStockAudits();
+      unsubBoms();
+      unsubWorkCenters();
+      unsubManufacturingOperations();
+      unsubLostSales();
+      unsubSalesOrders();
     };
   }, [user, profile]);
 
@@ -1593,6 +1642,7 @@ function MainApp({
           )}
 
           <NavButton active={activeTab === 'suppliers'} onClick={() => handleNavClick('suppliers')} icon={<Users size={20} />} label="الموردين" permission="suppliers" profile={profile} />
+          <NavButton active={activeTab === 'sales'} onClick={() => handleNavClick('sales')} icon={<ShoppingBag size={20} />} label="المبيعات والمعارض" permission="reports" profile={profile} />                
           
           <div className="pt-8 pb-2 px-6 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between">
             <span>النظام</span>
@@ -1686,6 +1736,7 @@ function MainApp({
             jobLabors={jobLabors}
             jobOtherCosts={jobOtherCosts}
             companyInfo={companySettings}
+            items={items}
           />
         )}
         {activeTab === 'productionCosts' && (
@@ -1697,6 +1748,9 @@ function MainApp({
             jobLabors={jobLabors}
             jobOtherCosts={jobOtherCosts}
             items={items}
+            boms={boms}
+            workCenters={workCenters}
+            manufacturingOperations={manufacturingOperations}
           />
         )}
         {activeTab === 'loading' && <LoadingManifests manifests={loadingManifests} companyInfo={companySettings} />}
@@ -1726,6 +1780,14 @@ function MainApp({
           />
         )}
         {activeTab === 'archive' && <ArchiveView employees={employees} payrolls={payrolls} transactions={hrTransactions} />}
+        {activeTab === 'sales' && (
+          <SalesModule 
+            showrooms={[]}
+            transferOrders={[]}
+            salesOrders={[]}
+            productionJobs={productionJobs}
+          />
+        )}
         {activeTab === 'suppliers' && (
           <Suppliers 
             suppliers={suppliers} 
@@ -3471,32 +3533,65 @@ function PrintJobCard({ job, companyInfo }: { job: ProductionJob, companyInfo: C
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-6 mb-10">
-        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-          <span className="text-xs font-black text-slate-400 uppercase tracking-widest block mb-2">المواصفات الفنية</span>
-          <div className="space-y-2 text-sm">
-            <p><span className="font-bold">نوع الخشب:</span> {job.woodType || '---'}</p>
-            <p><span className="font-bold">المقاسات:</span> {job.dimensions || '---'}</p>
-            <p><span className="font-bold">لون الدهان:</span> {job.paintColor || '---'}</p>
+      <div className="grid grid-cols-1 mb-10">
+        <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200">
+          <span className="text-xs font-black text-slate-400 uppercase tracking-widest block mb-4">المواصفات الفنية والتفصيلية للمصنع (Technical Specs)</span>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-8 mb-6 border-b border-slate-200 pb-6">
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">نوع الخشب</p>
+              <p className="font-black text-slate-900">{job.woodType || '---'}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">المقاسات</p>
+              <p className="font-black text-slate-900">{job.dimensions || '---'}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">لون الدهان</p>
+              <p className="font-black text-slate-900">{job.paintColor || '---'}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">نوع القماش</p>
+              <p className="font-black text-slate-900">{job.fabricType || '---'}</p>
+            </div>
+          </div>
+          <div className="space-y-4">
+             <div className="flex justify-between items-start">
+               <div className="flex-1">
+                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">تعليمات التصنيع</p>
+                 <pre className="text-sm font-bold text-slate-700 whitespace-pre-wrap leading-relaxed">
+                   {job.technicalSpecs || 'لا توجد تعليمات فنية إضافية'}
+                 </pre>
+               </div>
+               <div className="w-48 text-left">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">المكونات</p>
+                  <p className="text-sm font-bold leading-relaxed">{job.components || '---'}</p>
+               </div>
+             </div>
           </div>
         </div>
-        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-          <span className="text-xs font-black text-slate-400 uppercase tracking-widest block mb-2">التنجيد والقماش</span>
-          <div className="space-y-2 text-sm">
-            <p><span className="font-bold">نوع القماش:</span> {job.fabricType || '---'}</p>
-            <p><span className="font-bold">التفاصيل:</span> {job.upholsteryDetails || '---'}</p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-10 mb-10">
+        <div>
+          <span className="text-xs font-black text-slate-400 uppercase tracking-widest block mb-3">تفاصيل التنجيد</span>
+          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 font-bold text-sm">
+            {job.upholsteryDetails || 'لا توجد تفاصيل'}
           </div>
         </div>
-        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-          <span className="text-xs font-black text-slate-400 uppercase tracking-widest block mb-2">المكونات</span>
-          <p className="text-sm font-bold leading-relaxed">{job.components || '---'}</p>
+        <div>
+          {job.cuttingListUrl && (
+            <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 flex flex-col items-center justify-center text-emerald-700">
+               <span className="text-[10px] font-black uppercase tracking-widest mb-1">Cutting List Attached</span>
+               <span className="font-bold text-xs truncate w-full text-center">{job.cuttingListUrl}</span>
+            </div>
+          )}
         </div>
       </div>
 
       {job.referenceImage && (
-        <div className="mb-10">
+        <div className="mb-10 page-break-inside-avoid">
           <span className="text-xs font-black text-slate-400 uppercase tracking-widest block mb-3">صورة المرجع</span>
-          <div className="border-4 border-slate-100 rounded-3xl overflow-hidden max-h-[400px]">
+          <div className="border-4 border-slate-100 rounded-3xl overflow-hidden max-h-[500px]">
             <img src={job.referenceImage} alt="Reference" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
           </div>
         </div>
@@ -3792,7 +3887,8 @@ function ProductionLine({
   employees,
   jobLabors,
   jobOtherCosts,
-  companyInfo
+  companyInfo,
+  items
 }: { 
   costCenters: CostCenter[], 
   productionJobs: ProductionJob[],
@@ -3800,11 +3896,13 @@ function ProductionLine({
   employees: Employee[],
   jobLabors: JobLabor[],
   jobOtherCosts: JobOtherCost[],
-  companyInfo: CompanySettings
+  companyInfo: CompanySettings,
+  items: Item[]
 }) {
   const [showAdd, setShowAdd] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [editingJob, setEditingJob] = useState<ProductionJob | null>(null);
+  const [viewingJobId, setViewingJobId] = useState<string | null>(null);
   const [printingJob, setPrintingJob] = useState<ProductionJob | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterPriority, setFilterPriority] = useState<string>('all');
@@ -3821,6 +3919,8 @@ function ProductionLine({
     paintColor: '',
     fabricType: '',
     upholsteryDetails: '',
+    technicalSpecs: '',
+    cuttingListUrl: '',
     sellingPrice: 0,
     estimatedCost: 0,
     workflowStep: 0,
@@ -3828,7 +3928,9 @@ function ProductionLine({
     startDate: new Date().toISOString().split('T')[0],
     deadline: '',
     priority: 'متوسطة' as const,
-    notes: ''
+    notes: '',
+    qualityStatus: 'pending' as const,
+    readyForDelivery: false
   });
 
   const filteredJobs = productionJobs.filter(job => {
@@ -3879,6 +3981,8 @@ function ProductionLine({
         paintColor: '',
         fabricType: '',
         upholsteryDetails: '',
+        technicalSpecs: '',
+        cuttingListUrl: '',
         sellingPrice: 0,
         estimatedCost: 0,
         workflowStep: 0,
@@ -3886,7 +3990,9 @@ function ProductionLine({
         startDate: new Date().toISOString().split('T')[0],
         deadline: '',
         priority: 'متوسطة',
-        notes: ''
+        notes: '',
+        qualityStatus: 'pending',
+        readyForDelivery: false
       });
     } catch (err) {
       handleFirestoreError(err, 'write', 'productionJobs');
@@ -3916,15 +4022,40 @@ function ProductionLine({
   const stats = {
     total: productionJobs.length,
     highPriority: productionJobs.filter(j => j.priority === 'عالية').length,
-    completed: productionJobs.filter(j => j.status === costCenters[costCenters.length - 1]?.id).length
+    completed: productionJobs.filter(j => j.status === costCenters[costCenters.length - 1]?.id).length,
+    readyForDelivery: productionJobs.filter(j => j.readyForDelivery).length,
+    qcPending: productionJobs.filter(j => j.qualityStatus === 'pending').length
   };
+
+  const handleUpdateQuality = async (jobId: string, status: 'approved' | 'failed', notes: string = '') => {
+    try {
+      await updateDoc(doc(db, 'productionJobs', jobId), {
+        qualityStatus: status,
+        qualityNotes: notes
+      });
+    } catch (err) {
+      handleFirestoreError(err, 'update', 'productionJobs');
+    }
+  };
+
+  const handleSetReadyForDelivery = async (jobId: string, ready: boolean) => {
+    try {
+      await updateDoc(doc(db, 'productionJobs', jobId), {
+        readyForDelivery: ready
+      });
+    } catch (err) {
+      handleFirestoreError(err, 'update', 'productionJobs');
+    }
+  };
+
+  const viewingJob = productionJobs.find(j => j.id === viewingJobId);
 
   return (
     <div className="space-y-8 h-full flex flex-col">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-          <h2 className="text-2xl md:text-4xl font-black tracking-tight text-slate-900">خط الإنتاج الذكي</h2>
-          <p className="text-slate-500 mt-1 font-medium text-sm md:text-base">تتبع مراحل التصنيع بنظام السحب والإفلات</p>
+          <h2 className="text-2xl md:text-4xl font-black tracking-tight text-slate-900">نظام التصنيع العالمي (Furniture ERP)</h2>
+          <p className="text-slate-500 mt-1 font-medium text-sm md:text-base">إدارة دورة حياة المنتج من النجارة حتى التسليم</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="hidden md:flex items-center gap-4 ml-4">
@@ -3934,8 +4065,13 @@ function ProductionLine({
             </div>
             <div className="w-px h-8 bg-slate-200" />
             <div className="flex flex-col items-end">
-              <span className="text-[10px] font-black text-red-400 uppercase tracking-widest">أولوية عالية</span>
-              <span className="text-xl font-black text-red-500">{stats.highPriority}</span>
+              <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">جاهز للتسليم</span>
+              <span className="text-xl font-black text-emerald-500">{stats.readyForDelivery}</span>
+            </div>
+            <div className="w-px h-8 bg-slate-200" />
+            <div className="flex flex-col items-end">
+              <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest">فحص الجودة</span>
+              <span className="text-xl font-black text-amber-500">{stats.qcPending}</span>
             </div>
           </div>
           <Button onClick={() => setShowAdd(true)} className="btn-primary h-10 md:h-12 px-6 md:px-8 text-sm md:text-base">
@@ -4012,12 +4148,24 @@ function ProductionLine({
                                   <CardContent className="p-5 space-y-4">
                                     <div className="flex justify-between items-start">
                                       <div className="flex flex-col gap-1">
-                                        <Badge variant="outline" className="text-[10px] font-black uppercase tracking-widest border-slate-200 text-slate-400 w-fit">#{job.orderNo}</Badge>
-                                        {job.isCustom && (
-                                          <Badge className="bg-orange-500 text-white text-[9px] font-black uppercase tracking-widest border-none px-1.5 py-0.5 rounded-md w-fit">مخصوص</Badge>
-                                        )}
+                                        <div className="flex items-center gap-2">
+                                          <Badge variant="outline" className="text-[10px] font-black uppercase tracking-widest border-slate-200 text-slate-400 w-fit">#{job.orderNo}</Badge>
+                                          {job.readyForDelivery && (
+                                            <Badge className="bg-emerald-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-md animate-pulse">جاهز للتسليم</Badge>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                          {job.isCustom && (
+                                            <Badge className="bg-orange-500 text-white text-[9px] font-black uppercase tracking-widest border-none px-1.5 py-0.5 rounded-md w-fit">مخصوص</Badge>
+                                          )}
+                                          {job.qualityStatus === 'approved' && <Badge className="bg-green-100 text-green-600 border-none text-[8px] font-extrabold uppercase">الجودة تم</Badge>}
+                                          {job.qualityStatus === 'failed' && <Badge className="bg-red-100 text-red-600 border-none text-[8px] font-extrabold uppercase">مرفوض جودة</Badge>}
+                                        </div>
                                       </div>
                                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                        <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); setViewingJobId(job.id); }} className="h-7 w-7 rounded-lg text-slate-300 hover:text-primary hover:bg-blue-50">
+                                          <FileText size={14} />
+                                        </Button>
                                         <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); setPrintingJob(job); setTimeout(() => window.print(), 100); }} className="h-7 w-7 rounded-lg text-slate-300 hover:text-primary hover:bg-blue-50">
                                           <Printer size={14} />
                                         </Button>
@@ -4095,12 +4243,46 @@ function ProductionLine({
                                       </div>
                                     </div>
 
-                                    <div className="flex items-center justify-between pt-4 border-t border-slate-50">
-                                      <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                    <div className="flex items-center justify-between pt-4 border-t border-slate-50 gap-2">
+                                      <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest flex-1">
                                         <Calendar size={12} className={job.deadline && new Date(job.deadline) < new Date() ? "text-red-500 animate-pulse" : "text-primary"} />
                                         <span className={job.deadline && new Date(job.deadline) < new Date() ? "text-red-500 font-black" : ""}>
                                           {job.deadline ? format(new Date(job.deadline), 'dd/MM') : 'بدون موعد'}
                                         </span>
+                                      </div>
+                                      <div className="flex items-center gap-1 no-print">
+                                        {job.qualityStatus !== 'approved' && (
+                                          <Button 
+                                            variant="ghost" 
+                                            size="sm" 
+                                            onClick={(e) => { e.stopPropagation(); handleUpdateQuality(job.id, 'approved'); }} 
+                                            className="h-6 w-6 p-0 text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 rounded-md"
+                                            title="اعتماد الجودة"
+                                          >
+                                            <CheckCircle2 size={12} />
+                                          </Button>
+                                        )}
+                                        {!job.readyForDelivery ? (
+                                          <Button 
+                                            variant="ghost" 
+                                            size="sm" 
+                                            onClick={(e) => { e.stopPropagation(); handleSetReadyForDelivery(job.id, true); }} 
+                                            className="h-6 w-6 p-0 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-md"
+                                            title="تجهيز للتسليم"
+                                          >
+                                            <PackageCheck size={12} />
+                                          </Button>
+                                        ) : (
+                                          <Button 
+                                            variant="ghost" 
+                                            size="sm" 
+                                            onClick={(e) => { e.stopPropagation(); handleSetReadyForDelivery(job.id, false); }} 
+                                            className="h-6 w-6 p-0 text-emerald-500 hover:text-slate-400 hover:bg-slate-50 rounded-md"
+                                            title="إلغاء الجاهزية"
+                                          >
+                                            <RotateCcw size={12} />
+                                          </Button>
+                                        )}
                                       </div>
                                       <Badge 
                                         className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-lg border-none ${
@@ -4260,9 +4442,28 @@ function ProductionLine({
                 <label className="text-sm font-bold text-slate-700">تفاصيل التنجيد</label>
                 <Input className="rounded-xl h-11" value={editingJob.upholsteryDetails || ''} onChange={e => setEditingJob({...editingJob, upholsteryDetails: e.target.value})} />
               </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">رابط صورة المرجع</label>
+                  <Input className="rounded-xl h-11" value={editingJob.referenceImage || ''} onChange={e => setEditingJob({...editingJob, referenceImage: e.target.value})} placeholder="رابط الصورة (Pinterest/WhatsApp)" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">رابط كشف التقطيع (Technical Link)</label>
+                  <Input className="rounded-xl h-11" value={editingJob.cuttingListUrl || ''} onChange={e => setEditingJob({...editingJob, cuttingListUrl: e.target.value})} placeholder="URL (Google Drive / PDF)" />
+                </div>
+              </div>
               <div className="space-y-2">
-                <label className="text-sm font-bold text-slate-700">رابط صورة المرجع</label>
-                <Input className="rounded-xl h-11" value={editingJob.referenceImage || ''} onChange={e => setEditingJob({...editingJob, referenceImage: e.target.value})} placeholder="رابط الصورة (Pinterest/WhatsApp)" />
+                <label className="text-sm font-bold text-slate-700">المواصفات الفنية التفصيلية</label>
+                <textarea 
+                  className="w-full p-3 rounded-xl border border-slate-200 font-bold text-sm min-h-[100px]" 
+                  value={editingJob.technicalSpecs || ''} 
+                  onChange={e => setEditingJob({...editingJob, technicalSpecs: e.target.value})}
+                  placeholder="أدخل المواصفات الفنية، مقاسات الأجزاء، نوع الاكسسوارات، إلخ..."
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">ملاحظات الجودة</label>
+                <Input className="rounded-xl h-11 border-amber-200" value={editingJob.qualityNotes || ''} onChange={e => setEditingJob({...editingJob, qualityNotes: e.target.value})} placeholder="ملاحظات الفحص الفني" />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-bold text-slate-700">ملاحظات</label>
@@ -4385,9 +4586,24 @@ function ProductionLine({
                 <label className="text-sm font-bold text-slate-700">تفاصيل التنجيد</label>
                 <Input className="rounded-xl h-11" value={formData.upholsteryDetails} onChange={e => setFormData({...formData, upholsteryDetails: e.target.value})} />
               </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">رابط صورة المرجع</label>
+                  <Input className="rounded-xl h-11" value={formData.referenceImage} onChange={e => setFormData({...formData, referenceImage: e.target.value})} placeholder="رابط الصورة (Pinterest/WhatsApp)" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">رابط كشف التقطيع (Technical Link)</label>
+                  <Input className="rounded-xl h-11" value={formData.cuttingListUrl} onChange={e => setFormData({...formData, cuttingListUrl: e.target.value})} placeholder="URL (Google Drive / PDF)" />
+                </div>
+              </div>
               <div className="space-y-2">
-                <label className="text-sm font-bold text-slate-700">رابط صورة المرجع</label>
-                <Input className="rounded-xl h-11" value={formData.referenceImage} onChange={e => setFormData({...formData, referenceImage: e.target.value})} placeholder="رابط الصورة (Pinterest/WhatsApp)" />
+                <label className="text-sm font-bold text-slate-700">المواصفات الفنية التفصيلية</label>
+                <textarea 
+                  className="w-full p-3 rounded-xl border border-slate-200 font-bold text-sm min-h-[100px]" 
+                  value={formData.technicalSpecs} 
+                  onChange={e => setFormData({...formData, technicalSpecs: e.target.value})}
+                  placeholder="أدخل المواصفات الفنية، مقاسات الأجزاء، نوع الاكسسوارات، إلخ..."
+                />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-bold text-slate-700">ملاحظات</label>
@@ -4399,6 +4615,164 @@ function ProductionLine({
               </div>
             </CardContent>
           </Card>
+        </div>
+      )}
+
+      {/* Technical File Modal */}
+      {viewingJob && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center p-4 z-50 overflow-auto">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="w-full max-w-5xl bg-white rounded-[32px] shadow-2xl overflow-hidden flex flex-col md:flex-row max-h-[90vh]"
+          >
+            {/* Sidebar with Image & Summary */}
+            <div className="w-full md:w-80 bg-slate-900 p-8 text-white flex flex-col">
+              <div className="flex justify-between items-start mb-8">
+                <Badge className="bg-primary/20 text-primary border-none font-black">#{viewingJob.orderNo}</Badge>
+                <div className="flex flex-col items-end border-none">
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">تاريخ التعاقد</span>
+                  <span className="font-bold text-sm">{viewingJob.contractDate}</span>
+                </div>
+              </div>
+              
+              <div className="aspect-square rounded-2xl overflow-hidden border border-slate-800 bg-slate-800 mb-6">
+                {viewingJob.referenceImage ? (
+                  <img src={viewingJob.referenceImage} alt="Product" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center text-slate-600 gap-2">
+                    <Package size={40} />
+                    <span className="text-xs font-bold">لا توجد صورة</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-4 flex-1">
+                <div>
+                  <h3 className="text-xl font-black">{viewingJob.productName}</h3>
+                  <p className="text-slate-400 text-sm font-bold">{viewingJob.clientName}</p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 pt-4 border-t border-slate-800">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-500 font-bold text-right">الحالة الحالية</span>
+                    <Badge className="bg-blue-500/20 text-blue-400 border-none font-black">{costCenters.find(c => c.id === viewingJob.status)?.name || 'انتظار'}</Badge>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-500 font-bold text-right">الجودة</span>
+                    <Badge className={`border-none font-black ${
+                      viewingJob.qualityStatus === 'approved' ? 'bg-emerald-500/20 text-emerald-400' : 
+                      viewingJob.qualityStatus === 'failed' ? 'bg-red-500/20 text-red-400' : 'bg-slate-500/20 text-slate-400'
+                    }`}>
+                      {viewingJob.qualityStatus === 'approved' ? 'معتمد' : viewingJob.qualityStatus === 'failed' ? 'مرفوض' : 'قيد الفحص'}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+
+              <Button variant="outline" onClick={() => setViewingJobId(null)} className="mt-8 border-slate-700 text-white hover:bg-slate-800 rounded-xl">إغلاق الملف</Button>
+            </div>
+
+            {/* Main Content Area */}
+            <div className="flex-1 p-10 overflow-y-auto bg-slate-50">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                {/* Technical Specs */}
+                <div className="space-y-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-1.5 h-6 bg-primary rounded-full" />
+                    <h4 className="font-black text-xl text-slate-900">المواصفات الفنية</h4>
+                  </div>
+                  <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="p-3 bg-slate-50 rounded-2xl">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-right mb-1">نوع الخشب</p>
+                        <p className="font-black text-slate-900 text-right">{viewingJob.woodType || '---'}</p>
+                      </div>
+                      <div className="p-3 bg-slate-50 rounded-2xl">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-right mb-1">المقاسات</p>
+                        <p className="font-black text-slate-900 text-right">{viewingJob.dimensions || '---'}</p>
+                      </div>
+                      <div className="p-3 bg-slate-50 rounded-2xl">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-right mb-1">لون الدهان</p>
+                        <p className="font-black text-slate-900 text-right">{viewingJob.paintColor || '---'}</p>
+                      </div>
+                      <div className="p-3 bg-slate-50 rounded-2xl">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-right mb-1">نوع القماش</p>
+                        <p className="font-black text-slate-900 text-right">{viewingJob.fabricType || '---'}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100">
+                      <p className="text-xs font-black text-primary mb-2 text-right">المواصفات التفصيلية للمصنع</p>
+                      <pre className="text-sm font-bold text-slate-700 whitespace-pre-wrap leading-relaxed text-right">
+                        {viewingJob.technicalSpecs || 'لا توجد مواصفات فنية تفصيلية مسجلة'}
+                      </pre>
+                    </div>
+
+                    {viewingJob.cuttingListUrl && (
+                      <a 
+                        href={viewingJob.cuttingListUrl} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="flex items-center justify-center gap-3 w-full p-4 bg-emerald-50 text-emerald-700 rounded-2xl border border-emerald-100 font-black hover:bg-emerald-100 transition-colors"
+                      >
+                        <Download size={18} />
+                        معاينة أمر التقطيع (Cutting List)
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                {/* Financials & Materials */}
+                <div className="space-y-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-1.5 h-6 bg-emerald-500 rounded-full" />
+                    <h4 className="font-black text-xl text-slate-900">المواد والتكاليف</h4>
+                  </div>
+                  <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col h-[400px]">
+                    <div className="flex-1 overflow-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="text-right font-black">الخامة</TableHead>
+                            <TableHead className="text-right font-black">الكمية</TableHead>
+                            <TableHead className="text-right font-black">التكلفة</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {issuances.filter(i => i.jobOrderNo === viewingJob.orderNo).map((iss, idx) => {
+                            const item = items.find(it => it.id === iss.itemId);
+                            return (
+                              <TableRow key={idx}>
+                                <TableCell className="font-bold text-sm text-right">{item?.name || 'خامة'}</TableCell>
+                                <TableCell className="font-bold text-sm text-right">{iss.quantity} {iss.unit}</TableCell>
+                                <TableCell className="font-black text-sm text-emerald-600 text-right">{iss.total.toLocaleString()} ج.م</TableCell>
+                              </TableRow>
+                            );
+                          })}
+                          {issuances.filter(i => i.jobOrderNo === viewingJob.orderNo).length === 0 && (
+                            <TableRow>
+                              <TableCell colSpan={3} className="text-center py-10 text-slate-400 font-bold">لم يتم صرف خامات لهذا الأمر بعد</TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                    <div className="pt-6 border-t border-slate-100 mt-4 space-y-2">
+                      <div className="flex justify-between text-sm font-black">
+                        <span className="text-slate-400">إجمالي الخامات</span>
+                        <span className="text-slate-900 font-black">{(issuances.filter(i => i.jobOrderNo === viewingJob.orderNo).reduce((s, i) => s + i.total, 0)).toLocaleString()} ج.م</span>
+                      </div>
+                      <div className="flex justify-between text-sm font-black">
+                        <span className="text-slate-400">المقايسة التقديرية</span>
+                        <span className="text-blue-600 font-black">{viewingJob.estimatedCost?.toLocaleString()} ج.م</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
         </div>
       )}
     </div>
@@ -5199,9 +5573,7 @@ function Purchases({ items, suppliers, purchases }: { items: Item[], suppliers: 
   const [dateFilter, setDateFilter] = useState({ start: '', end: '' });
   const [formData, setFormData] = useState({
     supplierId: '',
-    itemId: '',
-    quantity: 0,
-    unitPrice: 0,
+    selectedItems: [{ itemId: '', quantity: 0, unitPrice: 0 }],
     paidAmount: 0,
     paymentStatus: 'نقدي' as const,
     notes: ''
@@ -5238,48 +5610,84 @@ function Purchases({ items, suppliers, purchases }: { items: Item[], suppliers: 
     XLSX.writeFile(wb, `المشتريات_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
+  const handleAddItem = () => {
+    setFormData({
+      ...formData,
+      selectedItems: [...formData.selectedItems, { itemId: '', quantity: 0, unitPrice: 0 }]
+    });
+  };
+
+  const handleRemoveItem = (index: number) => {
+    setFormData({
+      ...formData,
+      selectedItems: formData.selectedItems.filter((_, i) => i !== index)
+    });
+  };
+
+  const handleItemChange = (index: number, field: string, value: any) => {
+    const newItems = [...formData.selectedItems];
+    (newItems[index] as any)[field] = value;
+    setFormData({ ...formData, selectedItems: newItems });
+  };
+
   const handleAdd = async () => {
-    if (!formData.supplierId || !formData.itemId || formData.quantity <= 0) return;
+    if (!formData.supplierId || formData.selectedItems.some(i => !i.itemId || i.quantity <= 0)) return;
     
-    const total = formData.quantity * formData.unitPrice;
-    const item = items.find(i => i.id === formData.itemId);
+    const invoiceTotal = formData.selectedItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+    const date = new Date().toISOString();
     
     try {
-      await addDoc(collection(db, 'purchases'), {
-        ...formData,
-        total,
-        date: new Date().toISOString(),
-        unit: item?.unit || ''
-      });
+      const batch = writeBatch(db);
+      
+      for (const selectedItem of formData.selectedItems) {
+        const item = items.find(i => i.id === selectedItem.itemId);
+        const itemTotal = selectedItem.quantity * selectedItem.unitPrice;
+        
+        // Purchase record
+        const purchaseRef = doc(collection(db, 'purchases'));
+        batch.set(purchaseRef, {
+          supplierId: formData.supplierId,
+          itemId: selectedItem.itemId,
+          quantity: selectedItem.quantity,
+          unitPrice: selectedItem.unitPrice,
+          total: itemTotal,
+          paidAmount: 0, // Individual items don't track paid amount in this logical grouping
+          paymentStatus: formData.paymentStatus,
+          notes: formData.notes,
+          date,
+          unit: item?.unit || ''
+        });
 
-      // Update Item Stock
-      const currentTotalValue = (item?.totalValue || (item ? item.currentBalance * item.price : 0));
-      const purchaseTotal = formData.quantity * formData.unitPrice;
-      const newTotalValue = currentTotalValue + purchaseTotal;
-      const newQuantity = (item?.currentBalance || 0) + formData.quantity;
-      const newAveragePrice = newQuantity > 0 ? newTotalValue / newQuantity : formData.unitPrice;
+        // Update Item Stock
+        const itemRef = doc(db, 'items', selectedItem.itemId);
+        const currentTotalValue = (item?.totalValue || (item ? item.currentBalance * item.price : 0));
+        const newTotalValue = currentTotalValue + itemTotal;
+        const newQuantity = (item?.currentBalance || 0) + selectedItem.quantity;
+        const newAveragePrice = newQuantity > 0 ? newTotalValue / newQuantity : selectedItem.unitPrice;
 
-      await updateDoc(doc(db, 'items', formData.itemId), {
-        inward: increment(formData.quantity),
-        currentBalance: increment(formData.quantity),
-        totalValue: newTotalValue,
-        price: newAveragePrice
-      });
+        batch.update(itemRef, {
+          inward: increment(selectedItem.quantity),
+          currentBalance: increment(selectedItem.quantity),
+          totalValue: newTotalValue,
+          price: newAveragePrice
+        });
+      }
 
       // Update Supplier Balance
-      const balanceChange = total - formData.paidAmount;
-      await updateDoc(doc(db, 'suppliers', formData.supplierId), {
-        totalPurchases: increment(total),
+      const supplierRef = doc(db, 'suppliers', formData.supplierId);
+      const balanceChange = invoiceTotal - formData.paidAmount;
+      batch.update(supplierRef, {
+        totalPurchases: increment(invoiceTotal),
         totalPayments: increment(formData.paidAmount),
         balance: increment(balanceChange)
       });
 
+      await batch.commit();
+
       setShowAdd(false);
       setFormData({
         supplierId: '',
-        itemId: '',
-        quantity: 0,
-        unitPrice: 0,
+        selectedItems: [{ itemId: '', quantity: 0, unitPrice: 0 }],
         paidAmount: 0,
         paymentStatus: 'نقدي',
         notes: ''
@@ -5430,46 +5838,79 @@ function Purchases({ items, suppliers, purchases }: { items: Item[], suppliers: 
               <CardDescription className="font-medium">أدخل تفاصيل الفاتورة لتحديث المخزون وحسابات الموردين</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-700">المورد</label>
-                  <select 
-                    className="w-full h-11 rounded-xl border border-slate-200 px-3 bg-white"
-                    value={formData.supplierId}
-                    onChange={e => setFormData({...formData, supplierId: e.target.value})}
-                  >
-                    <option value="">اختر مورد...</option>
-                    {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">المورد</label>
+                <select 
+                  className="w-full h-11 rounded-xl border border-slate-200 px-3 bg-white"
+                  value={formData.supplierId}
+                  onChange={e => setFormData({...formData, supplierId: e.target.value})}
+                >
+                  <option value="">اختر مورد...</option>
+                  {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <label className="text-sm font-bold text-slate-700">الأصناف المشتراة</label>
+                  <Button variant="outline" size="sm" onClick={handleAddItem} className="rounded-xl border-slate-200">
+                    <Plus size={14} className="ml-1" />
+                    إضافة صنف
+                  </Button>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-700">الصنف</label>
-                  <select 
-                    className="w-full h-11 rounded-xl border border-slate-200 px-3 bg-white"
-                    value={formData.itemId}
-                    onChange={e => setFormData({...formData, itemId: e.target.value})}
-                  >
-                    <option value="">اختر صنف...</option>
-                    {items.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
-                  </select>
+
+                <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                  {formData.selectedItems.map((item, idx) => (
+                    <div key={idx} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3 relative group">
+                      {formData.selectedItems.length > 1 && (
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="absolute top-2 left-2 text-slate-300 hover:text-red-500 h-8 w-8"
+                          onClick={() => handleRemoveItem(idx)}
+                        >
+                          <Trash2 size={14} />
+                        </Button>
+                      )}
+                      
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">الصنف</label>
+                        <select 
+                          className="w-full h-10 rounded-lg border border-slate-200 px-3 bg-white text-sm"
+                          value={item.itemId}
+                          onChange={e => handleItemChange(idx, 'itemId', e.target.value)}
+                        >
+                          <option value="">اختر صنف...</option>
+                          {items.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                        </select>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">الكمية</label>
+                          <Input 
+                            type="number" 
+                            className="h-10 rounded-lg text-sm" 
+                            value={item.quantity} 
+                            onChange={e => handleItemChange(idx, 'quantity', Number(e.target.value))} 
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">سعر الوحدة</label>
+                          <Input 
+                            type="number" 
+                            className="h-10 rounded-lg text-sm" 
+                            value={item.unitPrice} 
+                            onChange={e => handleItemChange(idx, 'unitPrice', Number(e.target.value))} 
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-700">الكمية</label>
-                  <div className="relative">
-                    <Input type="number" className="rounded-xl h-11" value={formData.quantity} onChange={e => setFormData({...formData, quantity: Number(e.target.value)})} />
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
-                      {items.find(i => i.id === formData.itemId)?.unit}
-                    </span>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-700">سعر الوحدة</label>
-                  <Input type="number" className="rounded-xl h-11" value={formData.unitPrice} onChange={e => setFormData({...formData, unitPrice: Number(e.target.value)})} />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+
+              <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100">
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-slate-700">المبلغ المدفوع</label>
                   <Input type="number" className="rounded-xl h-11" value={formData.paidAmount} onChange={e => setFormData({...formData, paidAmount: Number(e.target.value)})} />
@@ -5487,11 +5928,18 @@ function Purchases({ items, suppliers, purchases }: { items: Item[], suppliers: 
                   </select>
                 </div>
               </div>
+
               <div className="space-y-2">
                 <label className="text-sm font-bold text-slate-700">ملاحظات</label>
                 <Input className="rounded-xl h-11" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder="أي ملاحظات إضافية..." />
               </div>
-              <div className="flex justify-end gap-3 pt-4">
+
+              <div className="flex justify-between items-center py-4 bg-slate-900 rounded-2xl px-6 text-white">
+                <span className="font-bold">إجمالي الفاتورة:</span>
+                <span className="text-xl font-black">{formData.selectedItems.reduce((sum, i) => sum + (i.quantity * i.unitPrice), 0).toLocaleString()} ج.م</span>
+              </div>
+
+              <div className="flex justify-end gap-3">
                 <Button variant="ghost" className="rounded-xl" onClick={() => setShowAdd(false)}>إلغاء</Button>
                 <Button onClick={handleAdd} className="btn-primary px-8 h-11">حفظ الفاتورة</Button>
               </div>

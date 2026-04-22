@@ -1,3 +1,92 @@
+export interface Showroom {
+  id: string;
+  name: string;
+  location: string;
+  managerName: string;
+}
+
+export interface ShowroomInventory {
+  id: string;
+  showroomId: string;
+  itemId: string; // يشير إلى الـ ProductionJob أو المنتج النهائي
+  quantity: number;
+  costPrice: number; // التكلفة الحقيقية من المصنع
+}
+
+export interface TransferOrder {
+  id: string;
+  date: string;
+  fromWarehouse: string; // المصنع
+  toShowroomId: string; // المعرض
+  items: {
+    itemId: string;
+    quantity: number;
+    costPrice: number;
+  }[];
+  notes: string;
+  status: 'تم التحويل' | 'تم الاستلام';
+}
+
+export interface BOMItem {
+  itemId: string;
+  quantity: number;
+}
+
+export interface WorkCenter {
+  id: string;
+  name: string;
+  hourlyRate: number; // تكلفة الساعة في هذا المركز
+}
+
+export interface ManufacturingOperation {
+  id: string;
+  jobId: string;
+  workCenterId: string;
+  stageName: string; // مثال: تقطيع، تجميع، دهان
+  startTime: string;
+  endTime: string;
+  actualDurationHours: number;
+}
+
+export interface BOM {
+  id: string;
+  productId: string;
+  items: BOMItem[];
+  totalExpectedMaterialCost: number;
+}
+
+export interface LostSale {
+  id: string;
+  date: string;
+  showroomId: string;
+  productName: string;
+  notes: string;
+}
+
+export interface SalesOrder {
+  id: string;
+  date: string;
+  showroomId: string;
+  customerName: string;
+  customerPhone: string;
+  items: {
+    jobId: string; // الربط المباشر مع أمر الإنتاج لسحب التكاليف
+    sellingPrice: number;
+    cogs: number; // تكلفة المصنع (مباشرة)
+    logisticsCost: number; // مصاريف النقل والتركيب
+    commission: number; // عمولات
+  }[];
+  totalAmount: number;
+  totalCOGS: number; // إجمالي التكلفة المباشرة
+  totalLogisticsCost: number;
+  totalCommission: number;
+  operationalOverheadRate: number; // نسبة التحميل الإداري (مثلاً 0.15 للمصاريف التشغيلية)
+  totalOperationalOverhead: number; // المبلغ الفعلي للمصاريف التشغيلية
+  netProfit: number; // صافي الربح الحقيقي
+  paymentMethod: 'نقدي' | 'شبكة' | 'تحويل بنكي';
+  notes: string;
+}
+
 export interface Item {
   id: string;
   name: string;
@@ -88,6 +177,8 @@ export interface ProductionJob {
   paintColor?: string; // لون الدهان
   fabricType?: string; // نوع القماش
   upholsteryDetails?: string; // تفاصيل التنجيد
+  technicalSpecs?: string; // المواصفات الفنية / تفاصيل التصنيع
+  cuttingListUrl?: string; // رابط كشف التقطيع
   sellingPrice?: number; // سعر البيع
   estimatedCost?: number; // التكلفة التقديرية (المقايسة)
   contractDate?: string; // تاريخ التعاقد
@@ -96,10 +187,13 @@ export interface ProductionJob {
   status: string; // This will be the CostCenter ID or name
   workflowStep?: number; // مسار العمل
   priority: 'منخفضة' | 'متوسطة' | 'عالية';
+  qualityStatus?: 'pending' | 'approved' | 'failed'; // حالة الجودة
+  qualityNotes?: string;
   notes: string;
   totalMaterialCost?: number;
   totalLaborCost?: number;
   totalOtherCost?: number;
+  readyForDelivery?: boolean; // جاهز للتسليم
 }
 
 export interface JobLabor {

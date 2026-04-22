@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ProductionJob, Issuance, Employee, JobLabor, JobOtherCost, CostCenter, Item } from '../types';
+import { ProductionJob, Issuance, Employee, JobLabor, JobOtherCost, CostCenter, Item, WorkCenter, ManufacturingOperation, BOM } from '../types';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,7 +17,10 @@ export function ProductionCostsView({
   employees, 
   jobLabors, 
   jobOtherCosts,
-  items
+  items,
+  boms,
+  workCenters,
+  manufacturingOperations
 }: { 
   productionJobs: ProductionJob[],
   costCenters: CostCenter[],
@@ -25,7 +28,10 @@ export function ProductionCostsView({
   employees: Employee[],
   jobLabors: JobLabor[],
   jobOtherCosts: JobOtherCost[],
-  items: Item[]
+  items: Item[],
+  boms: BOM[],
+  workCenters: WorkCenter[],
+  manufacturingOperations: ManufacturingOperation[]
 }) {
   const [selectedJob, setSelectedJob] = useState<ProductionJob | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -35,6 +41,11 @@ export function ProductionCostsView({
   const [showAddOther, setShowAddOther] = useState(false);
   const [showAddMaterial, setShowAddMaterial] = useState(false);
   const [materialError, setMaterialError] = useState<string | null>(null);
+  
+  const [materialForm, setMaterialForm] = useState({
+    costCenter: '',
+    selectedItems: [{ itemId: '', quantity: 0 }]
+  });
   
   const [laborForm, setLaborForm] = useState({
     employeeId: '',
@@ -52,10 +63,16 @@ export function ProductionCostsView({
     notes: ''
   });
 
-  const [materialForm, setMaterialForm] = useState({
-    costCenter: '',
-    selectedItems: [{ itemId: '', quantity: 0 }]
-  });
+  const matchingBOM = selectedJob ? boms.find(b => b.productId === selectedJob.productId) : null;
+
+  const handleApplyBOM = () => {
+    if (matchingBOM) {
+      setMaterialForm({
+        ...materialForm,
+        selectedItems: matchingBOM.items.map(item => ({ itemId: item.itemId, quantity: item.quantity }))
+      });
+    }
+  };
 
   useEffect(() => {
     if (costCenters.length > 0 && !materialForm.costCenter) {

@@ -228,6 +228,31 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
+    match /boms/{id} {
+      allow read: if hasPermission('production') || hasPermission('reports');
+      allow write: if hasPermission('production');
+    }
+
+    match /workCenters/{id} {
+      allow read: if hasPermission('production') || hasPermission('reports');
+      allow write: if hasPermission('production');
+    }
+
+    match /manufacturingOperations/{id} {
+      allow read: if hasPermission('production') || hasPermission('reports');
+      allow write: if hasPermission('production');
+    }
+
+    match /lostSales/{id} {
+      allow read: if hasPermission('dashboard') || hasPermission('reports');
+      allow write: if hasPermission('dashboard');
+    }
+
+    match /salesOrders/{id} {
+      allow read: if hasPermission('dashboard') || hasPermission('reports');
+      allow write: if hasPermission('dashboard');
+    }
+
     match /test/{id} {
       allow read: if true;
     }
