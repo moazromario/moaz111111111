@@ -862,7 +862,7 @@ function MainApp({
     safetyLimit: 5
   });
 
-  const [supplierForm, setSupplierForm] = useState({ name: '' });
+  const [supplierForm, setSupplierForm] = useState({ name: '', openingBalance: 0 });
   const [warehouseForm, setWarehouseForm] = useState({ name: '' });
   const [unitForm, setUnitForm] = useState({ name: '' });
   const [costCenterForm, setCostCenterForm] = useState({ name: '' });
@@ -907,10 +907,10 @@ function MainApp({
         ...supplierForm,
         totalPurchases: 0,
         totalPayments: 0,
-        balance: 0
+        balance: Number(supplierForm.openingBalance) || 0
       });
       setShowSupplierAdd(false);
-      setSupplierForm({ name: '' });
+      setSupplierForm({ name: '', openingBalance: 0 });
     } catch (err) { handleFirestoreError(err, 'write', 'suppliers'); }
   };
 
@@ -997,7 +997,14 @@ function MainApp({
   const handleUpdateSupplier = async () => {
     if (!editingSupplier) return;
     try {
-      await updateDoc(doc(db, 'suppliers', editingSupplier.id), { name: editingSupplier.name });
+      const oldSupplier = suppliers.find(s => s.id === editingSupplier.id);
+      const openingBalanceDiff = Number(editingSupplier.openingBalance || 0) - (oldSupplier?.openingBalance || 0);
+
+      await updateDoc(doc(db, 'suppliers', editingSupplier.id), { 
+        name: editingSupplier.name,
+        openingBalance: Number(editingSupplier.openingBalance) || 0,
+        balance: increment(openingBalanceDiff)
+      });
       setEditingSupplier(null);
     } catch (err) { handleFirestoreError(err, 'write', 'suppliers'); }
   };
@@ -1828,6 +1835,7 @@ function MainApp({
             companyInfo={companySettings}
           />
         )}
+        {activeTab === 'userManagement' && <UserManagement />}
         {activeTab === 'settings' && (
           <SettingsView 
             items={items} 
@@ -1958,28 +1966,7 @@ function MainApp({
         </div>
       )}
 
-      {editingSupplier && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <Card className="dribbble-card w-full max-w-sm">
-            <CardHeader><CardTitle className="font-black">تعديل مورد</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-slate-700">اسم المورد</label>
-                <Input className="rounded-xl h-11" value={editingSupplier.name} onChange={e => setEditingSupplier({...editingSupplier, name: e.target.value})} />
-              </div>
-              <div className="flex justify-end gap-3 pt-4">
-                <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setEditingSupplier(null)}>إلغاء</Button>
-                <Button onClick={async () => {
-                  try {
-                    await updateDoc(doc(db, 'suppliers', editingSupplier.id), { name: editingSupplier.name });
-                    setEditingSupplier(null);
-                  } catch (err) { handleFirestoreError(err, 'write', 'suppliers'); }
-                }} className="btn-primary px-8 h-11 font-black">حفظ</Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      {/* Deleted redundant supplier dialog */}
 
       {showWarehouseAdd && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-auto">
@@ -2105,6 +2092,11 @@ function MainApp({
                 <label className="text-sm font-bold text-slate-700">اسم المورد</label>
                 <Input className="rounded-xl h-11" value={supplierForm.name} onChange={e => setSupplierForm({...supplierForm, name: e.target.value})} />
               </div>
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">رصيد أول المدة (مدين)</label>
+                <Input type="number" className="rounded-xl h-11" value={supplierForm.openingBalance} onChange={e => setSupplierForm({...supplierForm, openingBalance: Number(e.target.value)})} placeholder="مثال: 5000" />
+                <p className="text-[10px] text-slate-400 font-bold">هذا المبلغ سيضاف إلى رصيد المورد الحالي كديون سابقة.</p>
+              </div>
               <div className="flex justify-end gap-3 pt-4">
                 <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setShowSupplierAdd(false)}>إلغاء</Button>
                 <Button onClick={handleAddSupplier} className="btn-primary px-8 h-11 font-black">إضافة</Button>
@@ -2123,6 +2115,10 @@ function MainApp({
               <div className="space-y-2">
                 <label className="text-sm font-bold text-slate-700">اسم المورد</label>
                 <Input className="rounded-xl h-11" value={editingSupplier.name} onChange={e => setEditingSupplier({...editingSupplier, name: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">رصيد أول المدة (مدين)</label>
+                <Input type="number" className="rounded-xl h-11" value={editingSupplier.openingBalance} onChange={e => setEditingSupplier({...editingSupplier, openingBalance: Number(e.target.value)})} />
               </div>
               <div className="flex justify-end gap-3 pt-4">
                 <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setEditingSupplier(null)}>إلغاء</Button>
@@ -2326,6 +2322,8 @@ function UserManagement() {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const { profile } = useAuth();
 
   useEffect(() => {
@@ -2349,45 +2347,203 @@ function UserManagement() {
     }
   };
 
-  if (!profile?.isAdmin) return <div className="p-8 text-center text-red-500 font-bold">عذراً، لا تملك صلاحية الوصول لهذه الصفحة</div>;
+  const handleDeleteUserRecord = async (uid: string) => {
+    try {
+      await deleteDoc(doc(db, 'users', uid));
+      setDeleteConfirm(null);
+    } catch (error) {
+      handleFirestoreError(error, 'delete', 'users');
+    }
+  };
+
+  if (!profile?.isAdmin) return (
+    <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
+      <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center text-red-500">
+        <ShieldAlert size={40} />
+      </div>
+      <h2 className="text-2xl font-black text-slate-900">عذراً، لا تملك صلاحية الوصول</h2>
+      <p className="text-slate-500 font-medium">هذه الصفحة مخصصة لمديري النظام فقط</p>
+    </div>
+  );
+
+  const filteredUsers = users.filter(u => 
+    u.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    u.email.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
-    <div className="p-8 max-w-6xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-3xl font-black text-slate-900 tracking-tight">إدارة المستخدمين</h2>
-          <p className="text-slate-500 font-medium">تحكم في صلاحيات الوصول لكل موديول في النظام</p>
+    <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="flex items-center gap-5">
+          <div className="w-16 h-16 bg-slate-900 rounded-[2rem] flex items-center justify-center text-white shadow-2xl shadow-slate-900/20">
+            <Users size={32} />
+          </div>
+          <div>
+            <h2 className="text-3xl font-black text-slate-900 tracking-tight">إدارة المستخدمين</h2>
+            <p className="text-slate-500 font-medium mt-1">التحكم في هويات وصلاحيات الفريق</p>
+          </div>
         </div>
-        <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center">
-          <ShieldAlert className="text-primary w-6 h-6" />
+        
+        <div className="relative w-full md:w-96">
+          <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <Input 
+            placeholder="بحث بالاسم أو البريد الإلكتروني..." 
+            className="h-12 pr-12 rounded-2xl border-slate-200 bg-white/50 backdrop-blur-sm focus:bg-white transition-all shadow-sm font-bold"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
         </div>
       </div>
 
-      <Card className="border-slate-200 shadow-xl shadow-slate-200/50 overflow-hidden rounded-3xl">
-        <Table>
-          <TableHeader className="bg-slate-50/50 border-b border-slate-100">
-            <TableRow>
-              <TableHead className="text-right font-black text-slate-900 py-4">المستخدم</TableHead>
-              <TableHead className="text-right font-black text-slate-900">البريد الإلكتروني</TableHead>
-              <TableHead className="text-center font-black text-slate-900">المسؤول</TableHead>
-              <TableHead className="text-right font-black text-slate-900">الصلاحيات</TableHead>
-              <TableHead className="text-center font-black text-slate-900">الإجراءات</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {users.map((u) => (
-              <TableRow key={u.uid} className="hover:bg-slate-50/50 transition-colors border-b border-slate-100 last:border-0 grow">
-                <TableCell className="font-bold text-slate-700 py-5">{u.name}</TableCell>
-                <TableCell className="text-slate-500 font-medium font-mono text-sm">{u.email}</TableCell>
-                <TableCell className="text-center">
-                  <Badge variant={u.isAdmin ? "default" : "outline"} className={u.isAdmin ? "bg-primary" : "text-slate-400 border-slate-200"}>
-                    {u.isAdmin ? 'نعم' : 'لا'}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-wrap gap-1 max-w-xs">
-                    {Object.entries(u.permissions || {}).map(([key, val]) => (
-                      val && <Badge key={key} variant="secondary" className="bg-blue-50 text-blue-600 border-blue-100 text-[10px] py-0 px-2">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredUsers.map((u) => (
+          <Card key={u.uid} className="dribbble-card border-none overflow-hidden group hover:shadow-2xl transition-all duration-300">
+            <CardContent className="p-6">
+              <div className="flex items-start justify-between mb-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-primary group-hover:text-white transition-all duration-500">
+                    <UserCircle size={32} />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-lg text-slate-900">{u.name}</h3>
+                    <p className="text-slate-500 text-xs font-mono lowercase">{u.email}</p>
+                  </div>
+                </div>
+                <Badge variant={u.isAdmin ? "default" : "secondary"} className={`rounded-xl py-1 px-3 font-black text-[10px] ${u.isAdmin ? 'bg-amber-500 hover:bg-amber-600' : 'bg-slate-100 text-slate-500'}`}>
+                  {u.isAdmin ? 'مدير نظام' : 'مستخدم'}
+                </Badge>
+              </div>
+
+              <div className="space-y-4">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">الصلاحيات النشطة</p>
+                <div className="flex flex-wrap gap-1.5 h-16 overflow-y-auto custom-scrollbar content-start">
+                  {Object.entries(u.permissions || {}).some(([, val]) => val) ? (
+                    Object.entries(u.permissions || {}).map(([key, val]) => (
+                      val && (
+                        <Badge key={key} className="bg-blue-50 text-blue-600 border-none rounded-lg text-[10px] font-bold px-2.5 py-1">
+                          {key === 'dashboard' ? 'لوحة التحكم' : 
+                           key === 'inventory' ? 'المخزن' : 
+                           key === 'production' ? 'الإنتاج' : 
+                           key === 'maintenance' ? 'الصيانة' : 
+                           key === 'purchases' ? 'المشتريات' : 
+                           key === 'hr' ? 'الأجور' : 
+                           key === 'reports' ? 'التقارير' : 
+                           key === 'suppliers' ? 'الموردين' : 'الإعدادات'}
+                        </Badge>
+                      )
+                    ))
+                  ) : (
+                    <span className="text-xs text-slate-400 italic">لا توجد صلاحيات محددة</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mt-8">
+                <Button 
+                  onClick={() => { setEditingUser(u); setIsModalOpen(true); }}
+                  className="rounded-2xl bg-slate-900 text-white hover:bg-slate-800 font-black h-11"
+                >
+                  <ShieldCheck size={16} className="ml-2" />
+                  الصلاحيات
+                </Button>
+                <Button 
+                  variant="outline"
+                  onClick={() => setDeleteConfirm(u.uid)}
+                  className="rounded-2xl border-slate-200 text-slate-400 hover:text-red-500 hover:bg-red-50 hover:border-red-100 font-black h-11"
+                >
+                  <Trash2 size={16} className="ml-2" />
+                  حذف السجل
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {filteredUsers.length === 0 && (
+        <div className="text-center py-20 bg-slate-50 rounded-[3rem] border border-dashed border-slate-200">
+          <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto text-slate-300 mb-4">
+            <Search size={32} />
+          </div>
+          <h3 className="text-xl font-black text-slate-900">لا يوجد مستخدمون</h3>
+          <p className="text-slate-500 font-medium">لم يتم العثور على أي مستخدم يطابق بحثك</p>
+        </div>
+      )}
+
+      {isModalOpen && editingUser && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xl z-[100] flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="w-full max-w-2xl bg-white rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300"
+          >
+            <div className="bg-slate-900 p-8 text-white relative">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={() => setIsModalOpen(false)} 
+                className="absolute left-6 top-6 text-slate-400 hover:text-white hover:bg-white/10 rounded-2xl"
+              >
+                <X size={24} />
+              </Button>
+              
+              <div className="flex items-center gap-6">
+                <div className="w-20 h-20 bg-white/10 rounded-[2rem] flex items-center justify-center text-white backdrop-blur-md">
+                  <ShieldCheck size={40} />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-black">{editingUser.name}</h3>
+                  <p className="text-slate-400 font-mono text-sm">{editingUser.email}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-10 space-y-10">
+              <div className="bg-orange-50 p-6 rounded-[2rem] border border-orange-100/50 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-orange-500 shadow-sm">
+                    <ShieldAlert size={24} />
+                  </div>
+                  <div>
+                    <h4 className="font-black text-slate-900">مدير نظام كامل</h4>
+                    <p className="text-orange-600/70 text-xs font-bold leading-tight">يتمتع المدير بكافة الصلاحيات تلقائياً<br/>وتجاوز كافة القيود</p>
+                  </div>
+                </div>
+                <div 
+                  className={`w-14 h-8 rounded-full p-1 cursor-pointer transition-all duration-300 ${editingUser.isAdmin ? 'bg-orange-500' : 'bg-slate-200'}`}
+                  onClick={() => setEditingUser({ ...editingUser, isAdmin: !editingUser.isAdmin })}
+                >
+                  <div className={`w-6 h-6 bg-white rounded-full shadow-md transition-all duration-300 ${editingUser.isAdmin ? 'translate-x-6' : 'translate-x-0'}`} />
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between px-2">
+                  <h4 className="font-black text-slate-900">صلاحيات الموديلات</h4>
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">تفعيل/تعطيل بالتفصيل</span>
+                </div>
+                
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {Object.entries(editingUser.permissions).map(([key, val]) => (
+                    <div 
+                      key={key} 
+                      onClick={() => setEditingUser({
+                        ...editingUser,
+                        permissions: { ...editingUser.permissions, [key]: !val }
+                      })}
+                      className={`p-4 rounded-3xl border-2 transition-all cursor-pointer flex flex-col gap-3 group ${val ? 'border-primary bg-blue-50/50 shadow-sm' : 'border-slate-100 bg-white hover:border-slate-200'}`}
+                    >
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${val ? 'bg-primary text-white' : 'bg-slate-50 text-slate-400 group-hover:bg-slate-100'}`}>
+                        {key === 'dashboard' ? <LayoutDashboard size={18} /> : 
+                         key === 'inventory' ? <Package size={18} /> : 
+                         key === 'production' ? <Layers size={18} /> : 
+                         key === 'maintenance' ? <Wrench size={18} /> : 
+                         key === 'purchases' ? <ShoppingCart size={18} /> : 
+                         key === 'hr' ? <Users size={18} /> : 
+                         key === 'reports' ? <BarChart3 size={18} /> : 
+                         key === 'suppliers' ? <Truck size={18} /> : <Settings size={18} />}
+                      </div>
+                      <span className={`font-black text-xs ${val ? 'text-primary' : 'text-slate-600'}`}>
                         {key === 'dashboard' ? 'لوحة التحكم' : 
                          key === 'inventory' ? 'المخزن' : 
                          key === 'production' ? 'الإنتاج' : 
@@ -2396,101 +2552,57 @@ function UserManagement() {
                          key === 'hr' ? 'الأجور' : 
                          key === 'reports' ? 'التقارير' : 
                          key === 'suppliers' ? 'الموردين' : 'الإعدادات'}
-                      </Badge>
-                    ))}
-                  </div>
-                </TableCell>
-                <TableCell className="text-center">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => { setEditingUser(u); setIsModalOpen(true); }}
-                    className="rounded-xl border-slate-200 hover:bg-primary hover:text-white hover:border-primary transition-all font-bold"
-                  >
-                    تعديل الصلاحيات
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Card>
-
-      {isModalOpen && editingUser && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-          <Card className="w-full max-w-lg bg-white rounded-[2.5rem] shadow-2xl p-8 border-0 animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between mb-8">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center">
-                  <ShieldCheck className="text-primary w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="text-xl font-black text-slate-900">صلاحيات: {editingUser.name}</h3>
-                  <p className="text-slate-400 text-sm font-medium">{editingUser.email}</p>
-                </div>
-              </div>
-              <Button variant="ghost" size="icon" onClick={() => setIsModalOpen(false)} className="rounded-2xl hover:bg-slate-100">
-                <X size={24} />
-              </Button>
-            </div>
-
-            <div className="space-y-8">
-              <div className="p-5 bg-slate-50 rounded-3xl border border-slate-100">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <UserCircle className="text-primary w-5 h-5" />
-                    <span className="font-bold text-slate-700">دوره كمسؤول للنظام</span>
-                  </div>
-                  <input 
-                    type="checkbox" 
-                    checked={editingUser.isAdmin}
-                    onChange={(e) => setEditingUser({ ...editingUser, isAdmin: e.target.checked })}
-                    className="w-5 h-5 accent-primary rounded-lg"
-                  />
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                {Object.entries(editingUser.permissions).map(([key, val]) => (
-                  <label key={key} className="flex items-center justify-between p-4 bg-white border border-slate-100 rounded-2xl hover:border-primary/30 transition-all cursor-pointer group shadow-sm">
-                    <span className="font-bold text-slate-600 text-sm group-hover:text-primary transition-colors">
-                      {key === 'dashboard' ? 'لوحة التحكم' : 
-                       key === 'inventory' ? 'المخزن' : 
-                       key === 'production' ? 'الإنتاج' : 
-                       key === 'maintenance' ? 'الصيانة' : 
-                       key === 'purchases' ? 'المشتريات' : 
-                       key === 'hr' ? 'الأجور' : 
-                       key === 'reports' ? 'التقارير' : 
-                       key === 'suppliers' ? 'الموردين' : 'الإعدادات'}
-                    </span>
-                    <input 
-                      type="checkbox" 
-                      checked={val}
-                      onChange={(e) => setEditingUser({
-                        ...editingUser,
-                        permissions: { ...editingUser.permissions, [key]: e.target.checked }
-                      })}
-                      className="w-5 h-5 accent-primary rounded-lg"
-                    />
-                  </label>
-                ))}
-              </div>
-
-              <div className="flex gap-4 pt-4">
+              <div className="flex gap-4">
                 <Button 
-                  className="flex-1 rounded-2xl bg-primary hover:bg-primary/90 text-white font-black h-12 shadow-lg shadow-primary/20"
+                  className="flex-1 rounded-[1.5rem] bg-slate-900 hover:bg-slate-800 text-white font-black h-14 shadow-xl shadow-slate-900/10"
                   onClick={() => handleUpdatePermissions(editingUser.uid, editingUser.permissions, editingUser.isAdmin)}
                 >
-                  حفظ التغييرات
+                  تحديث كافة الصلاحيات
                 </Button>
                 <Button 
                   variant="outline" 
-                  className="rounded-2xl border-slate-200 text-slate-500 font-bold h-12 px-8"
+                  className="rounded-[1.5rem] border-slate-200 text-slate-500 font-bold h-14 px-10"
                   onClick={() => setIsModalOpen(false)}
                 >
-                  إلغاء
+                  تراجع
                 </Button>
               </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xl z-[110] flex items-center justify-center p-4">
+          <Card className="w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl p-10 border-0 text-center animate-in zoom-in-95">
+            <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto text-red-500 mb-6">
+              <AlertTriangle size={40} />
+            </div>
+            <h3 className="text-2xl font-black text-slate-900 mb-2">تأكيد حذف المستخدم؟</h3>
+            <p className="text-slate-500 font-medium mb-10 leading-relaxed">
+              سيؤدي هذا إلى حذف سجل المستخدم وصلاحياته من النظام. لن يتمكن من الدخول مرة أخرى.
+            </p>
+            <div className="flex flex-col gap-3">
+              <Button 
+                variant="destructive" 
+                className="w-full h-14 rounded-2xl font-black text-lg bg-red-600 hover:bg-red-700 shadow-xl shadow-red-600/20"
+                onClick={() => handleDeleteUserRecord(deleteConfirm)}
+              >
+                نعم، احذف السجل نهائياً
+              </Button>
+              <Button 
+                variant="ghost" 
+                className="w-full h-12 rounded-2xl font-bold text-slate-400 hover:bg-slate-50"
+                onClick={() => setDeleteConfirm(null)}
+              >
+                تراجع عن الأمر
+              </Button>
             </div>
           </Card>
         </div>
@@ -2498,6 +2610,7 @@ function UserManagement() {
     </div>
   );
 }
+
 
 function ItemCardView({ items, suppliers, purchases, issuances, getItemMovements }: { items: Item[], suppliers: Supplier[], purchases: Purchase[], issuances: Issuance[], getItemMovements: (id: string) => any[] }) {
   const [selectedId, setSelectedId] = useState<string>('');
@@ -6433,7 +6546,11 @@ function Suppliers({
               </div>
             </CardHeader>
             <CardContent className="p-0 overflow-auto flex-1">
-              <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-4 bg-zinc-50 border-b border-zinc-100 print:bg-white">
+              <div className="p-6 grid grid-cols-1 md:grid-cols-4 gap-4 bg-zinc-50 border-b border-zinc-100 print:bg-white text-right" dir="rtl">
+                <div className="p-4 bg-white rounded-xl border border-zinc-200">
+                  <p className="text-xs text-zinc-500 mb-1">رصيد أول المدة</p>
+                  <p className="text-xl font-bold text-slate-700">{(selectedSupplier.openingBalance || 0).toLocaleString()} ج.م</p>
+                </div>
                 <div className="p-4 bg-white rounded-xl border border-zinc-200">
                   <p className="text-xs text-zinc-500 mb-1">إجمالي المشتريات</p>
                   <p className="text-xl font-bold">{selectedSupplier.totalPurchases.toLocaleString()} ج.م</p>
@@ -7244,7 +7361,27 @@ function ReportsView({
   machineMaintenance: MachineMaintenance[],
   companySettings: CompanySettings
 }) {
-  const [activeReportTab, setActiveReportTab] = useState<'dashboard' | 'warehouse' | 'purchases'>('dashboard');
+  const [activeReportTab, setActiveReportTab] = useState<'dashboard' | 'warehouse' | 'purchases' | 'suppliers'>('dashboard');
+
+  // Supplier Reports Data
+  const supplierDebtData = suppliers
+    .filter(s => s.balance > 0)
+    .map(s => ({ name: s.name, balance: s.balance }))
+    .sort((a, b) => b.balance - a.balance)
+    .slice(0, 10);
+
+  const supplierPurchasesData = suppliers
+    .map(s => ({ 
+      name: s.name, 
+      total: s.totalPurchases, 
+      paid: s.totalPayments,
+      debt: s.balance
+    }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 8);
+
+  const totalPaymentsAcrossSuppliers = suppliers.reduce((acc, s) => acc + s.totalPayments, 0);
+  const totalDebtAcrossSuppliers = suppliers.reduce((acc, s) => acc + s.balance, 0);
 
   // Logic for Purchase Reports
   const purchasesBySupplier = suppliers.map(s => ({
@@ -7399,6 +7536,12 @@ function ReportsView({
             className={`px-6 py-2 rounded-xl font-black transition-all ${activeReportTab === 'purchases' ? 'bg-white shadow-sm text-primary' : 'text-slate-500'}`}
           >
             تحليل المشتريات
+          </button>
+          <button 
+            onClick={() => setActiveReportTab('suppliers')}
+            className={`px-6 py-2 rounded-xl font-black transition-all ${activeReportTab === 'suppliers' ? 'bg-white shadow-sm text-primary' : 'text-slate-500'}`}
+          >
+            تقرير الموردين
           </button>
         </div>
       </div>
@@ -7759,6 +7902,140 @@ function ReportsView({
                   <Bar dataKey="amount" fill="#10b981" radius={[0, 8, 8, 0]} barSize={30} />
                 </BarChart>
               </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {activeReportTab === 'suppliers' && (
+        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <Card className="dribbble-card border-none bg-slate-900 shadow-sm text-white">
+              <CardContent className="pt-6">
+                <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">إجمالي المديونية</p>
+                <h3 className="text-2xl font-black">{totalDebtAcrossSuppliers.toLocaleString()} <small className="text-xs font-bold text-slate-400">ج.م</small></h3>
+              </CardContent>
+            </Card>
+            <Card className="dribbble-card border-none bg-blue-600 shadow-sm text-white">
+              <CardContent className="pt-6">
+                <p className="text-xs font-black text-blue-200 uppercase tracking-widest mb-1">إجمالي المسدد</p>
+                <h3 className="text-2xl font-black">{totalPaymentsAcrossSuppliers.toLocaleString()} <small className="text-xs font-bold text-blue-200">ج.م</small></h3>
+              </CardContent>
+            </Card>
+            <Card className="dribbble-card border-none bg-emerald-600 shadow-sm text-white">
+              <CardContent className="pt-6">
+                <p className="text-xs font-black text-emerald-200 uppercase tracking-widest mb-1">نسبة السداد العامة</p>
+                <h3 className="text-2xl font-black">
+                  {totalPaymentsAcrossSuppliers + totalDebtAcrossSuppliers > 0 
+                    ? Math.round((totalPaymentsAcrossSuppliers / (totalPaymentsAcrossSuppliers + totalDebtAcrossSuppliers)) * 100) 
+                    : 0}%
+                </h3>
+              </CardContent>
+            </Card>
+            <Card className="dribbble-card border-none bg-amber-500 shadow-sm text-white">
+              <CardContent className="pt-6">
+                <p className="text-xs font-black text-amber-100 uppercase tracking-widest mb-1">عدد الموردين</p>
+                <h3 className="text-2xl font-black">{suppliers.length} <small className="text-xs font-bold text-amber-100">مورد</small></h3>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <Card className="dribbble-card border-none shadow-xl shadow-slate-200/50">
+              <CardHeader>
+                <CardTitle className="text-xl font-black">تحليل التعاملات لكل مورد</CardTitle>
+                <CardDescription className="font-bold">المقارنة بين إجمالي المشتريات والمدفوعات</CardDescription>
+              </CardHeader>
+              <CardContent className="h-[400px] pt-4">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={supplierPurchasesData}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 700, fill: '#64748b' }} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }} />
+                    <Tooltip 
+                      contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px' }}
+                    />
+                    <Legend iconType="circle" />
+                    <Bar dataKey="total" name="إجمالي المشتريات" fill="#3b82f6" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="paid" name="المسدد فعلياً" fill="#10b981" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card className="dribbble-card border-none shadow-xl shadow-slate-200/50">
+              <CardHeader>
+                <CardTitle className="text-xl font-black">أكثر الموردين دائنية للمصنع</CardTitle>
+                <CardDescription className="font-bold">أعلى 10 موردين لهم مبالغ مستحقة</CardDescription>
+              </CardHeader>
+              <CardContent className="h-[400px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={supplierDebtData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={80}
+                      outerRadius={120}
+                      paddingAngle={5}
+                      dataKey="balance"
+                    >
+                      {supplierDebtData.map((_entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px' }}
+                      formatter={(value: number) => [`${value.toLocaleString()} ج.م`, 'المبلغ']}
+                    />
+                    <Legend verticalAlign="bottom" align="center" iconType="circle" />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="dribbble-card border-none shadow-xl shadow-slate-200/50 overflow-hidden">
+            <CardHeader className="bg-slate-50/50 border-b border-slate-100">
+              <CardTitle className="text-xl font-black">كشف الأرصدة التفصيلي للموردين</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-slate-50/50">
+                    <TableHead className="text-right font-black py-4">اسم المورد</TableHead>
+                    <TableHead className="text-right font-black">إجمالي المسحوبات</TableHead>
+                    <TableHead className="text-right font-black">إجمالي المدفوعات</TableHead>
+                    <TableHead className="text-right font-black">الرصيد الحالي</TableHead>
+                    <TableHead className="text-right font-black">نسبة السداد</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {suppliers.sort((a, b) => b.totalPurchases - a.totalPurchases).map(s => (
+                    <TableRow key={s.id} className="hover:bg-slate-50/50 transition-colors">
+                      <TableCell className="font-black text-slate-900 py-4">{s.name}</TableCell>
+                      <TableCell className="font-bold text-slate-600">{s.totalPurchases.toLocaleString()} ج.م</TableCell>
+                      <TableCell className="font-bold text-emerald-600">{s.totalPayments.toLocaleString()} ج.م</TableCell>
+                      <TableCell className={`font-black ${s.balance > 0 ? 'text-red-500' : 'text-emerald-600'}`}>
+                        {s.balance.toLocaleString()} ج.م
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                            <div className="w-24 bg-slate-100 h-2 rounded-full overflow-hidden">
+                            <div 
+                                className="bg-emerald-500 h-full" 
+                                style={{ width: `${s.totalPurchases > 0 ? (s.totalPayments / s.totalPurchases) * 100 : 0}%` }}
+                            />
+                            </div>
+                            <span className="text-xs font-bold text-slate-500">
+                                {s.totalPurchases > 0 ? Math.round((s.totalPayments / s.totalPurchases) * 100) : 0}%
+                            </span>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
         </div>

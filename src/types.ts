@@ -135,6 +135,7 @@ export interface Supplier {
   totalPurchases: number;
   totalPayments: number;
   balance: number;
+  openingBalance: number;
 }
 
 export interface Purchase {
