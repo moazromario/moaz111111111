@@ -602,13 +602,28 @@ const calculateLivePayroll = (
     }
     return sum + (Number(t.amount) || 0);
   }, 0);
-  const totalBonuses = empTransactions.filter(t => t.type === 'مكافأة' || t.type === 'مكافآت' || t.type === 'بدل').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+
+  // Fixed Allowances calculation (Transport, Housing, Phone, Work Nature, Badalat)
+  const monthlyFixedAllowances = (emp.transportAllowance || 0) + (emp.housingAllowance || 0) + (emp.phoneAllowance || 0) + (emp.workNatureAllowance || 0) + (emp.allowances || 0);
+  const fixedAllowancesProrated = p.weekNumber ? Math.round((monthlyFixedAllowances / 4) * 100) / 100 : monthlyFixedAllowances;
+
+  const transactionBonuses = empTransactions.filter(t => t.type === 'مكافأة' || t.type === 'مكافآت' || t.type === 'بدل').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+  const totalBonuses = transactionBonuses + fixedAllowancesProrated;
+
   const totalExpenses = empTransactions.filter(t => t.type === 'مصروف' || t.type === 'سلفة' || t.type === 'عهدة').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
   const manualLoanDeductions = empTransactions.filter(t => t.type === 'خصم سلف' || t.type === 'سلفة مستردة').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
   const manualDeductions = empTransactions.filter(t => t.type === 'خصم' || t.type === 'جزاء').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-  const totalDeductions = manualDeductions + Math.round(attendanceStats.timeDeduction * 100) / 100;
 
-  const totalProduction = empProduction.reduce((sum, r) => sum + r.total, 0);
+  // Fixed Deductions (Social Insurance & Income Tax)
+  const monthlyFixedDeductions = (emp.socialInsuranceDeduction || 0) + (emp.incomeTaxDeduction || 0);
+  const fixedDeductionsProrated = p.weekNumber ? Math.round((monthlyFixedDeductions / 4) * 100) / 100 : monthlyFixedDeductions;
+
+  const totalDeductions = manualDeductions + fixedDeductionsProrated + Math.round(attendanceStats.timeDeduction * 100) / 100;
+
+  // Production records + Early Completion / Quality Incentives
+  const rawProductionTotal = empProduction.reduce((sum, r) => sum + (Number(r.total) || 0), 0);
+  const productionIncentives = empProduction.reduce((sum, r) => sum + (Number(r.earlyBonus) || 0) + (Number(r.qualityBonus) || 0), 0);
+  const totalProduction = rawProductionTotal + productionIncentives;
 
   let baseSalary = 0;
   if (emp.payMethod === 'production') {
@@ -2940,7 +2955,7 @@ function MainApp({
 
 
       {/* Main Content */}
-      <main className="flex-1 overflow-x-hidden overflow-y-auto allow-print relative bg-slate-50 pb-20 md:pb-0">
+      <main id="main-scroll-container" className="flex-1 overflow-x-hidden overflow-y-auto allow-print relative bg-slate-50 pb-20 md:pb-0">
         {/* Mobile Top Header */}
         <div className="md:hidden sticky top-0 bg-white/80 backdrop-blur-xl border-b border-slate-100 px-6 h-12 flex items-center justify-between z-40 transition-all">
            <div className="flex items-center gap-4">
@@ -5631,7 +5646,9 @@ const Dashboard = React.memo(function Dashboard({
                     <Users size={18} />
                   </div>
                   <div className="flex flex-col text-right">
-                    <span className="text-sm font-black text-slate-900 leading-tight">{employees.find(e => e.id === trans.employeeId)?.name || 'موظف مجهول'}</span>
+                    <span className="text-sm font-black text-slate-900 leading-tight">
+                      {employees.find(e => e.id === trans.employeeId)?.name || (trans as any).employeeName || (trans.description ? `تسوية: ${trans.description}` : 'حركة مالية / موظف عام')}
+                    </span>
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{trans.type} - {trans.date}</span>
                   </div>
                 </div>
@@ -14122,13 +14139,104 @@ const EmployeesView = React.memo(function EmployeesView({ employees }: { employe
                   <Input type="time" className="rounded-xl h-11" value={editingEmployee.shiftEnd || '18:00'} onChange={e => setEditingEmployee({...editingEmployee, shiftEnd: e.target.value})} />
                 </div>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-slate-700">الحالة</label>
-                <select className="w-full h-11 rounded-xl border border-slate-200 px-3 bg-white font-bold" value={editingEmployee.status} onChange={e => setEditingEmployee({...editingEmployee, status: e.target.value as any})}>
-                  <option value="نشط">نشط</option>
-                  <option value="موقوف">موقوف</option>
-                  <option value="مستقيل">مستقيل</option>
-                </select>
+              {/* Job Category & Department */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700 block text-right">الفئة الوظيفية</label>
+                  <select 
+                    className="w-full h-11 rounded-xl border border-slate-200 px-3 bg-white font-bold text-right text-sm"
+                    value={editingEmployee.jobCategory || 'أخرى'}
+                    onChange={e => setEditingEmployee({...editingEmployee, jobCategory: e.target.value as any})}
+                  >
+                    <option value="إدارة">إدارة ومكاتب</option>
+                    <option value="فني ورشة">فني ورشة وتصنيع</option>
+                    <option value="سائق">سائقين ونقل</option>
+                    <option value="عامل مصنع">عامل مصنع وإنتاج</option>
+                    <option value="خدمات ومعاونة">خدمات ومعاونة</option>
+                    <option value="أخرى">أخرى</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700 block text-right">الحالة</label>
+                  <select className="w-full h-11 rounded-xl border border-slate-200 px-3 bg-white font-bold text-right text-sm" value={editingEmployee.status} onChange={e => setEditingEmployee({...editingEmployee, status: e.target.value as any})}>
+                    <option value="نشط">نشط</option>
+                    <option value="موقوف">موقوف</option>
+                    <option value="مستقيل">مستقيل</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Allowances & Fixed Deductions Tree (شجرة البدلات والتأمينات الثابتة) */}
+              <div className="p-4 rounded-2xl bg-indigo-50/70 border border-indigo-200 space-y-3">
+                <div className="flex items-center gap-2 text-indigo-950 font-black text-sm">
+                  <span>🌳 شجرة البدلات والتأمينات الثابتة (مكونات الأجر)</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 text-right">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 block mb-1">بدل انتقال شهري (ج.م)</label>
+                    <Input 
+                      type="number" 
+                      className="rounded-xl h-9 text-right font-bold text-xs bg-white" 
+                      value={editingEmployee.transportAllowance || ''} 
+                      onChange={e => setEditingEmployee({...editingEmployee, transportAllowance: Number(e.target.value)})} 
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 block mb-1">بدل سكن شهري (ج.م)</label>
+                    <Input 
+                      type="number" 
+                      className="rounded-xl h-9 text-right font-bold text-xs bg-white" 
+                      value={editingEmployee.housingAllowance || ''} 
+                      onChange={e => setEditingEmployee({...editingEmployee, housingAllowance: Number(e.target.value)})} 
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 block mb-1">بدل هاتف واتصالات (ج.م)</label>
+                    <Input 
+                      type="number" 
+                      className="rounded-xl h-9 text-right font-bold text-xs bg-white" 
+                      value={editingEmployee.phoneAllowance || ''} 
+                      onChange={e => setEditingEmployee({...editingEmployee, phoneAllowance: Number(e.target.value)})} 
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 block mb-1">بدل طبيعة عمل (ج.م)</label>
+                    <Input 
+                      type="number" 
+                      className="rounded-xl h-9 text-right font-bold text-xs bg-white" 
+                      value={editingEmployee.workNatureAllowance || ''} 
+                      onChange={e => setEditingEmployee({...editingEmployee, workNatureAllowance: Number(e.target.value)})} 
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 text-right pt-2 border-t border-indigo-200/80">
+                  <div>
+                    <label className="text-[11px] font-bold text-rose-800 block mb-1">استقطاع التأمين الاجتماعي (شهري)</label>
+                    <Input 
+                      type="number" 
+                      className="rounded-xl h-9 text-right font-bold text-xs bg-white text-rose-700" 
+                      value={editingEmployee.socialInsuranceDeduction || ''} 
+                      onChange={e => setEditingEmployee({...editingEmployee, socialInsuranceDeduction: Number(e.target.value)})} 
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-rose-800 block mb-1">ضريبة كسب العمل (شهري)</label>
+                    <Input 
+                      type="number" 
+                      className="rounded-xl h-9 text-right font-bold text-xs bg-white text-rose-700" 
+                      value={editingEmployee.incomeTaxDeduction || ''} 
+                      onChange={e => setEditingEmployee({...editingEmployee, incomeTaxDeduction: Number(e.target.value)})} 
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
               </div>
               <div className="flex justify-end gap-3 pt-6">
                 <Button variant="ghost" className="btn-ghost" onClick={() => setEditingEmployee(null)}>إلغاء</Button>
@@ -16345,10 +16453,13 @@ const HRTransactionsView = React.memo(function HRTransactionsView({ employees, t
   const handleAdd = async () => {
     if (!formData.employeeId || isSaving) return;
     
-    let finalData = { ...formData };
+    const emp = employees.find(e => e.id === formData.employeeId);
+    let finalData = { 
+      ...formData,
+      employeeName: emp?.name || ''
+    };
     
     if (formData.type === 'إضافي') {
-      const emp = employees.find(e => e.id === formData.employeeId);
       if (emp && formData.overtimeHours > 0) {
         const hourlyRate = emp.dailyRate / 10;
         finalData.amount = formData.overtimeHours * formData.overtimeRate * hourlyRate;
@@ -16383,10 +16494,13 @@ const HRTransactionsView = React.memo(function HRTransactionsView({ employees, t
   const handleUpdate = async () => {
     if (!editingTransaction || isSaving) return;
     
-    let finalData = { ...editingTransaction };
+    const emp = employees.find(e => e.id === editingTransaction.employeeId);
+    let finalData = { 
+      ...editingTransaction,
+      employeeName: emp?.name || (editingTransaction as any).employeeName || ''
+    };
     
     if (finalData.type === 'إضافي') {
-      const emp = employees.find(e => e.id === finalData.employeeId);
       if (emp && finalData.overtimeHours && finalData.overtimeHours > 0) {
         const hourlyRate = emp.dailyRate / 10;
         finalData.amount = finalData.overtimeHours * (finalData.overtimeRate || 1.5) * hourlyRate;
@@ -16469,7 +16583,9 @@ const HRTransactionsView = React.memo(function HRTransactionsView({ employees, t
             {filteredTransactions.map(tr => (
               <TableRow key={tr.id} className="hover:bg-slate-50/50 transition-colors">
                 <TableCell className="font-bold text-slate-500">{tr.date}</TableCell>
-                <TableCell className="font-black text-slate-900">{employees.find(e => e.id === tr.employeeId)?.name}</TableCell>
+                <TableCell className="font-black text-slate-900">
+                  {employees.find(e => e.id === tr.employeeId)?.name || (tr as any).employeeName || (tr.description ? `تسوية: ${tr.description}` : 'موظف عام')}
+                </TableCell>
                 <TableCell>
                   <Badge className={`rounded-lg px-3 py-1 border-none font-black text-[10px] uppercase tracking-widest ${
                     tr.type === 'مكافأة' ? 'bg-green-100 text-green-700' : 
@@ -16683,7 +16799,7 @@ const HRProductionView = React.memo(function HRProductionView({ employees, produ
   const [entryEmployeeId, setEntryEmployeeId] = useState('');
   const [entryContractorName, setEntryContractorName] = useState('');
   const [entryDate, setEntryDate] = useState(new Date().toISOString().split('T')[0]);
-  const [items, setItems] = useState([{ id: Math.random().toString(36).substr(2, 9), itemName: '', quantity: 1, rate: 0 }]);
+  const [items, setItems] = useState([{ id: Math.random().toString(36).substr(2, 9), itemName: '', quantity: 1, rate: 0, earlyBonus: 0, qualityBonus: 0, jobOrderNo: '' }]);
   const [searchTerm, setSearchTerm] = useState('');
   
   // Group Rate Configuration states
@@ -16748,7 +16864,7 @@ const HRProductionView = React.memo(function HRProductionView({ employees, produ
   });
 
   const addItem = () => {
-    setItems([...items, { id: Math.random().toString(36).substr(2, 9), itemName: '', quantity: 1, rate: 0 }]);
+    setItems([...items, { id: Math.random().toString(36).substr(2, 9), itemName: '', quantity: 1, rate: 0, earlyBonus: 0, qualityBonus: 0, jobOrderNo: '' }]);
   };
 
   const removeItem = (id: string) => {
@@ -16781,21 +16897,28 @@ const HRProductionView = React.memo(function HRProductionView({ employees, produ
       const batch = writeBatch(db);
       validItems.forEach(item => {
         const docRef = doc(collection(db, 'productionRecords'));
+        const itemEarlyBonus = Number(item.earlyBonus) || 0;
+        const itemQualityBonus = Number(item.qualityBonus) || 0;
+        const itemTotal = (item.quantity * item.rate) + itemEarlyBonus + itemQualityBonus;
+
         batch.set(docRef, {
           employeeId: entryType === 'registered' ? entryEmployeeId : 'manual',
           contractorName: entryType === 'registered' ? '' : entryContractorName.trim(),
           itemName: item.itemName,
           quantity: item.quantity,
           rate: item.rate,
-          total: item.quantity * item.rate,
+          earlyBonus: itemEarlyBonus,
+          qualityBonus: itemQualityBonus,
+          jobOrderNo: item.jobOrderNo || '',
+          total: itemTotal,
           date: entryDate,
           createdAt: serverTimestamp()
-            });
+        });
       });
       
       await batch.commit();
       setShowAdd(false);
-      setItems([{ id: Math.random().toString(36).substr(2, 9), itemName: '', quantity: 1, rate: 0 }]);
+      setItems([{ id: Math.random().toString(36).substr(2, 9), itemName: '', quantity: 1, rate: 0, earlyBonus: 0, qualityBonus: 0, jobOrderNo: '' }]);
       setEntryEmployeeId('');
       setEntryContractorName('');
       setEntryType('registered');
@@ -16945,30 +17068,55 @@ const HRProductionView = React.memo(function HRProductionView({ employees, produ
           <TableHeader className="bg-slate-50/50">
             <TableRow>
               <TableHead className="text-right font-black text-slate-900 py-5">تاريخ</TableHead>
-              <TableHead className="text-right font-black text-slate-900">الموظف</TableHead>
+              <TableHead className="text-right font-black text-slate-900">الموظف/المقاول</TableHead>
+              <TableHead className="text-right font-black text-slate-900">أمر الشغل</TableHead>
               <TableHead className="text-right font-black text-slate-900">البيان (المنتج)</TableHead>
               <TableHead className="text-right font-black text-slate-900">الكمية</TableHead>
               <TableHead className="text-right font-black text-slate-900">سعر القطعة</TableHead>
-              <TableHead className="text-right font-black text-slate-900">الإجمالي</TableHead>
+              <TableHead className="text-right font-black text-slate-900">حافز إنجاز مبكر</TableHead>
+              <TableHead className="text-right font-black text-slate-900">الإجمالي الشامل</TableHead>
               <TableHead className="text-right font-black text-slate-900">إجراءات</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredRecords.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(record => (
-              <TableRow key={record.id} className="hover:bg-slate-50/50 transition-colors">
-                <TableCell className="font-bold text-slate-500">{record.date}</TableCell>
-                <TableCell className="font-black text-slate-900">{employees.find(e => e.id === record.employeeId)?.name}</TableCell>
-                <TableCell className="font-bold text-slate-600">{record.itemName}</TableCell>
-                <TableCell className="font-black text-blue-600">{record.quantity} قطعة</TableCell>
-                <TableCell className="font-bold text-slate-600">{record.rate.toLocaleString()} ج.م</TableCell>
-                <TableCell className="font-black text-primary text-lg">{record.total.toLocaleString()} ج.م</TableCell>
-                <TableCell>
-                  <Button onClick={() => handleDelete(record.id)} variant="ghost" size="icon" className="text-red-600 hover:bg-red-50">
-                    <Trash2 size={16} />
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
+            {filteredRecords.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(record => {
+              const emp = employees.find(e => e.id === record.employeeId);
+              const displayName = record.contractorName || emp?.name || 'مقاول يدوي';
+
+              return (
+                <TableRow key={record.id} className="hover:bg-slate-50/50 transition-colors">
+                  <TableCell className="font-bold text-slate-500">{record.date}</TableCell>
+                  <TableCell className="font-black text-slate-900">{displayName}</TableCell>
+                  <TableCell className="font-bold text-slate-600">
+                    {record.jobOrderNo ? (
+                      <span className="bg-slate-100 text-slate-800 px-2.5 py-1 rounded-lg border border-slate-200 text-xs font-mono">
+                        {record.jobOrderNo}
+                      </span>
+                    ) : (
+                      <span className="text-slate-400 text-xs">-</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="font-bold text-slate-700">{record.itemName}</TableCell>
+                  <TableCell className="font-black text-blue-600">{record.quantity} قطعة</TableCell>
+                  <TableCell className="font-bold text-slate-600">{record.rate.toLocaleString()} ج.م</TableCell>
+                  <TableCell>
+                    {record.earlyBonus && record.earlyBonus > 0 ? (
+                      <span className="bg-amber-100 text-amber-900 border border-amber-300 font-black text-xs px-2.5 py-1 rounded-lg inline-flex items-center gap-1">
+                        ⚡ +{record.earlyBonus.toLocaleString()} ج.م
+                      </span>
+                    ) : (
+                      <span className="text-slate-400 text-xs">-</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="font-black text-emerald-700 text-lg">{record.total.toLocaleString()} ج.م</TableCell>
+                  <TableCell>
+                    <Button onClick={() => handleDelete(record.id)} variant="ghost" size="icon" className="text-red-600 hover:bg-red-50">
+                      <Trash2 size={16} />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>
@@ -17058,10 +17206,12 @@ const HRProductionView = React.memo(function HRProductionView({ employees, produ
                   <Table>
                     <TableHeader className="bg-slate-50/50">
                       <TableRow className="hover:bg-transparent">
-                        <TableHead className="text-right font-black text-slate-700 w-[50%]">الغرفة / القطعة / الخدمة</TableHead>
-                        <TableHead className="text-right font-black text-slate-700 w-[15%]">الكمية</TableHead>
-                        <TableHead className="text-right font-black text-slate-700 w-[20%]">سعر القطعة (ج.م)</TableHead>
-                        <TableHead className="text-right font-black text-slate-700 w-[15%]">الإجمالي</TableHead>
+                        <TableHead className="text-right font-black text-slate-700 w-[30%]">الغرفة / القطعة / الخدمة</TableHead>
+                        <TableHead className="text-right font-black text-slate-700 w-[15%]">أمر شغل الورشة</TableHead>
+                        <TableHead className="text-right font-black text-slate-700 w-[10%]">الكمية</TableHead>
+                        <TableHead className="text-right font-black text-slate-700 w-[15%]">سعر القطعة (ج.م)</TableHead>
+                        <TableHead className="text-right font-black text-slate-700 w-[15%]">حافز إنجاز مبكر (+)</TableHead>
+                        <TableHead className="text-right font-black text-slate-700 w-[15%]">الإجمالي الشامل</TableHead>
                         <TableHead className="w-[50px]"></TableHead>
                       </TableRow>
                     </TableHeader>
@@ -17095,7 +17245,7 @@ const HRProductionView = React.memo(function HRProductionView({ employees, produ
                                     }
                                   }}
                                 >
-                                  <option value="manual">-- اختر من كشاف أسعار الغرف أو اكتب يدوياً أسفله --</option>
+                                  <option value="manual">-- اختر من كشاف أسعار الغرف أو اكتب يدوياً --</option>
                                   {productionRates.map(r => (
                                     <option key={r.id} value={r.id}>
                                       {r.itemName} | (المجموعة أ: {r.rateA} ج.م / المجموعة ب: {r.rateB} ج.م)
@@ -17120,6 +17270,15 @@ const HRProductionView = React.memo(function HRProductionView({ employees, produ
                           </TableCell>
                           <TableCell className="p-2">
                             <Input 
+                              type="text" 
+                              className="rounded-lg h-10 border-slate-200 text-right font-bold text-xs" 
+                              placeholder="أمر #101"
+                              value={item.jobOrderNo || ''}
+                              onChange={(e) => updateItem(item.id, 'jobOrderNo', e.target.value)}
+                            />
+                          </TableCell>
+                          <TableCell className="p-2">
+                            <Input 
                               type="number" 
                               className="rounded-lg h-10 border-slate-200 text-right font-bold text-sm" 
                               value={item.quantity}
@@ -17134,8 +17293,17 @@ const HRProductionView = React.memo(function HRProductionView({ employees, produ
                               onChange={(e) => updateItem(item.id, 'rate', Number(e.target.value))}
                             />
                           </TableCell>
+                          <TableCell className="p-2">
+                            <Input 
+                              type="number" 
+                              className="rounded-lg h-10 border-amber-300 text-right font-bold text-sm text-amber-800 bg-amber-50/50" 
+                              placeholder="حافز إنجاز"
+                              value={item.earlyBonus || ''}
+                              onChange={(e) => updateItem(item.id, 'earlyBonus', Number(e.target.value))}
+                            />
+                          </TableCell>
                           <TableCell className="p-2 font-black text-slate-900 text-right text-sm">
-                            {(item.quantity * item.rate).toLocaleString()} ج.م
+                            {((item.quantity * item.rate) + (Number(item.earlyBonus) || 0) + (Number(item.qualityBonus) || 0)).toLocaleString()} ج.م
                           </TableCell>
                           <TableCell className="p-2 text-center">
                             {items.length > 1 && (
@@ -17155,7 +17323,7 @@ const HRProductionView = React.memo(function HRProductionView({ employees, produ
                 <div>
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-widest text-right font-bold">إجمالي السجل</p>
                   <p className="text-3xl font-black text-slate-900 text-right font-bold">
-                    {items.reduce((sum, item) => sum + (item.quantity * item.rate), 0).toLocaleString()} <span className="text-sm font-bold text-slate-500">ج.م</span>
+                    {items.reduce((sum, item) => sum + (item.quantity * item.rate) + (Number(item.earlyBonus) || 0) + (Number(item.qualityBonus) || 0), 0).toLocaleString()} <span className="text-sm font-bold text-slate-500">ج.م</span>
                   </p>
                 </div>
                 <div>
@@ -17424,6 +17592,7 @@ const PayrollView = React.memo(function PayrollView({
   });
   const [selectedPayrollIds, setSelectedPayrollIds] = useState<string[]>([]);
   const [selectedPayrollForSlip, setSelectedPayrollForSlip] = useState<Payroll | null>(null);
+  const [showBulkPrintModal, setShowBulkPrintModal] = useState(false);
 
   const handleGenerate = async () => {
     try {
@@ -17628,33 +17797,41 @@ const PayrollView = React.memo(function PayrollView({
   };
 
   const handleWhatsApp = (p: Payroll) => {
-    const emp = employees.find(e => e.id === p.employeeId);
+    const liveP = getLivePayroll(p);
+    const emp = employees.find(e => e.id === liveP.employeeId);
     if (!emp?.phone) {
-      alert('يرجى إضافة رقم الهاتف للموظف أولاً');
+      alert(`يرجى إضافة رقم الهاتف للموظف (${emp?.name || 'المحدد'}) في شاشة الموظفين لتفعيل إرسال قسيمة الواتساب.`);
       return;
     }
 
-    const message = `*${companyInfo.name}*
-*قسيمة صرف راتب أسبوعي*
---------------------------
-*الاسم:* ${emp.name}
-*الأسبوع:* ${p.weekNumber} / ${p.year}
---------------------------
-*أيام العمل:* ${(p.daysWorked || 0).toFixed(2)}
-*الأجر الأساسي:* ${p.baseSalary.toLocaleString('en-US')}
-*إنتاج (+):* ${p.totalProduction.toLocaleString('en-US')}
-*إضافي (+):* ${p.totalOvertime.toLocaleString('en-US')}
-*مكافآت (+):* ${p.totalBonuses.toLocaleString('en-US')}
-*خصومات (-):* ${p.totalDeductions.toLocaleString('en-US')}
-*سلف (-):* ${p.totalLoans.toLocaleString('en-US')}
---------------------------
-*صافي الراتب:* ${p.netSalary.toLocaleString('en-US')} ج.م
---------------------------
-شكراً لعملكم معنا.`;
+    const totalEarnings = (liveP.baseSalary || 0) + (liveP.totalProduction || 0) + (liveP.totalOvertime || 0) + (liveP.totalBonuses || 0);
+    const totalDeductionsVal = (liveP.totalDeductions || 0) + (liveP.totalExpenses || 0) + (liveP.totalLoans || 0);
+
+    const cleanPhone = emp.phone.replace(/[^0-9]/g, '');
+    const formattedPhone = cleanPhone.startsWith('01') ? '2' + cleanPhone : cleanPhone;
+
+    const message = `*${companyInfo?.name || 'الشركة'}* 🧾
+*قسيمة مفردات مرتب تفصيلية*
+--------------------------------
+👤 *الموظف:* ${emp.name} (${emp.position || emp.department || 'عام'})
+📅 *الفترة:* أسبوع ${liveP.weekNumber || 1} / ${liveP.year || 2026}
+--------------------------------
+📊 *تفاصيل الأيام والإنتاجية:*
+• أيام العمل المشغولة: ${(liveP.daysWorked || 0).toFixed(2)} يوم
+• الأجر الأساسي: ${(liveP.baseSalary || 0).toLocaleString('en-US')} ج.م
+${liveP.totalProduction > 0 ? `• أجر الإنتاج بالقطعة: ${liveP.totalProduction.toLocaleString('en-US')} ج.م\n` : ''}--------------------------------
+➕ *المستحقات والإضافات (+):*
+${liveP.totalOvertime > 0 ? `• إضافي وساعات عمل: +${liveP.totalOvertime.toLocaleString('en-US')} ج.م\n` : ''}${liveP.totalBonuses > 0 ? `• مكافآت وبدلات: +${liveP.totalBonuses.toLocaleString('en-US')} ج.م\n` : ''}• *إجمالي المستحقات:* ${totalEarnings.toLocaleString('en-US')} ج.م
+--------------------------------
+➖ *الاستقطاعات والخصومات (-):*
+${liveP.totalDeductions > 0 ? `• خصومات وجزاءات: -${liveP.totalDeductions.toLocaleString('en-US')} ج.م\n` : ''}${liveP.totalExpenses > 0 ? `• عهد ومصروفات: -${liveP.totalExpenses.toLocaleString('en-US')} ج.م\n` : ''}${liveP.totalLoans > 0 ? `• تسديد سلف وذمم: -${liveP.totalLoans.toLocaleString('en-US')} ج.م\n` : ''}• *إجمالي الاستقطاعات:* ${totalDeductionsVal.toLocaleString('en-US')} ج.م
+--------------------------------
+💵 *صافي الراتب المستحق:* *${liveP.netSalary.toLocaleString('en-US')} ج.م*
+--------------------------------
+شكراً لجهودكم وتمنياتنا بالتوفيق الدائم.`;
 
     const encodedMessage = encodeURIComponent(message);
-    const phone = emp.phone || '';
-    const whatsappUrl = `https://wa.me/${phone.startsWith('0') ? '2' + phone : phone}?text=${encodedMessage}`;
+    const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodedMessage}`;
     window.open(whatsappUrl, '_blank');
   };
 
@@ -17967,12 +18144,22 @@ const PayrollView = React.memo(function PayrollView({
         </div>
         
         <div className="md:col-span-2 flex items-center justify-end gap-3 flex-wrap">
+          {processedPayrolls.length > 0 && (
+            <Button
+              onClick={() => setShowBulkPrintModal(true)}
+              className="h-14 px-7 rounded-[14px] font-black text-base bg-indigo-600 hover:bg-indigo-700 text-white shadow-xl shadow-indigo-200 flex items-center gap-2"
+            >
+              <Printer size={20} />
+              <span>
+                {selectedPayrollIds.length > 0
+                  ? `طباعة مفردات المحددين (${selectedPayrollIds.length})`
+                  : `طباعة مفردات المرتبات المجمعة (${processedPayrolls.length})`}
+              </span>
+            </Button>
+          )}
+
           {selectedPayrollIds.length > 0 ? (
             <>
-              <Button onClick={() => window.print()} className="h-14 px-8 rounded-[14px] font-black text-base bg-blue-600 hover:bg-blue-700 text-white shadow-xl shadow-blue-200">
-                <Printer size={18} className="ml-2" />
-                طباعة القسائم
-              </Button>
               <span className="text-sm font-black text-slate-500 bg-slate-100 px-4 py-2.5 rounded-xl border border-slate-200">
                 تم تحديد {selectedPayrollIds.length} كشف
               </span>
@@ -19143,6 +19330,211 @@ const PayrollView = React.memo(function PayrollView({
                 </Button>
               </CardFooter>
             </Card>
+          </div>
+        );
+      })()}
+
+      {showBulkPrintModal && (() => {
+        const listToPrint = selectedPayrollIds.length > 0
+          ? processedPayrolls.filter(p => selectedPayrollIds.includes(p.id))
+          : processedPayrolls;
+
+        return (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center p-4 z-50 overflow-y-auto">
+            <style>{`
+              @media print {
+                body * {
+                  visibility: hidden;
+                }
+                #print-bulk-slips-area, #print-bulk-slips-area * {
+                  visibility: visible;
+                }
+                #print-bulk-slips-area {
+                  position: absolute;
+                  left: 0;
+                  top: 0;
+                  width: 100%;
+                  direction: rtl;
+                  background: white !important;
+                  color: black !important;
+                  padding: 10px !important;
+                }
+                .no-print {
+                  display: none !important;
+                }
+                .slip-card-print {
+                  page-break-inside: avoid !important;
+                  break-inside: avoid !important;
+                  margin-bottom: 24px !important;
+                  border: 2px dashed #94a3b8 !important;
+                  padding: 16px !important;
+                  border-radius: 12px !important;
+                  background: white !important;
+                }
+              }
+            `}</style>
+            <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-slate-200">
+              {/* Modal Header */}
+              <div className="p-6 bg-slate-900 text-white flex justify-between items-center no-print">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-indigo-500/20 text-indigo-400">
+                    <Printer size={22} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-white">طباعة كشوف قسائم المرتبات المجمعة</h3>
+                    <p className="text-xs font-bold text-slate-400">
+                      سيتم طباعة قسائم لـ ({listToPrint.length}) موظف مقسمة بخطوط قص وتوزيع جاهزة بالتسليم بالتوقيع.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button onClick={() => safePrint()} className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black px-6 flex items-center gap-2">
+                    <Printer size={18} />
+                    طباعة الكل الآن
+                  </Button>
+                  <Button variant="ghost" className="text-slate-400 hover:text-white rounded-xl" onClick={() => setShowBulkPrintModal(false)}>
+                    <X size={20} />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Scrollable Slips List */}
+              <div className="p-6 overflow-y-auto space-y-6 flex-1 bg-slate-100" id="print-bulk-slips-area">
+                {listToPrint.map((p, idx) => {
+                  const emp = employees.find(e => e.id === p.employeeId);
+                  const totalEarnings = p.baseSalary + p.totalProduction + p.totalOvertime + p.totalBonuses;
+                  const totalDeductionsVal = p.totalDeductions + p.totalExpenses + p.totalLoans;
+
+                  return (
+                    <div key={p.id || idx} className="slip-card-print bg-white p-5 rounded-2xl border border-slate-300 shadow-sm space-y-4 relative">
+                      {/* Cut indicator on web view */}
+                      <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-100 text-amber-900 px-3 py-0.5 rounded-full text-[10px] font-black border border-amber-300 flex items-center gap-1 no-print">
+                        <span>✂️ خط القص والتوزيع - كشف رقم #{idx + 1}</span>
+                      </div>
+
+                      {/* Header */}
+                      <div className="flex justify-between items-center pb-3 border-b border-slate-200">
+                        <div>
+                          <h4 className="font-black text-lg text-slate-900">{companyInfo?.name || 'مجموعة الشركات'}</h4>
+                          <p className="text-[11px] font-bold text-slate-500">قسيمة صرف مرتب أسبوعية - أسبوع {p.weekNumber} / {p.year}</p>
+                        </div>
+                        <div className="text-left">
+                          <span className="text-xs font-black text-slate-400 block">التاريخ</span>
+                          <span className="text-xs font-bold text-slate-800">{p.startDate || '-'} إلى {p.endDate || '-'}</span>
+                        </div>
+                      </div>
+
+                      {/* Employee Banner */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 bg-slate-50 p-3 rounded-xl text-xs font-bold border border-slate-200">
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">الموظف:</span>
+                          <span className="font-black text-slate-900 text-sm">{emp?.name || 'غير معروف'}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">القسم/الوظيفة:</span>
+                          <span className="text-slate-800">{emp?.department || 'عام'} ({emp?.position || 'موظف'})</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">طريقة الأجر:</span>
+                          <span className="text-slate-800">{p.payMethod === 'production' ? 'بالإنتاج / القطعة' : 'باليومية'}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">رقم الهاتف:</span>
+                          <span className="text-slate-800 font-mono">{emp?.phone || 'غير مسجل'}</span>
+                        </div>
+                      </div>
+
+                      {/* Financial Breakdown Table */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                        {/* Earnings */}
+                        <div className="bg-emerald-50/50 p-3 rounded-xl border border-emerald-100 space-y-1.5">
+                          <span className="font-black text-emerald-800 block pb-1 border-b border-emerald-200">المستحقات (+)</span>
+                          <div className="flex justify-between text-slate-700">
+                            <span>الأجر الأساسي ({p.daysWorked.toFixed(2)} يوم):</span>
+                            <span className="font-bold">{p.baseSalary.toLocaleString()} ج.م</span>
+                          </div>
+                          {p.totalProduction > 0 && (
+                            <div className="flex justify-between text-slate-700">
+                              <span>أجر الإنتاج بالقطعة:</span>
+                              <span className="font-bold">{p.totalProduction.toLocaleString()} ج.م</span>
+                            </div>
+                          )}
+                          {p.totalOvertime > 0 && (
+                            <div className="flex justify-between text-slate-700">
+                              <span>عمل إضافي:</span>
+                              <span className="font-bold text-emerald-700">+{p.totalOvertime.toLocaleString()} ج.م</span>
+                            </div>
+                          )}
+                          {p.totalBonuses > 0 && (
+                            <div className="flex justify-between text-slate-700">
+                              <span>مكافآت وبدلات:</span>
+                              <span className="font-bold text-emerald-700">+{p.totalBonuses.toLocaleString()} ج.م</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between font-black text-emerald-900 pt-1 border-t border-emerald-200">
+                            <span>إجمالي المستحقات:</span>
+                            <span>{totalEarnings.toLocaleString()} ج.م</span>
+                          </div>
+                        </div>
+
+                        {/* Deductions */}
+                        <div className="bg-rose-50/50 p-3 rounded-xl border border-rose-100 space-y-1.5">
+                          <span className="font-black text-rose-800 block pb-1 border-b border-rose-200">الاستقطاعات (-)</span>
+                          <div className="flex justify-between text-slate-700">
+                            <span>خصومات وجزاءات:</span>
+                            <span className="font-bold text-rose-700">-{p.totalDeductions.toLocaleString()} ج.م</span>
+                          </div>
+                          {p.totalExpenses > 0 && (
+                            <div className="flex justify-between text-slate-700">
+                              <span>عهد ومصروفات:</span>
+                              <span className="font-bold text-rose-700">-{p.totalExpenses.toLocaleString()} ج.م</span>
+                            </div>
+                          )}
+                          {p.totalLoans > 0 && (
+                            <div className="flex justify-between text-slate-700">
+                              <span>تسديد سلف وذمم:</span>
+                              <span className="font-bold text-rose-700">-{p.totalLoans.toLocaleString()} ج.م</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between font-black text-rose-900 pt-1 border-t border-rose-200">
+                            <span>إجمالي الاستقطاعات:</span>
+                            <span>{totalDeductionsVal.toLocaleString()} ج.م</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Net Amount & Signatures */}
+                      <div className="flex flex-col sm:flex-row justify-between items-center bg-slate-900 text-white p-3.5 rounded-xl gap-3">
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs font-bold text-slate-300">صافي المستحق القبض:</span>
+                          <span className="text-2xl font-black font-mono text-emerald-400">{p.netSalary.toLocaleString()} ج.م</span>
+                        </div>
+                        <div className="flex items-center gap-6 text-[11px] font-bold text-slate-400 border-t sm:border-t-0 sm:border-r border-slate-700 pt-2 sm:pt-0 sm:pr-4">
+                          <span>توقيع الموظف: ........................</span>
+                          <span>توقيع الحسابات: ........................</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Footer Buttons */}
+              <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center no-print">
+                <span className="text-xs font-bold text-slate-500">
+                  إجمالي عدد القسائم جاهزة للطباعة والتوزيع: <span className="font-black text-slate-900">{listToPrint.length}</span>
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" className="font-bold rounded-xl" onClick={() => setShowBulkPrintModal(false)}>
+                    إلغاء
+                  </Button>
+                  <Button onClick={() => safePrint()} className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black px-6 flex items-center gap-2">
+                    <Printer size={18} />
+                    طباعة كافة القسائم
+                  </Button>
+                </div>
+              </div>
+            </div>
           </div>
         );
       })()}
@@ -20800,7 +21192,98 @@ const Settings = React.memo(function Settings({
         </div>
       </div>
 
+      {/* FLOATING SCROLL TO TOP BUTTON */}
+      <ScrollToTopButton />
     </div>
+  );
+});
+
+// Scroll To Top Floating Button Component
+const ScrollToTopButton = React.memo(function ScrollToTopButton() {
+  const [showButton, setShowButton] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      let currentScroll = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+      
+      const mainElem = document.getElementById('main-scroll-container') || document.querySelector('main');
+      if (mainElem && mainElem.scrollTop > currentScroll) {
+        currentScroll = mainElem.scrollTop;
+      }
+
+      const allScrollables = document.querySelectorAll('.overflow-y-auto, .overflow-auto');
+      allScrollables.forEach(el => {
+        if (el.scrollTop > currentScroll) {
+          currentScroll = el.scrollTop;
+        }
+      });
+
+      if (currentScroll > 80) {
+        setShowButton(true);
+      } else {
+        setShowButton(false);
+      }
+    };
+
+    handleScroll();
+    const timer = setInterval(handleScroll, 300);
+
+    const mainElem = document.getElementById('main-scroll-container') || document.querySelector('main');
+    if (mainElem) {
+      mainElem.addEventListener('scroll', handleScroll, { passive: true });
+    }
+    window.addEventListener('scroll', handleScroll, { capture: true, passive: true });
+    document.addEventListener('scroll', handleScroll, { capture: true, passive: true });
+
+    return () => {
+      clearInterval(timer);
+      if (mainElem) {
+        mainElem.removeEventListener('scroll', handleScroll);
+      }
+      window.removeEventListener('scroll', handleScroll, { capture: true });
+      document.removeEventListener('scroll', handleScroll, { capture: true });
+    };
+  }, []);
+
+  const scrollToTop = () => {
+    const mainElem = document.getElementById('main-scroll-container') || document.querySelector('main');
+    if (mainElem) {
+      mainElem.scrollTo({ top: 0, behavior: 'smooth' });
+      mainElem.scrollTop = 0;
+    }
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+
+    const allScrollables = document.querySelectorAll('.overflow-y-auto, .overflow-auto');
+    allScrollables.forEach(el => {
+      try {
+        el.scrollTo({ top: 0, behavior: 'smooth' });
+        el.scrollTop = 0;
+      } catch (e) {
+        // ignore
+      }
+    });
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={scrollToTop}
+      aria-label="العودة لأعلى الشاشة"
+      title="العودة لأعلى الشاشة"
+      className={`fixed bottom-6 left-6 md:bottom-8 md:left-8 z-[999999] px-4 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-800 text-white rounded-2xl shadow-2xl shadow-indigo-900/80 border-2 border-white/60 backdrop-blur-md transition-all duration-300 transform flex items-center justify-center gap-2.5 group cursor-pointer hover:scale-110 active:scale-95 no-print ${
+        showButton ? 'translate-y-0 opacity-100 scale-100 ring-4 ring-blue-500/30' : 'translate-y-16 opacity-0 scale-50 pointer-events-none'
+      }`}
+    >
+      <div className="p-1.5 rounded-xl bg-white/20 group-hover:bg-white/30 transition-colors">
+        <ChevronUp size={22} className="stroke-[3] group-hover:-translate-y-1 transition-transform" />
+      </div>
+      <span className="font-black text-xs md:text-sm text-white drop-shadow-sm whitespace-nowrap pl-1">
+        العودة للأعلى ⬆️
+      </span>
+    </button>
   );
 });
 

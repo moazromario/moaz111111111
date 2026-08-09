@@ -555,7 +555,14 @@ export interface Employee {
   shiftEnd?: string;
   baseSalary?: number;
   commissionRate?: number; // % commission if applicable
-  allowances?: number; // Badalat
+  allowances?: number; // Badalat (إجمالي البدلات)
+  transportAllowance?: number; // بدل انتقال
+  housingAllowance?: number; // بدل سكن
+  phoneAllowance?: number; // بدل هاتف/اتصالات
+  workNatureAllowance?: number; // بدل طبيعة عمل
+  socialInsuranceDeduction?: number; // استقطاع التأمين الاجتماعي الثابت/الشهري
+  incomeTaxDeduction?: number; // استقطاع ضريبة كسب العمل
+  jobCategory?: 'إدارة' | 'فني ورشة' | 'سائق' | 'عامل مصنع' | 'خدمات ومعاونة' | 'أخرى';
   productionGroup?: 'A' | 'B' | '';
   address?: string;
   nationalId?: string;
@@ -613,6 +620,9 @@ export interface ProductionRecord {
   rate: number;
   total: number;
   contractorName?: string;
+  jobOrderNo?: string; // رقم أمر شغل المصنع / الورشة
+  earlyBonus?: number; // حافز الإنجاز المبكر لإنتاج الورشة
+  qualityBonus?: number; // حافز الجودة
 }
 
 export interface Payroll {
