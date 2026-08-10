@@ -41,10 +41,9 @@ import type {
   ProductionLog, ProductionMachine, ProductionTeam
 } from './types';
 
-const BanksManager = lazy(() => import('./components/BanksManager').then(m => ({ default: m.BanksManager })));
-const ProductionManager = lazy(() => import('./components/ProductionManager').then(m => ({ default: m.ProductionManager })));
-const FleetManager = lazy(() => import('./components/FleetManager').then(m => ({ default: m.FleetManager })));
-const TreasuryModule = lazy(() => import('./components/TreasuryModule').then(m => ({ default: m.TreasuryModule })));
+import { BanksManager } from './components/BanksManager';
+import { FleetManager } from './components/FleetManager';
+import { TreasuryModule } from './components/TreasuryModule';
 
 import { cn } from '@/lib/utils';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -67,28 +66,25 @@ import {
   TableRow 
 } from '@/components/ui/table';
 
-const WorkOrdersManager = lazy(() => import("./components/WorkOrdersManager").then(m => ({ default: m.WorkOrdersManager })));
-const CustomersManager = lazy(() => import("./components/CustomersManager").then(m => ({ default: m.CustomersManager })));
-const ProductionCostsView = lazy(() => import('./components/ProductionCostsView').then(m => ({ default: m.ProductionCostsView })));
-const ProductRecipesView = lazy(() => import('./components/ProductRecipesView').then(m => ({ default: m.ProductRecipesView })));
-const OdooManufacturingSuite = lazy(() => import('./components/OdooManufacturingSuite').then(m => ({ default: m.OdooManufacturingSuite })));
+import { WorkOrdersManager } from './components/WorkOrdersManager';
+import { CustomersManager } from './components/CustomersManager';
+import { DeliveryDocumentsManager } from './components/DeliveryDocumentsManager';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { motion, AnimatePresence } from 'motion/react';
 import { useHotkeys } from 'react-hotkeys-hook';
-const MaintenanceOrdersView = lazy(() => import("./components/MaintenanceOrdersView").then(m => ({ default: m.MaintenanceOrdersView })));
-const FinancialReports = lazy(() => import('./components/FinancialReports').then(m => ({ default: m.FinancialReports })));
+import { MaintenanceOrdersView } from './components/MaintenanceOrdersView';
+import { FinancialReports } from './components/FinancialReports';
 import ChartOfAccountsView, { defaultChartOfAccounts, flattenAccounts } from './components/ChartOfAccountsView';
-const UsersManager = lazy(() => import('./components/UsersManager').then(m => ({ default: m.UsersManager })));
-const ByproductSalesView = lazy(() => import('./components/ByproductSalesView').then(m => ({ default: m.ByproductSalesView })));
-const SalesModule = lazy(() => import('./components/SalesModule').then(m => ({ default: m.SalesModule })));
+import { UsersManager } from './components/UsersManager';
+import { ByproductSalesView } from './components/ByproductSalesView';
+import { SalesModule } from './components/SalesModule';
 import { NumberDisplay, formatNumber, formatCurrencyParts } from './lib/numberUtils';
 import { FactoryResetModal } from './components/FactoryResetModal';
-const MonthlyStipendsModule = lazy(() => import('./components/MonthlyStipendsModule').then(m => ({ default: m.MonthlyStipendsModule })));
-const MaterialCalculatorView = lazy(() => import('./components/MaterialCalculatorView').then(m => ({ default: m.MaterialCalculatorView })));
-const WhatsAppAssistant = lazy(() => import('./components/WhatsAppAssistant'));
-const WarehouseTransfersView = lazy(() => import('./components/WarehouseTransfersView').then(m => ({ default: m.WarehouseTransfersView })));
+import { MonthlyStipendsModule } from './components/MonthlyStipendsModule';
+import WhatsAppAssistant from './components/WhatsAppAssistant';
+import { WarehouseTransfersView } from './components/WarehouseTransfersView';
 import { SearchableSelect } from './components/SearchableSelect';
-const VehiclesView = lazy(() => import('./components/VehiclesView').then(m => ({ default: m.VehiclesView })));
+import { VehiclesView } from './components/VehiclesView';
 import elNaggarLogo from './assets/images/el_naggar_logo_1784363217999.jpg';
 
 const loginWithGoogle = () => signInWithPopup(auth, getGoogleProvider());
@@ -423,6 +419,62 @@ function AppContent() {
   });
 
   const [error] = useState<string>('');
+  const [wsReconnecting, setWsReconnecting] = useState(false);
+
+  useEffect(() => {
+    let reconnectTimer: any = null;
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = String(event.reason?.message || event.reason || '').toLowerCase();
+      if (
+        reason.includes('websocket') || 
+        reason.includes('ws:') || 
+        reason.includes('wss:') || 
+        reason.includes('closed before') || 
+        reason.includes('failed to connect')
+      ) {
+        event.preventDefault();
+        console.warn('WebSocket notification: connection temporarily interrupted, reconnecting automatically...');
+        setWsReconnecting(true);
+        if (reconnectTimer) clearTimeout(reconnectTimer);
+        reconnectTimer = setTimeout(() => setWsReconnecting(false), 4000);
+      }
+    };
+
+    const handleError = (event: ErrorEvent) => {
+      const msg = String(event.message || event.error || '').toLowerCase();
+      if (
+        msg.includes('websocket') || 
+        msg.includes('ws:') || 
+        msg.includes('wss:') || 
+        msg.includes('closed before') || 
+        msg.includes('failed to connect')
+      ) {
+        event.preventDefault();
+        setWsReconnecting(true);
+        if (reconnectTimer) clearTimeout(reconnectTimer);
+        reconnectTimer = setTimeout(() => setWsReconnecting(false), 4000);
+      }
+    };
+
+    const handleOffline = () => setWsReconnecting(true);
+    const handleOnline = () => {
+      setWsReconnecting(false);
+    };
+
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+    window.addEventListener('error', handleError);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+      window.removeEventListener('error', handleError);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleOnline);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+    };
+  }, []);
 
   useEffect(() => {
     const unsubSettings = onSnapshot(doc(db, 'settings', 'company'), (docSnap) => {
@@ -495,14 +547,46 @@ function AppContent() {
     );
   }
 
-  return (user && profile) ? (
-    <MainApp 
-      settings={settings} 
-      setSettings={setSettings} 
-      handleSaveSettings={handleSaveSettings} 
-    />
-  ) : (
-    <LoginView error={error} />
+  return (
+    <>
+      {(user && profile) ? (
+        <MainApp 
+          settings={settings} 
+          setSettings={setSettings} 
+          handleSaveSettings={handleSaveSettings} 
+        />
+      ) : (
+        <LoginView error={error} />
+      )}
+
+      <AnimatePresence>
+        {wsReconnecting && (
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 bg-slate-900/95 text-white rounded-2xl shadow-2xl backdrop-blur-md border border-slate-700/60 text-xs font-bold"
+            dir="rtl"
+          >
+            <div className="relative flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+            </div>
+            <div className="flex items-center gap-2">
+              <RotateCcw className="w-4 h-4 animate-spin text-amber-400" />
+              <span>جاري إعادة الاتصال بالخادم تلقائياً...</span>
+            </div>
+            <button 
+              onClick={() => setWsReconnecting(false)}
+              className="mr-2 text-slate-400 hover:text-white transition-colors p-1"
+              title="إغلاق التنبيه"
+            >
+              <X size={14} />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 
@@ -1451,7 +1535,6 @@ function MainApp({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [inventoryMenuOpen, setInventoryMenuOpen] = useState(false);
-  const [productionMenuOpen, setProductionMenuOpen] = useState(false);
   const [maintenanceMenuOpen, setMaintenanceMenuOpen] = useState(false);
   const [itemCardSelectedId, setItemCardSelectedId] = useState<string>('');
   const [items, setItems] = useState<Item[]>([]);
@@ -1501,17 +1584,6 @@ function MainApp({
   const [bankTransactions, setBankTransactions] = useState<BankTransaction[]>([]);
   const [checks, setChecks] = useState<BankCheck[]>([]);
 
-  // New Production Management State
-  const [manufacturingOrders, setManufacturingOrders] = useState<ManufacturingOrder[]>([]);
-  const [productionRoutes, setProductionRoutes] = useState<ProductionRoute[]>([]);
-  const [productionWOs, setProductionWOs] = useState<WorkOrder[]>([]);
-  const [qualityInspections, setQualityInspections] = useState<QualityInspection[]>([]);
-  const [packingRecords, setPackingRecords] = useState<PackingRecord[]>([]);
-  const [productionTracking, setProductionTracking] = useState<ProductionTracking[]>([]);
-  const [productionLogs, setProductionLogs] = useState<ProductionLog[]>([]);
-  const [productionMachines, setProductionMachines] = useState<ProductionMachine[]>([]);
-  const [productionTeams, setProductionTeams] = useState<ProductionTeam[]>([]);
-
   // Keyboard Shortcuts
   useHotkeys('alt+n', () => {
     const addButton = document.querySelector('[data-hotkey="new"]') as HTMLButtonElement;
@@ -1528,7 +1600,6 @@ function MainApp({
   useHotkeys('alt+2', () => setActiveTab('inventory'));
   useHotkeys('alt+3', () => setActiveTab('purchases'));
   useHotkeys('alt+4', () => setActiveTab('sales'));
-  useHotkeys('alt+5', () => setActiveTab('production'));
   useHotkeys('esc', () => {
     const closeButtons = document.querySelectorAll('[data-hotkey="close"]') as NodeListOf<HTMLButtonElement>;
     if (closeButtons.length > 0) closeButtons[closeButtons.length - 1].click();
@@ -1578,6 +1649,8 @@ function MainApp({
   const [itemForm, setItemForm] = useState({
     name: '',
     unit: '',
+    secondaryUnit: '',
+    conversionFactor: 0,
     price: 0,
     department: '',
     warehouseId: '',
@@ -1588,7 +1661,7 @@ function MainApp({
   const [supplierForm, setSupplierForm] = useState({ name: '', openingBalance: 0 });
   const [warehouseForm, setWarehouseForm] = useState({ name: '' });
   const [unitForm, setUnitForm] = useState({ name: '' });
-  const [costCenterForm, setCostCenterForm] = useState({ name: '' });
+  const [costCenterForm, setCostCenterForm] = useState({ name: '', parentId: '' });
 
   useEffect(() => {
     if (units.length > 0 && !itemForm.unit) {
@@ -1604,16 +1677,20 @@ function MainApp({
     try {
       await addDoc(collection(db, 'items'), {
         ...itemForm,
+        secondaryUnit: itemForm.secondaryUnit || '',
+        conversionFactor: Number(itemForm.conversionFactor) || 0,
         inward: 0,
         outward: 0,
         returned: 0,
-        currentBalance: itemForm.openingBalance,
-        totalValue: itemForm.openingBalance * itemForm.price
+        currentBalance: Number(itemForm.openingBalance) || 0,
+        totalValue: (Number(itemForm.openingBalance) || 0) * (Number(itemForm.price) || 0)
       });
       setShowItemAdd(false);
       setItemForm({
         name: '',
         unit: units[0]?.name || '',
+        secondaryUnit: '',
+        conversionFactor: 0,
         price: 0,
         department: costCenters[0]?.name || '',
         warehouseId: '',
@@ -1668,7 +1745,7 @@ function MainApp({
     try {
       await addDoc(collection(db, 'costCenters'), { ...costCenterForm });
       setShowCostCenterAdd(false);
-      setCostCenterForm({ name: '' });
+      setCostCenterForm({ name: '', parentId: '' });
     } catch (err) {
       console.error(err);
     }
@@ -1937,17 +2014,6 @@ function MainApp({
     let unsubBankAccounts = () => {};
     let unsubBankTransactions = () => {};
     let unsubChecks = () => {};
-
-    // Production Declarations
-    let unsubMOs = () => {};
-    let unsubProductionRoutes = () => {};
-    let unsubProductionWOs = () => {};
-    let unsubQualityInspections = () => {};
-    let unsubPackingRecords = () => {};
-    let unsubProductionTracking = () => {};
-    let unsubProductionLogs = () => {};
-    let unsubProductionMachines = () => {};
-    let unsubProductionTeams = () => {};
 
     // 1. unsubWarehouses
     if (profile.isAdmin || profile.permissions.inventory || profile.permissions.reports) {
@@ -2416,35 +2482,6 @@ function MainApp({
       );
     }
 
-    // 36. Production Listeners
-    unsubMOs = onSnapshot(collection(db, 'manufacturingOrders'), (snap) => {
-      setManufacturingOrders(snap.docs.map(d => ({ id: d.id, ...d.data() } as ManufacturingOrder)));
-    });
-    unsubProductionRoutes = onSnapshot(collection(db, 'productionRoutes'), (snap) => {
-      setProductionRoutes(snap.docs.map(d => ({ id: d.id, ...d.data() } as ProductionRoute)));
-    });
-    unsubProductionWOs = onSnapshot(collection(db, 'productionWorkOrders'), (snap) => {
-      setProductionWOs(snap.docs.map(d => ({ id: d.id, ...d.data() } as WorkOrder)));
-    });
-    unsubQualityInspections = onSnapshot(collection(db, 'qualityInspections'), (snap) => {
-      setQualityInspections(snap.docs.map(d => ({ id: d.id, ...d.data() } as QualityInspection)));
-    });
-    unsubPackingRecords = onSnapshot(collection(db, 'packingRecords'), (snap) => {
-      setPackingRecords(snap.docs.map(d => ({ id: d.id, ...d.data() } as PackingRecord)));
-    });
-    unsubProductionTracking = onSnapshot(collection(db, 'productionTracking'), (snap) => {
-      setProductionTracking(snap.docs.map(d => ({ id: d.id, ...d.data() } as ProductionTracking)));
-    });
-    unsubProductionLogs = onSnapshot(collection(db, 'productionLogs'), (snap) => {
-      setProductionLogs(snap.docs.map(d => ({ id: d.id, ...d.data() } as ProductionLog)));
-    });
-    unsubProductionMachines = onSnapshot(collection(db, 'productionMachines'), (snap) => {
-      setProductionMachines(snap.docs.map(d => ({ id: d.id, ...d.data() } as ProductionMachine)));
-    });
-    unsubProductionTeams = onSnapshot(collection(db, 'productionTeams'), (snap) => {
-      setProductionTeams(snap.docs.map(d => ({ id: d.id, ...d.data() } as ProductionTeam)));
-    });
-
     return () => {
       unsubWarehouses();
       unsubUnits();
@@ -2490,15 +2527,6 @@ function MainApp({
       unsubBankAccounts();
       unsubBankTransactions();
       unsubChecks();
-      unsubMOs();
-      unsubProductionRoutes();
-      unsubProductionWOs();
-      unsubQualityInspections();
-      unsubPackingRecords();
-      unsubProductionTracking();
-      unsubProductionLogs();
-      unsubProductionMachines();
-      unsubProductionTeams();
     };
   }, [user, profile]);
 
@@ -2759,44 +2787,6 @@ function MainApp({
             </div>
           )}
 
-          {/* Group 5: التصنيع */}
-          {(profile?.isAdmin || profile?.permissions?.production) && (
-            <div className="space-y-1">
-              {!sidebarCollapsed && (
-                <div className="px-3 pb-1.5 text-[10px] font-black text-slate-400 uppercase tracking-wider">
-                  <span>التصنيع</span>
-                </div>
-              )}
-              <CollapsibleNavButton
-                active={['productionManager', 'productionReports', 'production', 'productRecipes', 'productionCosts', 'loading', 'deliveryReceipts', 'materialCalculator', 'whatsapp'].includes(activeTab)}
-                isOpen={productionMenuOpen}
-                onClick={() => setProductionMenuOpen(!productionMenuOpen)}
-                icon={<Cpu size={18} />}
-                label="التصنيع والإنتاج"
-              />
-              <AnimatePresence>
-                {productionMenuOpen && !sidebarCollapsed && (
-                  <motion.div 
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    className="overflow-hidden bg-slate-900/90 rounded-xl mt-1 p-1.5 space-y-1 border border-slate-800"
-                  >
-                    <SubNavButton active={activeTab === 'productionManager'} onClick={() => handleNavClick('productionManager')} label="مخطط الإنتاج الذكي ⚙️" permission="production" profile={profile} />
-                    <SubNavButton active={activeTab === 'productionReports'} onClick={() => handleNavClick('productionReports')} label="تقارير التصنيع (14) 📊" permission="production" profile={profile} />
-                    <SubNavButton active={activeTab === 'production'} onClick={() => handleNavClick('production')} label="لوحة تحكم التصنيع" permission="production" profile={profile} />
-                    <SubNavButton active={activeTab === 'productRecipes'} onClick={() => handleNavClick('productRecipes')} label="قوائم المواد (BoM)" permission="production" profile={profile} />
-                    <SubNavButton active={activeTab === 'materialCalculator'} onClick={() => handleNavClick('materialCalculator')} label="حاسبة الخامات والقياسات" permission="production" profile={profile} />
-                    <SubNavButton active={activeTab === 'productionCosts'} onClick={() => handleNavClick('productionCosts')} label="تحليل التكاليف" permission="production" profile={profile} />
-                    <SubNavButton active={activeTab === 'loading'} onClick={() => handleNavClick('loading')} label="بيان التحميل" permission="production" profile={profile} />
-                    <SubNavButton active={activeTab === 'deliveryReceipts'} onClick={() => handleNavClick('deliveryReceipts')} label="محاضر الاستلام" permission="production" profile={profile} />
-                    <SubNavButton active={activeTab === 'whatsapp'} onClick={() => handleNavClick('whatsapp')} label="مساعد واتساب الذكي ✨" permission="production" profile={profile} />
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          )}
-
           {/* Group 6: المحاسبة */}
           {(profile?.isAdmin || profile?.permissions?.finance) && (
             <div className="space-y-1">
@@ -2815,11 +2805,12 @@ function MainApp({
           <div className="space-y-1">
             {!sidebarCollapsed && (
               <div className="px-3 pb-1.5 text-[10px] font-black text-slate-400 uppercase tracking-wider">
-                <span>إدارة العملاء</span>
+                <span>إدارة العملاء والتشغيل</span>
               </div>
             )}
             <NavButton active={activeTab === 'customers'} onClick={() => handleNavClick('customers')} icon={<Contact size={18} />} label="العملاء" permission="sales" profile={profile} />
             <NavButton active={activeTab === 'workOrders'} onClick={() => handleNavClick('workOrders')} icon={<FileCheck2 size={18} />} label="أوامر التشغيل" permission="production" profile={profile} />
+            <NavButton active={activeTab === 'deliveryDocuments'} onClick={() => handleNavClick('deliveryDocuments')} icon={<Truck size={18} />} label="أوامر الاستلام والتسليم" permission="sales" profile={profile} />
           </div>
 
           {/* Group 7: الأجور والمرتبات */}
@@ -2882,7 +2873,6 @@ function MainApp({
                     className="overflow-hidden bg-slate-900/90 rounded-xl mt-1 p-1.5 space-y-1 border border-slate-800"
                   >
                     <SubNavButton active={activeTab === 'reports'} onClick={() => handleNavClick('reports')} label="التحليل العام" permission="reports" profile={profile} />
-                    <SubNavButton active={activeTab === 'productionReports'} onClick={() => handleNavClick('productionReports')} label="تقارير التصنيع (14) 📊" permission="reports" profile={profile} />
                     <SubNavButton active={activeTab === 'payrollMasterReport'} onClick={() => handleNavClick('payrollMasterReport')} label="كشف الأجور المجمع" permission="reports" profile={profile} />
                   </motion.div>
                 )}
@@ -2993,21 +2983,6 @@ function MainApp({
               transition={{ duration: 0.3, ease: "easeOut" }}
             >
               <Suspense fallback={<ComponentLoader />}>
-                {(activeTab === 'productionManager' || activeTab === 'productionReports') && (
-                <ProductionManager 
-                  manufacturingOrders={manufacturingOrders}
-                  productionRoutes={productionRoutes}
-                  workOrders={productionWOs}
-                  qualityInspections={qualityInspections}
-                  packingRecords={packingRecords}
-                  employees={employees}
-                  departments={departments}
-                  productionLogs={productionLogs}
-                  productionTracking={productionTracking}
-                  salesOrders={salesOrders}
-                  initialTab={activeTab === 'productionReports' ? 'reports' : 'dashboard'}
-                />
-              )}
               {activeTab === 'banks' && (
                 <BanksManager 
                   accounts={bankAccounts}
@@ -3061,87 +3036,13 @@ function MainApp({
             profile={profile} 
           />
         )}
-        {activeTab === 'productRecipes' && (
-          <ProductRecipesView 
-            recipes={productRecipes}
-            costCenters={costCenters}
-            items={items}
-            purchases={purchases}
-          />
-        )}
-        {activeTab === 'production' && (
-          <OdooManufacturingSuite 
-            costCenters={costCenters}
-            productionJobs={productionJobs} 
-            issuances={issuances} 
-            jobLabors={jobLabors}
-            jobOtherCosts={jobOtherCosts}
-            companyInfo={settings}
-            items={items}
-            productRecipes={productRecipes}
-            profile={profile}
-            boms={boms}
-            workCenters={workCenters}
-            employees={employees}
-            renderCustomJobsList={() => (
-              <ProductionLine 
-                costCenters={costCenters}
-                productionJobs={productionJobs} 
-                issuances={issuances} 
-                jobLabors={jobLabors}
-                jobOtherCosts={jobOtherCosts}
-                companyInfo={settings}
-                items={items}
-                productRecipes={productRecipes}
-                profile={profile}
-              />
-            )}
-          />
-        )}
-        {activeTab === 'productionCosts' && (
-          <ProductionCostsView 
-            productionJobs={productionJobs}
-            costCenters={costCenters}
-            issuances={issuances}
-            jobLabors={jobLabors}
-            jobOtherCosts={jobOtherCosts}
-            items={items}
-            boms={boms}
-            workCenters={workCenters}
-            employees={employees}
-            manufacturingOperations={manufacturingOperations}
-          />
-        )}
-        {activeTab === 'loading' && (
-          <LoadingManifests 
-            manifests={loadingManifests}
-            companyInfo={settings}
-            profile={profile}
-          />
-        )}
-        {activeTab === 'deliveryReceipts' && (
-          <DeliveryReceipts 
-            receipts={deliveryReceipts}
-            companyInfo={settings}
-            profile={profile}
-          />
-        )}
-        {activeTab === 'whatsapp' && (
-          <WhatsAppAssistant 
-            employees={employees}
-            items={items}
-            customers={customers}
-            companyInfo={settings}
-            onNavigateToTab={(tab) => handleNavClick(tab)}
-          />
-        )}
-        {activeTab === 'materialCalculator' && <MaterialCalculatorView />}
         {activeTab === 'issuances' && <Issuances items={items} issuances={issuances} costCenters={costCenters} />}
         {activeTab === 'stockAudit' && <StockAuditView items={items} warehouses={warehouses} audits={stockAudits} />}
         {activeTab === 'returns' && <Returns items={items} suppliers={suppliers} costCenters={costCenters} />}
         {activeTab === 'waste' && <WastedItemsView items={items} wasteRecords={wasteRecords} />}
         {activeTab === 'maintenanceOrders' && <MaintenanceOrdersView records={maintenanceOrders} safes={safes} costCenters={costCenters} profile={profile} />}
         {activeTab === 'customers' && <CustomersManager customers={customers} customerPayments={customerPayments} safes={safes} salesOrders={salesOrders} profile={profile} />}
+        {activeTab === 'deliveryDocuments' && <DeliveryDocumentsManager />}
         {activeTab === 'employees' && <EmployeesView employees={employees} />}
         {activeTab === 'attendance' && <AttendanceView employees={employees} />}
         {activeTab === 'hrProduction' && <HRProductionView employees={employees} productionRecords={productionRecords} />}
@@ -3347,13 +3248,7 @@ function MainApp({
             </button>
           </div>
 
-          <button 
-            onClick={() => handleNavClick('productionManager')}
-            className={cn("flex flex-col items-center justify-center w-16 h-full transition-colors", ['productionManager', 'productionReports', 'productRecipes'].includes(activeTab) ? "text-indigo-600" : "text-slate-400")}
-          >
-            <Zap size={20} strokeWidth={['productionManager', 'productionReports', 'productRecipes'].includes(activeTab) ? 2.5 : 2} />
-            <span className="text-[9px] font-black mt-1">التصنيع</span>
-          </button>
+
           <button 
             onClick={() => handleNavClick('employees')}
             className={cn("flex flex-col items-center justify-center w-16 h-full transition-colors", ['employees', 'attendance', 'payroll'].includes(activeTab) ? "text-indigo-600" : "text-slate-400")}
@@ -3487,6 +3382,19 @@ function MainApp({
                 <label className="text-sm font-bold text-slate-700">اسم مركز التكلفة</label>
                 <Input className="rounded-xl h-11" value={costCenterForm.name} onChange={e => setCostCenterForm({...costCenterForm, name: e.target.value})} placeholder="مثال: ورشة النجارة" />
               </div>
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">المركز الرئيسي (اختياري)</label>
+                <select 
+                  className="w-full h-11 rounded-xl border border-slate-200 px-3 font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 outline-none"
+                  value={costCenterForm.parentId}
+                  onChange={e => setCostCenterForm({...costCenterForm, parentId: e.target.value})}
+                >
+                  <option value="">مركز رئيسي</option>
+                  {costCenters.filter(cc => !cc.parentId).map(cc => (
+                    <option key={cc.id} value={cc.id}>{cc.name}</option>
+                  ))}
+                </select>
+              </div>
               <div className="flex justify-end gap-3 pt-4">
                 <Button variant="ghost" className="btn-ghost" onClick={() => setShowCostCenterAdd(false)}>إلغاء</Button>
                 <Button onClick={handleAddCostCenter} className="btn-primary px-8 h-11">حفظ مركز التكلفة</Button>
@@ -3518,12 +3426,46 @@ function MainApp({
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-700">الوحدة</label>
+                  <label className="text-sm font-bold text-slate-700">وحدة الصرف الأساسية (مثال: كجم)</label>
                   <select className="w-full h-11 rounded-xl border border-slate-200 px-3 font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 outline-none" value={itemForm.unit} onChange={e => setItemForm({...itemForm, unit: e.target.value})}>
                     <option value="">اختر الوحدة...</option>
                     {units.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
                   </select>
                 </div>
+              </div>
+
+              {/* Multi-Unit Setup (Dual UOM) */}
+              <div className="p-4 bg-amber-50/60 rounded-2xl border border-amber-200/80 space-y-3">
+                <div className="flex items-center gap-2 text-amber-900 font-black text-xs">
+                  <Layers size={16} className="text-amber-600" />
+                  إعدادات وحدات القياس المتعددة (Dual UOM)
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700">وحدة الشراء/التعبئة (مثال: برميل)</label>
+                    <Input 
+                      placeholder="برميل / طرد / كرتونة" 
+                      className="rounded-xl h-10 bg-white" 
+                      value={itemForm.secondaryUnit} 
+                      onChange={e => setItemForm({...itemForm, secondaryUnit: e.target.value})} 
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700">معامل التحويل (سعة الوحدة)</label>
+                    <Input 
+                      type="number" 
+                      placeholder="180 (مثال: 180 كجم/برميل)" 
+                      className="rounded-xl h-10 bg-white font-mono" 
+                      value={itemForm.conversionFactor || ''} 
+                      onChange={e => setItemForm({...itemForm, conversionFactor: Number(e.target.value)})} 
+                    />
+                  </div>
+                </div>
+                {itemForm.secondaryUnit && itemForm.conversionFactor > 0 && (
+                  <p className="text-[11px] text-amber-800 font-bold bg-white/80 p-2 rounded-xl border border-amber-200/50">
+                    💡 عند توريد 1 {itemForm.secondaryUnit} سيتم تسجيل {itemForm.conversionFactor} {itemForm.unit || 'وحدة'} بالمخزن، وعند الصرف لمراكز التكلفة يتم الصرف بالـ ({itemForm.unit || 'وحدة'}).
+                  </p>
+                )}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -4668,6 +4610,15 @@ const Dashboard = React.memo(function Dashboard({
     return acc + materialCost + laborCost + otherCost;
   }, 0), [productionJobs, issuances, jobLabors, jobOtherCosts]);
 
+  // Furniture Factory Executive KPIs
+  const totalMaintenanceCost = React.useMemo(() => (maintenanceOrders || []).reduce((acc, m) => acc + (m.cost || 0), 0), [maintenanceOrders]);
+  const activeManifestsCount = React.useMemo(() => (loadingManifests || []).length, [loadingManifests]);
+  const materialCoverageRate = React.useMemo(() => {
+    if (!items || items.length === 0) return 100;
+    const safeItems = items.filter(i => i.currentBalance > i.safetyLimit).length;
+    return Math.round((safeItems / items.length) * 100);
+  }, [items]);
+
   // Workforce Attendance Ratio Today (or the last available date in database)
   const lastAttendanceDate = React.useMemo(() => {
     if (attendance && attendance.length > 0) {
@@ -5331,6 +5282,61 @@ const Dashboard = React.memo(function Dashboard({
           )}
         </CardContent>
       </Card>
+
+      {/* Furniture Manufacturing Executive KPI Strip */}
+      {(activeTab === 'all' || activeTab === 'operations') && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-900 via-slate-900 to-indigo-950 text-white shadow-lg space-y-2 border border-indigo-500/20">
+            <div className="flex items-center justify-between text-indigo-300">
+              <span className="text-[10px] font-black uppercase tracking-wider">تغطية الخامات للأوامر الجارية</span>
+              <PackageCheck size={18} className="text-emerald-400" />
+            </div>
+            <div className="flex items-baseline justify-between">
+              <span className="text-2xl font-black font-mono text-emerald-400">{materialCoverageRate}%</span>
+              <span className="text-[10px] font-bold text-slate-300">
+                {materialCoverageRate >= 80 ? '✓ تغطية خامات ممتازة' : '⚠️ استكمال توريد الخامات'}
+              </span>
+            </div>
+            <p className="text-[10px] text-slate-400 font-bold leading-tight">نسبة توفر خامات الأخشاب والإكسسوارات فوق حدود الأمان لخطوط الإنتاج</p>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-white border border-slate-100 shadow-md space-y-2">
+            <div className="flex items-center justify-between text-slate-500">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">تكاليف صيانة الماكينات والورش</span>
+              <Wrench size={18} className="text-amber-500" />
+            </div>
+            <div className="flex items-baseline justify-between">
+              <span className="text-2xl font-black font-mono text-slate-900">{totalMaintenanceCost.toLocaleString()} <span className="text-xs font-sans text-slate-400">ج.م</span></span>
+              <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md">{(maintenanceOrders || []).length} أمر صيانة</span>
+            </div>
+            <p className="text-[10px] text-slate-400 font-bold leading-tight">تكاليف إصلاحات وصيانة المعدات وقطع الغيار لخطوط التقطيع والدهانات</p>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-white border border-slate-100 shadow-md space-y-2">
+            <div className="flex items-center justify-between text-slate-500">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">حمولات الشحن والتسليم الجارية</span>
+              <Truck size={18} className="text-blue-600" />
+            </div>
+            <div className="flex items-baseline justify-between">
+              <span className="text-2xl font-black font-mono text-indigo-600">{activeManifestsCount} <span className="text-xs font-sans text-slate-400">بيان شحن</span></span>
+              <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md">قيد التحميل والتسليم</span>
+            </div>
+            <p className="text-[10px] text-slate-400 font-bold leading-tight">حمولات المنتجات التامة المسندة للسيارات المتجهة للمعارض والعملاء</p>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-white border border-slate-100 shadow-md space-y-2">
+            <div className="flex items-center justify-between text-slate-500">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">أوامر التصنيع النشطة بالورش</span>
+              <Activity size={18} className="text-indigo-600" />
+            </div>
+            <div className="flex items-baseline justify-between">
+              <span className="text-2xl font-black font-mono text-slate-900">{activeJobsCount} <span className="text-xs font-sans text-slate-400">أمر إنتاج</span></span>
+              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">تحت التشغيل اللحظي</span>
+            </div>
+            <p className="text-[10px] text-slate-400 font-bold leading-tight">أوامر شغل الغرف والأثاث الجاري تقطيعها وكبسها وتجميعها وتنجيدها</p>
+          </div>
+        </div>
+      )}
 
       {/* Row 2: Deep Analytics & Core Flow Charts */}
       {(activeTab === 'all' || activeTab === 'operations') && (
@@ -6114,6 +6120,17 @@ const Inventory = React.memo(function Inventory({
                           </div>
                        </div>
                        
+                       {/* Dual UOM Secondary Unit Balance Badge */}
+                       {item.secondaryUnit && item.conversionFactor && item.conversionFactor > 0 ? (
+                         <div className="flex items-center justify-between p-3.5 rounded-xl bg-amber-50/90 border border-amber-200/80 text-amber-900 text-xs font-bold shadow-sm">
+                            <div className="flex items-center gap-2">
+                               <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                               <span>المكافئ بالتعبئة: <strong className="font-black text-sm font-mono text-amber-950">{(item.currentBalance / item.conversionFactor).toFixed(1)} {item.secondaryUnit}</strong></span>
+                            </div>
+                            <span className="text-[10px] text-amber-700 font-mono">(1 {item.secondaryUnit} = {item.conversionFactor} {item.unit})</span>
+                         </div>
+                       ) : null}
+
                        <div className="flex items-center justify-between p-6 rounded-[14px] bg-indigo-50/30 border border-indigo-100/50 group-hover:bg-indigo-500 group-hover:border-indigo-500 transition-all duration-200">
                           <TrendingUp size={24} className="text-indigo-200 group-hover:text-white transition-colors" />
                           <div className="text-left">
@@ -6198,6 +6215,11 @@ const Inventory = React.memo(function Inventory({
                           )}>
                             {(item.currentBalance || 0).toLocaleString()}
                           </span>
+                          {item.secondaryUnit && item.conversionFactor && item.conversionFactor > 0 ? (
+                            <span className="text-[10px] font-black text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200/60 font-mono mt-1">
+                              {(item.currentBalance / item.conversionFactor).toFixed(1)} {item.secondaryUnit}
+                            </span>
+                          ) : null}
                           {item.currentBalance <= item.safetyLimit && (
                             <span className="text-[9px] text-red-400 font-black uppercase mt-1">تنبيه حد الأمان</span>
                           )}
@@ -6366,7 +6388,7 @@ const Inventory = React.memo(function Inventory({
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="space-y-2">
-                      <label className="text-xs font-black text-slate-400 uppercase tracking-widest">وحدة القياس</label>
+                      <label className="text-xs font-black text-slate-400 uppercase tracking-widest">وحدة الصرف الأساسية</label>
                       <Input className="h-16 rounded-[14px] bg-slate-50 border-none font-bold text-lg px-6" value={editingItem.unit} onChange={e => setEditingItem({...editingItem, unit: e.target.value})} />
                     </div>
                     <div className="space-y-2">
@@ -6377,6 +6399,41 @@ const Inventory = React.memo(function Inventory({
                       <label className="text-xs font-black text-slate-400 uppercase tracking-widest">حد الأمان (تنبيه)</label>
                       <Input type="number" className="h-16 rounded-[14px] bg-slate-50 border-none font-bold text-lg px-6" value={editingItem.safetyLimit} onChange={e => setEditingItem({...editingItem, safetyLimit: Number(e.target.value)})} />
                     </div>
+                  </div>
+
+                  {/* Multi-Unit Edit (Dual UOM) */}
+                  <div className="p-6 bg-amber-50/60 rounded-[14px] border border-amber-200/80 space-y-4">
+                    <div className="flex items-center gap-2 text-amber-900 font-black text-xs uppercase tracking-wider">
+                      <Layers size={18} className="text-amber-600" />
+                      إعدادات وحدات التوريد والتحويل (Dual UOM)
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-slate-700">وحدة التوريد الثانوية (مثال: برميل)</label>
+                        <Input 
+                          placeholder="برميل / طرد" 
+                          className="h-14 rounded-xl bg-white border-none font-bold text-base px-4" 
+                          value={editingItem.secondaryUnit || ''} 
+                          onChange={e => setEditingItem({...editingItem, secondaryUnit: e.target.value})} 
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-slate-700">معامل التحويل (سعة الوحدة)</label>
+                        <Input 
+                          type="number" 
+                          placeholder="180 (مثال: 180 كجم/برميل)" 
+                          className="h-14 rounded-xl bg-white border-none font-bold text-base px-4 font-mono" 
+                          value={editingItem.conversionFactor || ''} 
+                          onChange={e => setEditingItem({...editingItem, conversionFactor: Number(e.target.value)})} 
+                        />
+                      </div>
+                    </div>
+                    {editingItem.secondaryUnit && Number(editingItem.conversionFactor) > 0 && (
+                      <p className="text-xs text-amber-800 font-bold bg-white/80 p-3 rounded-xl border border-amber-200/50">
+                        💡 السعة المحددة: 1 {editingItem.secondaryUnit} = {editingItem.conversionFactor} {editingItem.unit || 'وحدة'}.
+                        عند التوريد يتم تحويل الكمية آلياً إلى {editingItem.unit || 'وحدة'}.
+                      </p>
+                    )}
                   </div>
 
                   <div className="pt-12 flex gap-4">
@@ -6489,7 +6546,32 @@ const Inventory = React.memo(function Inventory({
                    </div>
                 </div>
 
-                <div className="px-12 pb-12">
+                 {/* Dual UOM Analytics Banner */}
+                 {selectedItemCard.secondaryUnit && selectedItemCard.conversionFactor && selectedItemCard.conversionFactor > 0 ? (
+                   <div className="mx-12 mb-8 p-6 rounded-[14px] bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-slate-50 border border-amber-300/40 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                     <div className="space-y-1 max-w-xl">
+                       <div className="flex items-center gap-2 text-amber-900 font-black text-xs uppercase tracking-wider">
+                         <Layers size={18} className="text-amber-600" />
+                         تحليل وحدة الشراء والتحويل المزدوجة (Dual UOM Analysis)
+                       </div>
+                       <p className="text-slate-600 font-bold text-sm leading-relaxed">
+                         يتم توريد واستلام خامة <strong>{selectedItemCard.name}</strong> بالـ <strong>{selectedItemCard.secondaryUnit}</strong>، ويتم الصرف لمراكز التكلفة بالـ <strong>{selectedItemCard.unit}</strong>.
+                       </p>
+                     </div>
+                     <div className="flex items-center gap-6 bg-white p-4 rounded-2xl border border-amber-200/80 shadow-md shrink-0">
+                       <div className="text-right px-4 border-l border-slate-100">
+                         <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest block">معامل التحويل</span>
+                         <span className="text-base font-black text-slate-900">1 {selectedItemCard.secondaryUnit} = {selectedItemCard.conversionFactor} {selectedItemCard.unit}</span>
+                       </div>
+                       <div className="text-right px-4">
+                         <span className="text-[10px] text-amber-600 font-black uppercase tracking-widest block">الرصيد بالـ {selectedItemCard.secondaryUnit}</span>
+                         <span className="text-2xl font-black text-amber-900 font-mono">{(selectedItemCard.currentBalance / selectedItemCard.conversionFactor).toFixed(2)} {selectedItemCard.secondaryUnit}</span>
+                       </div>
+                     </div>
+                   </div>
+                 ) : null}
+
+                 <div className="px-12 pb-12">
                    <div className="bg-white rounded-[14px] border border-slate-100 overflow-hidden shadow-[0_10px_40px_rgba(0,0,0,0.03)] group/table transition-all duration-200">
                       <div className="p-6 border-b border-slate-50 bg-slate-50/30 flex justify-between items-center relative overflow-hidden">
                          <div className="absolute inset-0 bg-primary/5 opacity-0 group-hover/table:opacity-100 transition-opacity duration-200" />
@@ -11277,7 +11359,21 @@ const Issuances = React.memo(function Issuances({ items, issuances, costCenters 
                     onChange={e => setFormData({...formData, costCenter: e.target.value})}
                   >
                     <option value="">اختر مركز التكلفة...</option>
-                    {costCenters.map(cc => <option key={cc.id} value={cc.name}>{cc.name}</option>)}
+                    {(() => {
+                      const renderCostCenters = (parentId: string | undefined = undefined, level = 0) => {
+                        return costCenters
+                          .filter(cc => cc.parentId === parentId)
+                          .map(cc => (
+                            <React.Fragment key={cc.id}>
+                              <option value={cc.name} className={level > 0 ? "text-slate-500 font-bold" : "font-black"}>
+                                {'\u00A0'.repeat(level * 4)}{level > 0 ? '↳ ' : ''}{cc.name}
+                              </option>
+                              {renderCostCenters(cc.id, level + 1)}
+                            </React.Fragment>
+                          ));
+                      };
+                      return renderCostCenters();
+                    })()}
                   </select>
                 </div>
               </div>
@@ -21218,7 +21314,7 @@ const ScrollToTopButton = React.memo(function ScrollToTopButton() {
         }
       });
 
-      if (currentScroll > 80) {
+      if (currentScroll > 40) {
         setShowButton(true);
       } else {
         setShowButton(false);
@@ -21226,7 +21322,7 @@ const ScrollToTopButton = React.memo(function ScrollToTopButton() {
     };
 
     handleScroll();
-    const timer = setInterval(handleScroll, 300);
+    const timer = setInterval(handleScroll, 200);
 
     const mainElem = document.getElementById('main-scroll-container') || document.querySelector('main');
     if (mainElem) {
@@ -21273,11 +21369,11 @@ const ScrollToTopButton = React.memo(function ScrollToTopButton() {
       onClick={scrollToTop}
       aria-label="العودة لأعلى الشاشة"
       title="العودة لأعلى الشاشة"
-      className={`fixed bottom-6 left-6 md:bottom-8 md:left-8 z-[999999] px-4 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-800 text-white rounded-2xl shadow-2xl shadow-indigo-900/80 border-2 border-white/60 backdrop-blur-md transition-all duration-300 transform flex items-center justify-center gap-2.5 group cursor-pointer hover:scale-110 active:scale-95 no-print ${
-        showButton ? 'translate-y-0 opacity-100 scale-100 ring-4 ring-blue-500/30' : 'translate-y-16 opacity-0 scale-50 pointer-events-none'
+      className={`fixed bottom-22 right-5 md:bottom-8 md:right-8 z-[999999] px-4 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-800 text-white rounded-2xl shadow-2xl shadow-indigo-900/80 border-2 border-white/80 backdrop-blur-md transition-all duration-300 transform flex items-center justify-center gap-2.5 group cursor-pointer hover:scale-110 active:scale-95 no-print ${
+        showButton ? 'translate-y-0 opacity-100 scale-100 ring-4 ring-blue-500/30 ring-offset-2' : 'translate-y-16 opacity-0 scale-50 pointer-events-none'
       }`}
     >
-      <div className="p-1.5 rounded-xl bg-white/20 group-hover:bg-white/30 transition-colors">
+      <div className="p-1.5 rounded-xl bg-white/20 group-hover:bg-white/30 transition-colors shrink-0">
         <ChevronUp size={22} className="stroke-[3] group-hover:-translate-y-1 transition-transform" />
       </div>
       <span className="font-black text-xs md:text-sm text-white drop-shadow-sm whitespace-nowrap pl-1">

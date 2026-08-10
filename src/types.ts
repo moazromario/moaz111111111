@@ -95,6 +95,8 @@ export interface Item {
   id: string;
   name: string;
   unit: string;
+  secondaryUnit?: string;
+  conversionFactor?: number;
   price: number;
   department: string;
   category: string;
@@ -132,6 +134,7 @@ export interface Unit {
 export interface CostCenter {
   id: string;
   name: string;
+  parentId?: string;
 }
 
 export interface Supplier {
@@ -172,6 +175,8 @@ export interface Issuance {
   total: number;
   costCenter: string;
   manufactureTarget?: string; // لصنع ماذا بالضبط
+  stage?: string;
+  manufacturingOrderId?: string;
 }
 
 export interface ProductionJob {
@@ -366,21 +371,66 @@ export interface ProductionRoute {
   createdAt: any;
 }
 
+export interface SpecAttachment {
+  id?: string;
+  name: string;
+  url: string;
+  type?: 'image' | 'drawing' | 'pdf' | 'other';
+  uploadedAt?: string;
+}
+
+export interface CustomerSpecifications {
+  customerName?: string;
+  orderReference?: string;
+  color?: string;                  // اللون (مثال: أبيض مط / بني جوزي)
+  dimensions?: string;             // المقاس (مثال: 200×180×60 سم)
+  woodType?: string;               // نوع الخشب (مثال: زان أحمر روماني / أرو شبيه / MDF)
+  paintType?: string;              // نوع الدهان (مثال: أستر بولي يوريثان / دوكو لؤلؤي)
+  fabricType?: string;             // نوع القماش (مثال: مخمل إسباني / كتان معالج)
+  fabricColor?: string;            // لون القماش (مثال: كحلي ملكي #124)
+  fabricQuantity?: string;         // كمية القماش (مثال: 18 متر طولي)
+  foamType?: string;               // نوع الإسفنج (مثال: هارد تايلاندي / سوبر سوفت كثافة 38)
+  foamQuantity?: string;           // كمية / سماكة الإسفنج (مثال: سماكة 15 سم)
+  accessories?: string;            // إكسسوارات معينة (مثال: مقابض نحاس ذهبي / مفصلات بلوم هيدروليك)
+  customModifications?: string;    // تعديلات خاصة على التصميم القياسي
+  customerNotes?: string;          // ملاحظات العميل الخاصة
+  specialInstructions?: string;    // تعليمات ورشة التصنيع والأسطوات
+  attachments?: SpecAttachment[];  // صور، رسومات هندسية، وملفات PDF
+}
+
+export type MOStatus = 
+  | 'DRAFT' | 'CONFIRMED' | 'PLANNED' | 'IN_PROGRESS' | 'ON_HOLD' 
+  | 'MANUFACTURED' | 'READY_FOR_PACKAGING' | 'PACKED' | 'PACKAGED' | 'FINISHED_GOODS_WAREHOUSE' 
+  | 'READY_FOR_LOADING' | 'IN_LOADING_AREA' | 'LOADED' | 'DELIVERED' | 'CANCELLED' | 'COMPLETED'
+  | 'draft' | 'confirmed' | 'planned' | 'in_progress' | 'on_hold' 
+  | 'manufactured' | 'ready_for_packaging' | 'packed' | 'packaged' | 'finished_goods_warehouse' 
+  | 'ready_for_loading' | 'in_loading_area' | 'loaded' | 'delivered' | 'cancelled' | 'completed';
+
 export interface ManufacturingOrder {
   id: string;
   moNumber: string;
+  customer?: string;
+  salesOrderReference?: string;
+  salesOrderId?: string;
   productId: string;
   productName: string;
   quantity: number;
   routeId: string;
+  orderDate?: string;
   startDate: string;
   dueDate: string;
-  status: 'draft' | 'planned' | 'in_progress' | 'completed' | 'cancelled';
+  plannedStartDate?: string;
+  plannedDeliveryDate?: string;
+  status: MOStatus;
   currentStageId?: string;
-  priority: 'normal' | 'high' | 'urgent';
+  priority: 'low' | 'normal' | 'high' | 'urgent';
   notes?: string;
+  customerSpecs?: CustomerSpecifications;
+  attachments?: SpecAttachment[] | string[];
   createdBy: string;
+  approvedBy?: string;
   createdAt: any;
+  updatedAt?: any;
   packingStatus?: 'pending' | 'completed';
   packagesCount?: number;
   packingBarcode?: string;
@@ -412,6 +462,7 @@ export interface WorkOrder {
   status: 'pending' | 'active' | 'paused' | 'completed' | 'failed';
   progress: number; // 0-100
   notes?: string;
+  customerSpecs?: CustomerSpecifications;
   images?: string[];
   attachments?: string[];
   qualityStatus?: 'pending' | 'pass' | 'fail' | 'rework' | 'scrap';
@@ -1040,3 +1091,28 @@ export interface CustodySettlementExpense {
   createdAt?: any;
 }
 
+
+export interface DeliveryItem {
+  orderId?: string;
+  orderNumber?: string;
+  productName: string;
+  requestedQuantity: number;
+  deliveredQuantity: number;
+  remainingQuantity: number;
+}
+
+export interface DeliveryDocument {
+  id: string;
+  documentNumber: string;
+  date: string;
+  customerName: string;
+  items: DeliveryItem[];
+  vehicleDetails: string;
+  driverName: string;
+  recipientName: string;
+  signature?: string;
+  notes: string;
+  status: 'جزئي' | 'مكتمل';
+  createdBy: string;
+  createdAt: any;
+}

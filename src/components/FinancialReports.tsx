@@ -72,8 +72,12 @@ export function FinancialReports({
 }: FinancialReportsProps) {
   // Tabs management
   const [activeReportTab, setActiveReportTab] = useState<
-    'dashboard' | 'warehouse' | 'purchases' | 'suppliers' | 'ledger' | 'journal' | 'income_statement' | 'balance_sheet' | 'trial_balance' | 'production_costs' | 'sales_analytics' | 'inventory_analytics'
+    'dashboard' | 'warehouse' | 'purchases' | 'suppliers' | 'ledger' | 'journal' | 'income_statement' | 'balance_sheet' | 'trial_balance' | 'production_costs' | 'sales_analytics' | 'inventory_analytics' | 'payroll_analytics' | 'fleet_maintenance_analytics'
   >('dashboard');
+
+  // Global Executive Filters
+  const [selectedWarehouseFilter, setSelectedWarehouseFilter] = useState<string>('all');
+  const [selectedCostCenterFilter, setSelectedCostCenterFilter] = useState<string>('all');
 
   // General Ledger States
   const [ledgerAccount, setLedgerAccount] = useState<'safes' | 'sales' | 'purchases' | 'suppliers' | 'expenses' | 'karim' | 'custodies'>('safes');
@@ -87,7 +91,7 @@ export function FinancialReports({
   const [journalSearch, setJournalSearch] = useState('');
 
   // Financial statements date filters
-  const [statementPeriod, setStatementPeriod] = useState<'all' | 'year' | 'month' | 'custom'>('all');
+  const [statementPeriod, setStatementPeriod] = useState<'all' | 'today' | 'week' | 'month' | 'year' | 'custom'>('all');
   const [pnlDateFrom, setPnlDateFrom] = useState('');
   const [pnlDateTo, setPnlDateTo] = useState('');
 
@@ -107,6 +111,14 @@ export function FinancialReports({
     const date = new Date(dateStr);
     const now = new Date();
     
+    if (statementPeriod === 'today') {
+      return format(date, 'yyyy-MM-dd') === format(now, 'yyyy-MM-dd');
+    }
+    if (statementPeriod === 'week') {
+      const oneWeekAgo = new Date();
+      oneWeekAgo.setDate(now.getDate() - 7);
+      return date >= oneWeekAgo && date <= now;
+    }
     if (statementPeriod === 'year') {
       return date.getFullYear() === now.getFullYear();
     }
@@ -904,6 +916,117 @@ export function FinancialReports({
         </div>
       </div>
 
+      {/* Executive Global Filter Bar */}
+      <div className="p-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl shadow-xl space-y-4 print:hidden">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-3">
+          <div className="flex items-center gap-2">
+            <ListFilter size={18} className="text-indigo-400" />
+            <h3 className="font-black text-sm text-indigo-100">شريط الفلترة التنفيذي الموحد للتقرير</h3>
+          </div>
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
+            <span>الفترة الزمنية النشطة:</span>
+            <span className="bg-indigo-500/30 text-indigo-200 px-3 py-1 rounded-full border border-indigo-400/30">
+              {statementPeriod === 'all' && 'كل الفترات المسجلة'}
+              {statementPeriod === 'today' && 'اليوم الحالي'}
+              {statementPeriod === 'week' && 'آخر 7 أيام'}
+              {statementPeriod === 'month' && 'الشهر الحالي'}
+              {statementPeriod === 'year' && 'السنة المالية الحالية'}
+              {statementPeriod === 'custom' && `مخصص (${pnlDateFrom || 'البداية'} إلى ${pnlDateTo || 'النهاية'})`}
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-1">
+          {/* Period presets */}
+          <div className="space-y-1">
+            <label className="text-[11px] font-bold text-slate-300">الفترة الزمنية</label>
+            <div className="flex bg-white/10 p-1 rounded-xl border border-white/10 text-xs font-bold">
+              <button 
+                onClick={() => setStatementPeriod('all')}
+                className={`flex-1 py-1.5 rounded-lg transition-all ${statementPeriod === 'all' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-300 hover:text-white'}`}
+              >
+                الكل
+              </button>
+              <button 
+                onClick={() => setStatementPeriod('today')}
+                className={`flex-1 py-1.5 rounded-lg transition-all ${statementPeriod === 'today' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-300 hover:text-white'}`}
+              >
+                اليوم
+              </button>
+              <button 
+                onClick={() => setStatementPeriod('month')}
+                className={`flex-1 py-1.5 rounded-lg transition-all ${statementPeriod === 'month' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-300 hover:text-white'}`}
+              >
+                الشهر
+              </button>
+              <button 
+                onClick={() => setStatementPeriod('year')}
+                className={`flex-1 py-1.5 rounded-lg transition-all ${statementPeriod === 'year' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-300 hover:text-white'}`}
+              >
+                السنة
+              </button>
+            </div>
+          </div>
+
+          {/* Warehouse Selector */}
+          <div className="space-y-1">
+            <label className="text-[11px] font-bold text-slate-300">تصفية حسب المستودع</label>
+            <select 
+              value={selectedWarehouseFilter}
+              onChange={(e) => setSelectedWarehouseFilter(e.target.value)}
+              className="w-full h-10 rounded-xl bg-white/10 border border-white/10 px-3 font-bold text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            >
+              <option value="all" className="bg-slate-900 text-white">كل المستودعات</option>
+              {warehouses.map(w => (
+                <option key={w.id} value={w.id} className="bg-slate-900 text-white">{w.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Date From Custom */}
+          <div className="space-y-1">
+            <label className="text-[11px] font-bold text-slate-300">من تاريخ (مخصص)</label>
+            <input 
+              type="date"
+              value={pnlDateFrom}
+              onChange={(e) => {
+                setPnlDateFrom(e.target.value);
+                setStatementPeriod('custom');
+              }}
+              className="w-full h-10 rounded-xl bg-white/10 border border-white/10 px-3 font-bold text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            />
+          </div>
+
+          {/* Date To Custom */}
+          <div className="space-y-1">
+            <label className="text-[11px] font-bold text-slate-300">إلى تاريخ (مخصص)</label>
+            <input 
+              type="date"
+              value={pnlDateTo}
+              onChange={(e) => {
+                setPnlDateTo(e.target.value);
+                setStatementPeriod('custom');
+              }}
+              className="w-full h-10 rounded-xl bg-white/10 border border-white/10 px-3 font-bold text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Printable Company Header (Visible ONLY during Print) */}
+      <div className="hidden print:block text-center border-b-2 border-slate-900 pb-6 mb-8">
+        <div className="flex justify-between items-center">
+          <div className="text-right space-y-1">
+            <h1 className="text-2xl font-black text-slate-900">الشركة الوطنية للصناعات المتقدمة</h1>
+            <p className="text-xs text-slate-600 font-bold">الإدارة المالية والتخطيط التنفيذي</p>
+            <p className="text-[10px] text-slate-500 font-mono">تاريخ الاستخراج: {format(new Date(), 'yyyy/MM/dd HH:mm')}</p>
+          </div>
+          <div className="w-16 h-16 rounded-2xl bg-slate-900 text-white flex items-center justify-center font-black text-2xl border-2 border-slate-900">
+            ERP
+          </div>
+        </div>
+      </div>
+
       {/* Navigation Tabs Grid */}
       <div className="flex flex-wrap gap-1.5 p-1.5 bg-slate-100/90 rounded-[14px] w-full print:hidden shadow-md">
         {[
@@ -916,6 +1039,8 @@ export function FinancialReports({
           { id: 'trial_balance', label: 'ميزان المراجعة الذكي', icon: <Layers size={16} /> },
           { id: 'production_costs', label: 'تكاليف الإنتاج والتصنيع', icon: <Activity size={16} /> },
           { id: 'sales_analytics', label: 'تحليل المبيعات والمعارض', icon: <CircleDollarSign size={16} /> },
+          { id: 'payroll_analytics', label: 'رواتب وأجور الموظفين', icon: <Users size={16} /> },
+          { id: 'fleet_maintenance_analytics', label: 'صيانة الأسطول والماكينات', icon: <Briefcase size={16} /> },
           { id: 'warehouse', label: 'جرد مستودعات الخامات', icon: <Package size={16} /> },
           { id: 'purchases', label: 'تحليل تكلفة المشتريات', icon: <ShoppingCart size={16} /> },
           { id: 'suppliers', label: 'حسابات أرصدة الموردين', icon: <Users size={16} /> }
@@ -923,7 +1048,7 @@ export function FinancialReports({
           <button 
             key={tab.id}
             onClick={() => setActiveReportTab(tab.id as any)}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs md:text-sm transition-all duration-200 ${activeReportTab === tab.id ? 'bg-white shadow-md text-indigo-700' : 'text-slate-500 hover:text-slate-800 hover:bg-white/50'}`}
+            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-black text-xs md:text-sm transition-all duration-200 ${activeReportTab === tab.id ? 'bg-white shadow-md text-indigo-700' : 'text-slate-500 hover:text-slate-800 hover:bg-white/50'}`}
           >
             <span className={activeReportTab === tab.id ? 'text-indigo-600' : 'text-slate-400'}>{tab.icon}</span>
             {tab.label}
@@ -2126,6 +2251,171 @@ export function FinancialReports({
                             {s.totalPurchases > 0 ? Math.round((s.totalPayments / s.totalPurchases) * 100) : 0}%
                           </span>
                         </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* ==================== 11. PAYROLL & HR ANALYTICS TAB ==================== */}
+      {activeReportTab === 'payroll_analytics' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            <div className="p-6 bg-white rounded-[14px] border border-slate-100 shadow-md">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">إجمالي مسيرات الرواتب المنصرفة</p>
+              <h3 className="text-2xl font-black text-indigo-700">
+                {payrolls.reduce((sum, p) => sum + p.netSalary, 0).toLocaleString()} <span className="text-xs text-slate-400 font-bold">ج.م</span>
+              </h3>
+            </div>
+            <div className="p-6 bg-white rounded-[14px] border border-slate-100 shadow-md">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">إجمالي السلف الشخصية المنصرفة</p>
+              <h3 className="text-2xl font-black text-amber-600">
+                {loans.reduce((sum, l) => sum + l.amount, 0).toLocaleString()} <span className="text-xs text-slate-400 font-bold">ج.م</span>
+              </h3>
+            </div>
+            <div className="p-6 bg-slate-900 text-white rounded-[14px] shadow-md">
+              <p className="text-[10px] text-slate-400 font-black uppercase tracking-wider mb-1">أرصدة السلف الجارية المتبقية للتحصيل</p>
+              <h3 className="text-2xl font-black text-emerald-400">
+                {loans.filter(l => l.status === 'نشط').reduce((sum, l) => sum + l.remainingAmount, 0).toLocaleString()} <span className="text-xs text-slate-400 font-bold">ج.م</span>
+              </h3>
+            </div>
+          </div>
+
+          <Card className="border-none shadow-xl rounded-3xl bg-white overflow-hidden p-0">
+            <div className="p-6 border-b border-slate-50 bg-slate-50/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-base font-black text-slate-900">سجل الأجور والرواتب ومسيرات الموظفين</h3>
+                <p className="text-slate-400 text-xs font-bold mt-0.5">تفاصيل الاستحقاقات والاستقطاعات للعمليات المالية الخاصة بالأجور</p>
+              </div>
+              <Button onClick={() => {
+                const formatted = payrolls.map(p => ({
+                  'كود الموظف': p.employeeId,
+                  'الفترة من': p.startDate,
+                  'الفترة إلى': p.endDate,
+                  'الراتب الأساسي': p.baseSalary,
+                  'حوافز وإضافي وعمولات': (p.totalBonuses || 0) + (p.totalOvertime || 0) + (p.totalCommission || 0),
+                  'الخصومات': p.totalDeductions,
+                  'خصم السلفة': p.totalLoans,
+                  'صافي الراتب المنصرف': p.netSalary,
+                  'الحالة': p.status
+                }));
+                exportToExcel(formatted, 'تقرير_مسيرات_الرواتب');
+              }} className="h-10 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold">
+                <Download size={14} className="ml-1.5" /> تصدير مسيرات الرواتب
+              </Button>
+            </div>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-slate-50/50">
+                    <TableHead className="text-right font-black py-3.5 px-6">كود الموظف</TableHead>
+                    <TableHead className="text-center font-black">فترة المسير</TableHead>
+                    <TableHead className="text-right font-black">الأساسي</TableHead>
+                    <TableHead className="text-right font-black">المكافآت / البدلات</TableHead>
+                    <TableHead className="text-right font-black">الاستقطاعات والسلف</TableHead>
+                    <TableHead className="text-right font-black px-6">صافي الراتب</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {payrolls.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8 text-slate-400 font-bold">لا توجد مسيرات رواتب مسجلة حتى الآن</TableCell>
+                    </TableRow>
+                  ) : payrolls.map(p => {
+                    const extra = (p.totalBonuses || 0) + (p.totalOvertime || 0) + (p.totalCommission || 0);
+                    const cuts = (p.totalDeductions || 0) + (p.totalLoans || 0);
+                    return (
+                      <TableRow key={p.id} className="hover:bg-slate-50/50 font-bold text-xs">
+                        <TableCell className="font-black text-slate-900 py-3.5 px-6">{p.employeeId}</TableCell>
+                        <TableCell className="text-center text-slate-500 font-mono">{p.startDate} - {p.endDate}</TableCell>
+                        <TableCell className="font-mono text-slate-700">{p.baseSalary.toLocaleString()} ج.م</TableCell>
+                        <TableCell className="font-mono text-emerald-600">+{extra.toLocaleString()} ج.م</TableCell>
+                        <TableCell className="font-mono text-rose-500">-{cuts.toLocaleString()} ج.م</TableCell>
+                        <TableCell className="px-6 font-black text-indigo-700 text-sm">{p.netSalary.toLocaleString()} ج.م</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* ==================== 12. FLEET & MAINTENANCE ANALYTICS TAB ==================== */}
+      {activeReportTab === 'fleet_maintenance_analytics' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            <div className="p-6 bg-white rounded-[14px] border border-slate-100 shadow-md">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">إجمالي تكاليف الصيانة والتشغيل</p>
+              <h3 className="text-2xl font-black text-slate-900">
+                {maintenanceOrders.reduce((sum, m) => sum + m.cost, 0).toLocaleString()} <span className="text-xs text-slate-400 font-bold">ج.م</span>
+              </h3>
+            </div>
+            <div className="p-6 bg-white rounded-[14px] border border-slate-100 shadow-md">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">عدد أوامر الصيانة المسجلة</p>
+              <h3 className="text-2xl font-black text-indigo-600">{maintenanceOrders.length} <span className="text-xs text-slate-400 font-bold">أمر صيانة</span></h3>
+            </div>
+            <div className="p-6 bg-slate-900 text-white rounded-[14px] shadow-md">
+              <p className="text-[10px] text-slate-400 font-black uppercase tracking-wider mb-1">متوسط تكلفة أمر الصيانة</p>
+              <h3 className="text-2xl font-black text-amber-400">
+                {(maintenanceOrders.length > 0 ? (maintenanceOrders.reduce((sum, m) => sum + m.cost, 0) / maintenanceOrders.length) : 0).toLocaleString()} <span className="text-xs text-slate-400 font-bold">ج.م</span>
+              </h3>
+            </div>
+          </div>
+
+          <Card className="border-none shadow-xl rounded-3xl bg-white overflow-hidden p-0">
+            <div className="p-6 border-b border-slate-50 bg-slate-50/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-base font-black text-slate-900">تقرير صيانة الأصول الثابتة والماكينات</h3>
+                <p className="text-slate-400 text-xs font-bold mt-0.5">تتبع تكاليف الصيانة الخارجية، الإصلاحات، وقطع الغيار للخطوط والأسطول</p>
+              </div>
+              <Button onClick={() => {
+                const formatted = maintenanceOrders.map(m => ({
+                  'الماكينة / المعدة': m.itemName,
+                  'نوع الصيانة': m.type,
+                  'ملاحظات / عطل': m.notes || 'غير محدد',
+                  'التكلفة الإجمالية': m.cost,
+                  'مركز الصيانة الخارجي': m.externalCenterName || 'خارجي',
+                  'تاريخ الإرسال': m.sendDate,
+                  'تاريخ العودة المتوقع': m.expectedReturnDate,
+                  'حالة الصيانة': m.status
+                }));
+                exportToExcel(formatted, 'تقرير_صيانة_المعدات_والأسطول');
+              }} className="h-10 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold">
+                <Download size={14} className="ml-1.5" /> تصدير سجل الصيانة
+              </Button>
+            </div>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-slate-50/50">
+                    <TableHead className="text-right font-black py-3.5 px-6">المعدة / الماكينة</TableHead>
+                    <TableHead className="text-right font-black">العطل / الملاحظات</TableHead>
+                    <TableHead className="text-center font-black">التاريخ</TableHead>
+                    <TableHead className="text-right font-black">التكلفة</TableHead>
+                    <TableHead className="text-center font-black px-6">الحالة</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {maintenanceOrders.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-8 text-slate-400 font-bold">لا توجد عمليات صيانة مسجلة حالياً</TableCell>
+                    </TableRow>
+                  ) : maintenanceOrders.map(m => (
+                    <TableRow key={m.id} className="hover:bg-slate-50/50 font-bold text-xs">
+                      <TableCell className="font-black text-slate-900 py-3.5 px-6">{m.itemName}</TableCell>
+                      <TableCell className="text-slate-600 max-w-xs truncate">{m.notes || m.type}</TableCell>
+                      <TableCell className="text-center text-slate-500 font-mono">{m.sendDate}</TableCell>
+                      <TableCell className="font-mono font-black text-rose-600">{m.cost.toLocaleString()} ج.م</TableCell>
+                      <TableCell className="text-center px-6">
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-black ${m.status === 'مكتملة' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+                          {m.status || 'مكتملة'}
+                        </span>
                       </TableCell>
                     </TableRow>
                   ))}

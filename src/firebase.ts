@@ -9,10 +9,10 @@ let firestoreDb;
 try {
   firestoreDb = initializeFirestore(app, {
     experimentalForceLongPolling: true
-  }, firebaseConfig.firestoreDatabaseId);
+  }, firebaseConfig.firestoreDatabaseId || undefined);
 } catch (error) {
-  console.warn("Firestore initialization fallback:", error);
-  firestoreDb = getFirestore(app);
+  console.warn("Firestore initializeFirestore fallback:", error);
+  firestoreDb = getFirestore(app, firebaseConfig.firestoreDatabaseId || undefined);
 }
 
 export const db = firestoreDb;
