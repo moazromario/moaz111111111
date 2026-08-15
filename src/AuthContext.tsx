@@ -2,6 +2,8 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, User, signOut as firebaseSignOut } from 'firebase/auth';
 import { auth, db } from './firebase';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
+import { UserRole, UserPermissions } from './core/types';
+import { ROLE_PERMISSIONS } from './core/permissions';
 
 const safeStorage = {
   getItem: (key: string): string | null => {
@@ -34,25 +36,12 @@ export interface UserProfile {
   phone?: string;
   password?: string;
   name: string;
+  role: UserRole;
   isAdmin: boolean;
-  permissions: {
-    dashboard: boolean;
-    inventory: boolean;
-    production: boolean;
-    maintenance: boolean;
-    purchases: boolean;
-    hr: boolean;
-    reports: boolean;
-    suppliers: boolean;
-    settings: boolean;
-    finance: boolean;
-    sales: boolean;
-    vehicles: boolean;
-    canDelete: boolean;
-  };
+  permissions: UserPermissions;
 }
 
-export const DEFAULT_PERMISSIONS = {
+export const DEFAULT_PERMISSIONS: UserPermissions = {
   dashboard: true,
   inventory: false,
   production: false,
@@ -69,20 +58,27 @@ export const DEFAULT_PERMISSIONS = {
 };
 
 export const normalizeProfile = (data: any, isMasterAdmin: boolean): UserProfile => {
-  const isAdmin = data.isAdmin || isMasterAdmin;
-  const mergedPermissions = {
-    ...DEFAULT_PERMISSIONS,
+  const role: UserRole = isMasterAdmin
+    ? 'super_admin'
+    : (data.role || (data.isAdmin ? 'admin' : 'worker'));
+
+  const isAdmin = role === 'super_admin' || role === 'admin' || !!data.isAdmin || isMasterAdmin;
+  const roleBasePermissions = ROLE_PERMISSIONS[role] || DEFAULT_PERMISSIONS;
+
+  const mergedPermissions: UserPermissions = {
+    ...roleBasePermissions,
     ...(data.permissions || {})
   };
-  
+
   if (isAdmin) {
     Object.keys(mergedPermissions).forEach(key => {
-      mergedPermissions[key as keyof typeof DEFAULT_PERMISSIONS] = true;
+      (mergedPermissions as any)[key] = true;
     });
   }
-  
+
   return {
     ...data,
+    role,
     isAdmin,
     permissions: mergedPermissions
   } as UserProfile;
@@ -121,29 +117,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const savedUid = safeStorage.getItem('custom_uid');
     const savedPassword = safeStorage.getItem('custom_password');
 
-    const setupCustomSession = async (uid: string, psw: string) => {
+    const setupCustomSession = async (uidInput: string, psw: string) => {
       try {
-        const cleanUid = uid.toLowerCase().trim();
+        const cleanUid = uidInput.toLowerCase().trim();
         const cleanPsw = psw.trim();
-        const userDocRef = doc(db, 'users', cleanUid);
-        const docSnap = await getDoc(userDocRef);
+        
+        let userDocRef = doc(db, 'users', cleanUid);
+        let docSnap = await getDoc(userDocRef);
+
+        if (!docSnap.exists()) {
+          // Check if custom_uid was an email
+          const emailDocRef = doc(db, 'users', cleanUid);
+          docSnap = await getDoc(emailDocRef);
+        }
 
         if (docSnap.exists()) {
-          const data = docSnap.data() as UserProfile;
+          const data = docSnap.data();
           if (data.password?.trim() === cleanPsw) {
             const isMasterAdmin = data.email === "cfo.moaz@gmail.com";
             const normalized = normalizeProfile(data, isMasterAdmin);
             setUser({
-              uid: normalized.uid,
-              email: normalized.email || normalized.uid,
+              uid: normalized.uid || cleanUid,
+              email: normalized.email || cleanUid,
               displayName: normalized.name
             });
             setProfile(normalized);
 
             // Subscribe to real-time changes
-            unsubscribeProfile = onSnapshot(userDocRef, (snap) => {
+            unsubscribeProfile = onSnapshot(doc(db, 'users', normalized.uid || cleanUid), (snap) => {
               if (snap.exists()) {
-                setProfile(normalizeProfile(snap.data() as UserProfile, isMasterAdmin));
+                setProfile(normalizeProfile(snap.data(), isMasterAdmin));
               }
             });
 
@@ -167,53 +170,61 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (success) return;
       }
 
-      // Fallback to standard Firebase Auth
+      // Standard Firebase Auth
       unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
         setUser(firebaseUser);
 
         if (firebaseUser) {
           try {
-            const userId = firebaseUser.email?.toLowerCase() || firebaseUser.uid;
-            const userDocRef = doc(db, 'users', userId);
+            const uid = firebaseUser.uid;
+            const masterAdminEmail = "cfo.moaz@gmail.com";
+            const isMasterAdmin = firebaseUser.email === masterAdminEmail;
 
-            unsubscribeProfile = onSnapshot(userDocRef, (docSnap) => {
-              const masterAdminEmail = "cfo.moaz@gmail.com";
-              const isMasterAdmin = firebaseUser.email === masterAdminEmail;
+            const uidDocRef = doc(db, 'users', uid);
+            let docSnap = await getDoc(uidDocRef);
 
-              if (docSnap.exists()) {
-                const data = docSnap.data() as UserProfile;
+            // Legacy lookup fallback by email
+            if (!docSnap.exists() && firebaseUser.email) {
+              const emailDocRef = doc(db, 'users', firebaseUser.email.toLowerCase());
+              const emailDocSnap = await getDoc(emailDocRef);
+              if (emailDocSnap.exists()) {
+                const legacyData = emailDocSnap.data();
+                const migratedProfile = {
+                  ...legacyData,
+                  uid,
+                  email: firebaseUser.email,
+                };
+                await setDoc(uidDocRef, migratedProfile);
+                docSnap = await getDoc(uidDocRef);
+              }
+            }
+
+            if (!docSnap.exists()) {
+              const initialRole: UserRole = isMasterAdmin ? 'super_admin' : 'worker';
+              const roleBasePerms = ROLE_PERMISSIONS[initialRole] || DEFAULT_PERMISSIONS;
+
+              const defaultProfile: UserProfile = {
+                uid,
+                email: firebaseUser.email || '',
+                name: firebaseUser.displayName || 'مستخدم جديد',
+                role: initialRole,
+                isAdmin: isMasterAdmin,
+                permissions: {
+                  ...roleBasePerms,
+                  dashboard: true,
+                }
+              };
+              await setDoc(uidDocRef, defaultProfile);
+            }
+
+            unsubscribeProfile = onSnapshot(uidDocRef, (snap) => {
+              if (snap.exists()) {
+                const data = snap.data();
                 const normalized = normalizeProfile(data, isMasterAdmin);
-
-                if (isMasterAdmin && !data.isAdmin) {
-                  setDoc(userDocRef, normalized);
+                if (isMasterAdmin && normalized.role !== 'super_admin') {
+                  setDoc(uidDocRef, { ...normalized, role: 'super_admin', isAdmin: true });
                 }
                 setProfile(normalized);
-              } else {
-                const isMasterAdmin = firebaseUser.email === masterAdminEmail;
-
-                const defaultProfile: UserProfile = {
-                  uid: userId,
-                  email: firebaseUser.email || '',
-                  name: firebaseUser.displayName || 'مستخدم جديد',
-                  isAdmin: isMasterAdmin,
-                  permissions: {
-                    dashboard: true,
-                    inventory: isMasterAdmin,
-                    production: isMasterAdmin,
-                    maintenance: isMasterAdmin,
-                    purchases: isMasterAdmin,
-                    hr: isMasterAdmin,
-                    reports: isMasterAdmin,
-                    suppliers: isMasterAdmin,
-                    settings: isMasterAdmin,
-                    finance: isMasterAdmin,
-                    sales: isMasterAdmin,
-                    vehicles: isMasterAdmin,
-                    canDelete: isMasterAdmin
-                  }
-                };
-                setDoc(userDocRef, defaultProfile);
-                setProfile(defaultProfile);
               }
               setLoading(false);
             }, (err) => {
@@ -243,41 +254,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loginWithEmailOrPhone = async (identifier: string, psw: string) => {
     setLoading(true);
     try {
-      // 1. Clean and normalize inputs
-      const uid = identifier.toLowerCase().trim();
+      const cleanIdentifier = identifier.toLowerCase().trim();
       const cleanPsw = psw.trim();
       
-      if (!uid || !cleanPsw) {
+      if (!cleanIdentifier || !cleanPsw) {
         throw new Error('يرجى إدخال اسم المستخدم وكلمة المرور.');
       }
 
-      const userDocRef = doc(db, 'users', uid);
-      const docSnap = await getDoc(userDocRef);
+      let userDocRef = doc(db, 'users', cleanIdentifier);
+      let docSnap = await getDoc(userDocRef);
 
       if (!docSnap.exists()) {
         throw new Error('المستخدم غير مسجل في النظام. يرجى التأكد من كتابة البريد أو الرقم بشكل صحيح.');
       }
 
-      const data = docSnap.data() as UserProfile;
+      const data = docSnap.data();
       if (!data.password) {
         throw new Error('هذا الحساب مهيأ لتسجيل الدخول باستخدام جوجل فقط.');
       }
 
-      // 2. Strict password comparison (trimmed)
       if (data.password.trim() !== cleanPsw) {
         throw new Error('كلمة المرور غير صحيحة. يرجى التأكد من لغة لوحة المفاتيح وحالة الأحرف.');
       }
 
-      // Set credentials to localStorage
-      safeStorage.setItem('custom_uid', data.uid);
+      const isMasterAdmin = data.email === "cfo.moaz@gmail.com";
+      const normalized = normalizeProfile(data, isMasterAdmin);
+
+      safeStorage.setItem('custom_uid', normalized.uid || cleanIdentifier);
       safeStorage.setItem('custom_password', cleanPsw);
 
       setUser({
-        uid: data.uid,
-        email: data.email || data.uid,
-        displayName: data.name
+        uid: normalized.uid || cleanIdentifier,
+        email: normalized.email || cleanIdentifier,
+        displayName: normalized.name
       });
-      setProfile(data);
+      setProfile(normalized);
     } catch (err: any) {
       console.error("Custom login error:", err);
       setLoading(false);

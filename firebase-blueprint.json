@@ -54,9 +54,69 @@
         "name": { "type": "string", "description": "Supplier name" },
         "totalPurchases": { "type": "number", "description": "Total purchase amount" },
         "totalPayments": { "type": "number", "description": "Total paid amount" },
-        "balance": { "type": "number", "description": "Remaining balance" }
+        "balance": { "type": "number", "description": "Remaining balance" },
+        "openingBalance": { "type": "number", "description": "Initial balance we owe them" },
+        "legacyBalance": { "type": "number", "description": "Legacy cached balance for supplier" },
+        "currentBalance": { "type": "number", "description": "Dynamic ledger-calculated balance for supplier" }
       },
       "required": ["name"]
+    },
+    "SupplierLedgerEntry": {
+      "title": "SupplierLedgerEntry",
+      "description": "A modernized, double-entry supplier ledger transaction record",
+      "type": "object",
+      "properties": {
+        "transactionNo": { "type": "string" },
+        "supplierId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "type": { "type": "string", "enum": ["OPENING", "PURCHASE", "PAYMENT", "RETURN", "ADJUSTMENT"] },
+        "amount": { "type": "number" },
+        "direction": { "type": "string", "enum": ["in", "out"] },
+        "referenceId": { "type": "string" },
+        "description": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["transactionNo", "supplierId", "date", "type", "amount", "direction"]
+    },
+    "Customer": {
+      "title": "Customer",
+      "description": "A company or individual customer",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "address": { "type": "string" },
+        "type": { "type": "string" },
+        "status": { "type": "string" },
+        "balance": { "type": "number" },
+        "openingBalance": { "type": "number" },
+        "legacyBalance": { "type": "number" },
+        "currentBalance": { "type": "number" },
+        "creditLimit": { "type": "number" },
+        "taxId": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["name"]
+    },
+    "CustomerLedgerEntry": {
+      "title": "CustomerLedgerEntry",
+      "description": "A modernized, double-entry customer ledger transaction record",
+      "type": "object",
+      "properties": {
+        "transactionNo": { "type": "string" },
+        "customerId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "type": { "type": "string", "enum": ["OPENING", "SALE", "PAYMENT", "RETURN", "ADJUSTMENT"] },
+        "amount": { "type": "number" },
+        "direction": { "type": "string", "enum": ["in", "out"] },
+        "referenceId": { "type": "string" },
+        "description": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["transactionNo", "customerId", "date", "type", "amount", "direction"]
     },
     "Purchase": {
       "title": "Purchase",
@@ -274,27 +334,22 @@
     },
     "Payroll": {
       "title": "Payroll",
-      "description": "Weekly payroll record",
+      "description": "Employee payroll record",
       "type": "object",
       "properties": {
         "employeeId": { "type": "string" },
-        "weekNumber": { "type": "number" },
+        "month": { "type": "number" },
         "year": { "type": "number" },
-        "startDate": { "type": "string", "format": "date" },
-        "endDate": { "type": "string", "format": "date" },
-        "dailyRate": { "type": "number" },
-        "daysWorked": { "type": "number" },
+        "status": { "type": "string", "enum": ["DRAFT", "CALCULATED", "APPROVED", "POSTED", "PAID"] },
         "baseSalary": { "type": "number" },
-        "totalBonuses": { "type": "number" },
-        "totalOvertime": { "type": "number" },
+        "earnings": { "type": "array", "items": { "type": "object" } },
+        "deductions": { "type": "array", "items": { "type": "object" } },
+        "grossEarnings": { "type": "number" },
         "totalDeductions": { "type": "number" },
-        "totalLoans": { "type": "number" },
         "netSalary": { "type": "number" },
-        "status": { "type": "string", "enum": ["مسودة", "مدفوع"] },
-        "paymentDate": { "type": "string", "format": "date" },
-        "payMethod": { "type": "string", "enum": ["daily", "production"] }
+        "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["employeeId", "weekNumber", "year", "netSalary", "status"]
+      "required": ["employeeId", "month", "year", "status", "baseSalary", "grossEarnings", "totalDeductions", "netSalary", "createdAt"]
     },
     "ProductionRecord": {
       "title": "ProductionRecord",
@@ -587,6 +642,8 @@
       "properties": {
         "name": { "type": "string" },
         "balance": { "type": "number" },
+        "legacyBalance": { "type": "number", "description": "Legacy cached balance for safe" },
+        "currentBalance": { "type": "number", "description": "Dynamic ledger-calculated balance for safe" },
         "type": { "type": "string", "enum": ["خزنة رئيسية", "عهدة موظف", "بنك"] }
       },
       "required": ["name"]
@@ -655,6 +712,25 @@
         "createdBy": { "type": "string" }
       },
       "required": ["safeId", "date", "type", "amount"]
+    },
+    "CashTransaction": {
+      "title": "CashTransaction",
+      "description": "A modernized, double-entry treasury transaction ledger record",
+      "type": "object",
+      "properties": {
+        "transactionNo": { "type": "string" },
+        "safeId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "type": { "type": "string", "enum": ["OPENING", "DEPOSIT", "WITHDRAWAL", "TRANSFER_IN", "TRANSFER_OUT", "ADJUSTMENT"] },
+        "amount": { "type": "number" },
+        "direction": { "type": "string", "enum": ["in", "out"] },
+        "referenceType": { "type": "string", "enum": ["purchase", "sale", "payroll", "transfer", "manual", "adjustment"] },
+        "referenceId": { "type": "string" },
+        "description": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["transactionNo", "safeId", "date", "type", "amount", "direction"]
     },
     "MRPOrder": {
       "title": "MRPOrder",
@@ -726,6 +802,249 @@
       },
       "required": ["customerName", "date", "materialType", "quantity", "unitPrice", "totalAmount"]
     },
+    "Account": {
+      "title": "Account",
+      "description": "General ledger account",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["ASSET", "LIABILITY", "EQUITY", "REVENUE", "EXPENSE"] },
+        "parentId": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["code", "name", "type", "isActive"]
+    },
+    "JournalEntry": {
+      "title": "JournalEntry",
+      "description": "General ledger journal entry",
+      "type": "object",
+      "properties": {
+        "transactionNo": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "description": { "type": "string" },
+        "type": { "type": "string", "enum": ["OPENING", "SALES", "PURCHASE", "PAYMENT", "ADJUSTMENT", "TRANSFER"] },
+        "referenceId": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "isPosted": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["DRAFT", "SUBMITTED", "APPROVED", "POSTED", "CLOSED", "CANCELLED", "REVERSAL"] }
+      },
+      "required": ["transactionNo", "date", "description", "type", "createdBy", "isPosted", "status"]
+    },
+    "JournalLine": {
+      "title": "JournalLine",
+      "description": "Line item for a journal entry",
+      "type": "object",
+      "properties": {
+        "entryId": { "type": "string" },
+        "accountId": { "type": "string" },
+        "debit": { "type": "number" },
+        "credit": { "type": "number" },
+        "description": { "type": "string" },
+        "costCenterId": { "type": "string" }
+      },
+      "required": ["entryId", "accountId", "debit", "credit"]
+    },
+    "FiscalPeriod": {
+      "title": "FiscalPeriod",
+      "description": "Fiscal period definition",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "startDate": { "type": "string", "format": "date" },
+        "endDate": { "type": "string", "format": "date" },
+        "status": { "type": "string", "enum": ["OPEN", "CLOSED"] }
+      },
+      "required": ["name", "startDate", "endDate", "status"]
+    },
+    "AccountingDocument": {
+      "title": "AccountingDocument",
+      "description": "Source accounting document",
+      "type": "object",
+      "properties": {
+        "documentNo": { "type": "string" },
+        "type": { "type": "string", "enum": ["INVOICE", "RECEIPT", "PAYMENT_VOUCHER", "JOURNAL_VOUCHER"] },
+        "date": { "type": "string", "format": "date" },
+        "amount": { "type": "number" },
+        "sourceEntityId": { "type": "string" },
+        "sourceEntityType": { "type": "string" },
+        "journalEntryId": { "type": "string" },
+        "status": { "type": "string", "enum": ["DRAFT", "SUBMITTED", "APPROVED", "POSTED", "CLOSED", "CANCELLED", "REVERSAL"] }
+      },
+      "required": ["documentNo", "type", "date", "amount", "sourceEntityId", "sourceEntityType", "status"]
+    },
+    "DocumentCounter": {
+      "title": "DocumentCounter",
+      "description": "Atomic document counter",
+      "type": "object",
+      "properties": {
+        "nextValue": { "type": "number" }
+      },
+      "required": ["nextValue"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "System audit log",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "action": { "type": "string", "enum": ["CREATE", "UPDATE", "DELETE", "POST", "CANCEL", "REVERSE"] },
+        "entity": { "type": "string" },
+        "entityId": { "type": "string" },
+        "before": { "type": "object" },
+        "after": { "type": "object" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "reason": { "type": "string" },
+        "reference": { "type": "string" }
+      },
+      "required": ["userId", "action", "entity", "entityId", "timestamp"]
+    },
+    "ProductionOrder": {
+      "title": "ProductionOrder",
+      "description": "Production order",
+      "type": "object",
+      "properties": {
+        "orderNumber": { "type": "string" },
+        "productId": { "type": "string" },
+        "productName": { "type": "string" },
+        "quantityRequested": { "type": "number" },
+        "quantityProduced": { "type": "number" },
+        "status": { "type": "string", "enum": ["DRAFT", "PLANNED", "IN_PROGRESS", "COMPLETED", "CANCELLED"] },
+        "startDate": { "type": "string", "format": "date" },
+        "dueDate": { "type": "string", "format": "date" },
+        "bomId": { "type": "string" },
+        "routingId": { "type": "string" },
+        "notes": { "type": "string" },
+        "wipMetrics": { "type": "object" },
+        "costing": { "type": "object" },
+        "sellingPrice": { "type": "number" }
+      },
+      "required": ["orderNumber", "productId", "quantityRequested", "status", "bomId", "routingId"]
+    },
+    "ProductionRouting": {
+      "title": "ProductionRouting",
+      "description": "Production routing",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "stages": { "type": "array", "items": { "type": "object" } }
+      },
+      "required": ["name", "stages"]
+    },
+    "MaterialReservation": {
+      "title": "MaterialReservation",
+      "description": "Material reservation",
+      "type": "object",
+      "properties": {
+        "productionOrderId": { "type": "string" },
+        "itemId": { "type": "string" },
+        "quantityReserved": { "type": "number" },
+        "quantityIssued": { "type": "number" }
+      },
+      "required": ["productionOrderId", "itemId", "quantityReserved", "quantityIssued"]
+    },
+    "ProductionOperation": {
+      "title": "ProductionOperation",
+      "description": "Production operation",
+      "type": "object",
+      "properties": {
+        "productionOrderId": { "type": "string" },
+        "routingStageId": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "IN_PROGRESS", "COMPLETED"] },
+        "startTime": { "type": "string", "format": "date-time" },
+        "endTime": { "type": "string", "format": "date-time" }
+      },
+      "required": ["productionOrderId", "routingStageId", "status"]
+    },
+    "ProductionLabor": {
+      "title": "ProductionLabor",
+      "description": "Production labor",
+      "type": "object",
+      "properties": {
+        "productionOrderId": { "type": "string" },
+        "operationId": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "hours": { "type": "number" },
+        "cost": { "type": "number" }
+      },
+      "required": ["productionOrderId", "operationId", "employeeId", "hours", "cost"]
+    },
+    "ProductionMachineTime": {
+      "title": "ProductionMachineTime",
+      "description": "Production machine time",
+      "type": "object",
+      "properties": {
+        "productionOrderId": { "type": "string" },
+        "operationId": { "type": "string" },
+        "machineId": { "type": "string" },
+        "hours": { "type": "number" },
+        "cost": { "type": "number" }
+      },
+      "required": ["productionOrderId", "operationId", "machineId", "hours", "cost"]
+    },
+    "ProductionOverhead": {
+      "title": "ProductionOverhead",
+      "description": "Production overhead",
+      "type": "object",
+      "properties": {
+        "productionOrderId": { "type": "string" },
+        "description": { "type": "string" },
+        "amount": { "type": "number" }
+      },
+      "required": ["productionOrderId", "description", "amount"]
+    },
+    "FinishedGood": {
+      "title": "FinishedGood",
+      "description": "Finished good",
+      "type": "object",
+      "properties": {
+        "productionOrderId": { "type": "string" },
+        "itemId": { "type": "string" },
+        "quantity": { "type": "number" },
+        "date": { "type": "string", "format": "date" }
+      },
+      "required": ["productionOrderId", "itemId", "quantity", "date"]
+    },
+    "ProductionScrap": {
+      "title": "ProductionScrap",
+      "description": "Production scrap",
+      "type": "object",
+      "properties": {
+        "productionOrderId": { "type": "string" },
+        "itemId": { "type": "string" },
+        "quantity": { "type": "number" },
+        "reason": { "type": "string" }
+      },
+      "required": ["productionOrderId", "itemId", "quantity", "reason"]
+    },
+    "ProductionRework": {
+      "title": "ProductionRework",
+      "description": "Production rework",
+      "type": "object",
+      "properties": {
+        "productionOrderId": { "type": "string" },
+        "operationId": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "COMPLETED"] }
+      },
+      "required": ["productionOrderId", "operationId", "description", "status"]
+    },
+    "AIWorkflowDraft": {
+      "title": "AIWorkflowDraft",
+      "description": "AI-generated workflow draft",
+      "type": "object",
+      "properties": {
+        "originalMessage": { "type": "string" },
+        "suggestedTransaction": { "type": "object" },
+        "confidenceScore": { "type": "number" },
+        "status": { "type": "string", "enum": ["DRAFT", "PENDING_APPROVAL", "APPROVED", "REJECTED"] },
+        "reason": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "approvedBy": { "type": "string" }
+      },
+      "required": ["originalMessage", "suggestedTransaction", "confidenceScore", "status", "createdAt"]
+    },
     "ChatMessage": {
       "title": "ChatMessage",
       "description": "A message in a chat room",
@@ -750,6 +1069,9 @@
     "/costCenters/{costCenterId}": { "schema": "CostCenter", "description": "Cost centers" },
     "/items/{itemId}": { "schema": "Item", "description": "Inventory items" },
     "/suppliers/{supplierId}": { "schema": "Supplier", "description": "Suppliers" },
+    "/supplierLedger/{id}": { "schema": "SupplierLedgerEntry", "description": "Modern double-entry supplier ledger records" },
+    "/customers/{id}": { "schema": "Customer", "description": "Customers list" },
+    "/customerLedger/{id}": { "schema": "CustomerLedgerEntry", "description": "Modern double-entry customer ledger records" },
     "/purchases/{purchaseId}": { "schema": "Purchase", "description": "Purchase records" },
     "/issuances/{issuanceId}": { "schema": "Issuance", "description": "Issuance records" },
     "/productionJobs/{jobId}": { "schema": "ProductionJob", "description": "Active production orders" },
@@ -780,10 +1102,29 @@
     "/productRecipes/{id}": { "schema": "ProductRecipe", "description": "Standard product cost models" },
     "/safes/{id}": { "schema": "Safe", "description": "Financial safes/treasury accounts" },
     "/safeTransactions/{id}": { "schema": "SafeTransaction", "description": "Transactions in the safes" },
+    "/cashTransactions/{id}": { "schema": "CashTransaction", "description": "Modern double-entry treasury ledger transactions" },
     "/safeAudits/{id}": { "schema": "SafeAudit", "description": "Safe audit records" },
     "/safeSettlements/{id}": { "schema": "SafeSettlement", "description": "Petty cash settlement records" },
     "/mrpOrders/{id}": { "schema": "MRPOrder", "description": "MRP Manufacturing orders" },
     "/mrpScrap/{id}": { "schema": "MRPScrap", "description": "MRP Scrap records" },
-    "/productionRates/{id}": { "schema": "ProductionRate", "description": "Rate configuration for piece work" }
+    "/productionRates/{id}": { "schema": "ProductionRate", "description": "Rate configuration for piece work" },
+    "/accounts/{id}": { "schema": "Account", "description": "General ledger accounts" },
+    "/journalEntries/{id}": { "schema": "JournalEntry", "description": "General ledger journal entries" },
+    "/journalLines/{id}": { "schema": "JournalLine", "description": "Line items for journal entries" },
+    "/fiscalPeriods/{id}": { "schema": "FiscalPeriod", "description": "Fiscal periods" },
+    "/accountingDocuments/{id}": { "schema": "AccountingDocument", "description": "Source accounting documents" },
+    "/documentCounters/{id}": { "schema": "DocumentCounter", "description": "Atomic document counters" },
+    "/auditLogs/{id}": { "schema": "AuditLog", "description": "System audit logs" },
+    "/productionOrders/{id}": { "schema": "ProductionOrder", "description": "Production orders" },
+    "/productionRoutings/{id}": { "schema": "ProductionRouting", "description": "Production routings" },
+    "/materialReservations/{id}": { "schema": "MaterialReservation", "description": "Material reservations for production" },
+    "/productionOperations/{id}": { "schema": "ProductionOperation", "description": "Production operations" },
+    "/productionLabor/{id}": { "schema": "ProductionLabor", "description": "Production labor tracking" },
+    "/productionMachineTime/{id}": { "schema": "ProductionMachineTime", "description": "Production machine time tracking" },
+    "/productionOverhead/{id}": { "schema": "ProductionOverhead", "description": "Production overhead tracking" },
+    "/finishedGoods/{id}": { "schema": "FinishedGood", "description": "Finished goods produced" },
+    "/productionScrap/{id}": { "schema": "ProductionScrap", "description": "Production scrap records" },
+    "/productionRework/{id}": { "schema": "ProductionRework", "description": "Production rework records" },
+    "/aiWorkflowDrafts/{id}": { "schema": "AIWorkflowDraft", "description": "AI-generated workflow drafts" }
   }
 }

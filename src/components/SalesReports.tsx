@@ -1,15 +1,31 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { SalesOrder, ProductionJob, Showroom, LostSale } from '../types';
+import { SalesOrder, ProductionJob, Showroom, LostSale, Issuance, JobLabor, JobOtherCost, SafeTransaction, CustodySettlementExpense } from '../types';
+import { getJobLedgerCostBreakdown } from '../lib/costAccountingEngine';
 
 interface SalesReportsProps {
   salesOrders: SalesOrder[];
   productionJobs: ProductionJob[];
   showrooms: Showroom[];
   lostSales: LostSale[];
+  issuances?: Issuance[];
+  jobLabors?: JobLabor[];
+  jobOtherCosts?: JobOtherCost[];
+  safeTransactions?: SafeTransaction[];
+  settlementExpenses?: CustodySettlementExpense[];
 }
 
-export function SalesReports({ salesOrders, productionJobs, showrooms, lostSales }: SalesReportsProps) {
+export function SalesReports({ 
+  salesOrders, 
+  productionJobs, 
+  showrooms, 
+  lostSales,
+  issuances = [],
+  jobLabors = [],
+  jobOtherCosts = [],
+  safeTransactions = [],
+  settlementExpenses = []
+}: SalesReportsProps) {
 
   // 1. تقرير دخل المعارض
   const showroomIncome = showrooms.map(showroom => {
@@ -18,16 +34,18 @@ export function SalesReports({ salesOrders, productionJobs, showrooms, lostSales
     return { name: showroom.name, profit: totalProfit };
   });
 
-  // 2. تحليل ربحية الموديلات
+  // 2. تحليل ربحية الموديلات المعتمد على إعادة بناء السجل المحاسبي من الحركات
   const modelProfitability = productionJobs.map(job => {
     const relatedSalesOrders = salesOrders.filter(so => so.items.some(item => item.jobId === job.id));
     const totalRevenue = relatedSalesOrders.reduce((sum, so) => {
       const orderItem = so.items.find(item => item.jobId === job.id);
       return sum + (orderItem?.sellingPrice || 0);
     }, 0);
-    const totalCosts = (job.totalMaterialCost || 0) + (job.totalLaborCost || 0) + (job.totalOtherCost || 0);
-    const netProfit = totalRevenue - totalCosts;
-    return { name: job.productName, netProfit };
+
+    const breakdown = getJobLedgerCostBreakdown(job, issuances, jobLabors, jobOtherCosts, safeTransactions, settlementExpenses);
+    const totalCosts = breakdown.actualTotalCost || job.estimatedCost || 0;
+    const netProfit = (totalRevenue || job.sellingPrice || 0) - totalCosts;
+    return { name: job.productName, netProfit, totalCosts, totalRevenue };
   });
 
   return (

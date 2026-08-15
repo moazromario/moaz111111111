@@ -22,6 +22,7 @@ import type {
 } from '../types';
 
 import { InventoryReports } from './InventoryReports';
+import { getJobLedgerCostBreakdown, syncAndPersistJobLedgerCosts } from '../lib/costAccountingEngine';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -159,34 +160,28 @@ export function FinancialReports({
     }, 0);
   }, [wasteRecords, items, filterByPeriod]);
 
-  // Production Stats
+  // Production Stats - Reconstructed dynamically from actual ledger movements
   const productionProfitData = useMemo(() => {
     return productionJobs.map(job => {
-      const jobMaterials = issuances.filter(i => i.jobOrderNo === job.orderNo);
-      const jobLaborsList = jobLabors.filter(l => l.jobId === job.id);
-      const jobOtherCostsList = jobOtherCosts.filter(o => o.jobId === job.id);
-
-      const materialCost = jobMaterials.reduce((sum, m) => sum + m.total, 0);
-      const laborCost = jobLaborsList.reduce((sum, l) => sum + l.total, 0);
-      const otherCost = jobOtherCostsList.reduce((sum, o) => sum + o.amount, 0);
-      const totalCost = materialCost + laborCost + otherCost;
-      const profit = (job.sellingPrice || 0) - totalCost;
-
+      const bd = getJobLedgerCostBreakdown(job, issuances, jobLabors, jobOtherCosts, safeTransactions, settlementExpenses);
       return {
         id: job.id,
         name: job.productName,
         orderNo: job.orderNo,
         status: job.status,
-        materialCost,
-        laborCost,
-        otherCost,
-        cost: totalCost,
-        sellingPrice: job.sellingPrice || 0,
-        profit: profit,
-        profitMargin: job.sellingPrice ? Math.round((profit / job.sellingPrice) * 100) : 0
+        materialCost: bd.actualMaterialCost,
+        laborCost: bd.actualLaborCost,
+        otherCost: bd.actualOtherCost,
+        cost: bd.actualTotalCost,
+        estimatedCost: bd.estimatedCost,
+        discrepancy: bd.discrepancy,
+        isSynced: bd.isSynced,
+        sellingPrice: bd.sellingPrice,
+        profit: bd.grossProfit,
+        profitMargin: Math.round(bd.profitMarginPercent)
       };
     });
-  }, [productionJobs, issuances, jobLabors, jobOtherCosts]);
+  }, [productionJobs, issuances, jobLabors, jobOtherCosts, safeTransactions, settlementExpenses]);
 
   const totalProductionCost = useMemo(() => {
     return productionProfitData.reduce((acc, j) => acc + j.cost, 0);

@@ -144,7 +144,32 @@ export interface Supplier {
   totalPayments: number;
   balance: number;
   openingBalance: number;
+  code?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  taxNumber?: string;
+  legacyBalance?: number;
+  currentBalance?: number;
+  notes?: string;
 }
+
+export type SupplierLedgerEntryType = 'OPENING' | 'PURCHASE' | 'PAYMENT' | 'RETURN' | 'ADJUSTMENT';
+
+export interface SupplierLedgerEntry {
+  id?: string;
+  transactionNo: string;
+  supplierId: string;
+  date: string; // YYYY-MM-DD
+  type: SupplierLedgerEntryType;
+  amount: number;
+  direction: 'in' | 'out'; // 'in' increases payable, 'out' decreases payable
+  referenceId?: string;
+  description: string;
+  createdBy: string;
+  createdAt?: string; // ISO string
+}
+
 
 export interface Purchase {
   id: string;
@@ -676,29 +701,45 @@ export interface ProductionRecord {
   qualityBonus?: number; // حافز الجودة
 }
 
+// ... (keep existing HR interfaces like Employee, Attendance)
+
+export type PayrollStatus = 'DRAFT' | 'CALCULATED' | 'APPROVED' | 'POSTED' | 'PAID';
+
+export interface PayrollComponent {
+  type: 'EARNING' | 'DEDUCTION';
+  name: string;
+  amount: number;
+  description?: string;
+  isRecurring: boolean;
+}
+
 export interface Payroll {
   id: string;
   employeeId: string;
-  monthNumber?: number; // For showroom (monthly)
-  weekNumber?: number; // For factory (weekly)
+  month: number;
   year: number;
-  startDate: string;
-  endDate: string;
-  dailyRate: number;
-  daysWorked: number;
+  status: PayrollStatus;
+  
+  // Re-calculable fields
   baseSalary: number;
-  totalCommission: number; // عمولات المبيعات
-  totalTips: number; // إكراميات
-  totalBonuses: number;
-  totalOvertime: number;
-  totalProduction: number;
+  
+  // Earnings & Deductions
+  earnings: PayrollComponent[];
+  deductions: PayrollComponent[];
+  
+  // Totals
+  grossEarnings: number;
   totalDeductions: number;
-  totalExpenses: number;
-  totalLoans: number;
   netSalary: number;
-  status: 'مسودة' | 'مدفوع';
-  paymentDate?: string;
-  payMethod?: 'daily' | 'production' | 'monthly';
+  
+  createdAt: string;
+  approvedBy?: string;
+  postedAt?: string;
+  paymentDetails?: {
+    date: string;
+    method: 'CASH' | 'BANK' | 'TRANSFER';
+    reference?: string;
+  };
 }
 
 export interface SupplierPayment {
@@ -827,6 +868,26 @@ export interface Safe {
   balance: number;
   type?: 'خزنة رئيسية' | 'عهدة موظف' | 'بنك';
   minBalanceThreshold?: number; // Safety threshold for liquidity alerts (e.g. 20,000 EGP)
+  legacyBalance?: number;
+  currentBalance?: number;
+}
+
+export type CashTransactionType = 'OPENING' | 'DEPOSIT' | 'WITHDRAWAL' | 'TRANSFER_IN' | 'TRANSFER_OUT' | 'ADJUSTMENT';
+export type CashTransactionReferenceType = 'purchase' | 'sale' | 'payroll' | 'transfer' | 'manual' | 'adjustment';
+
+export interface CashTransaction {
+  id?: string;
+  transactionNo: string;
+  safeId: string;
+  date: string; // YYYY-MM-DD
+  type: CashTransactionType;
+  amount: number;
+  direction: 'in' | 'out';
+  referenceType: CashTransactionReferenceType;
+  referenceId?: string;
+  description: string;
+  createdBy: string;
+  createdAt?: string;
 }
 
 export interface SafeAudit {
@@ -937,6 +998,7 @@ export interface ByproductSale {
 
 export interface Customer {
   id: string;
+  code?: string;
   name: string;
   phone: string;
   email?: string;
@@ -944,10 +1006,29 @@ export interface Customer {
   type: 'أفراد' | 'شركات' | 'مقاولين' | 'تجار' | 'مهندسين ديكور';
   status: 'نشط' | 'غير نشط' | 'محتمل' | 'محظور';
   balance: number; // Positive means they owe us (debt), negative means they paid in advance (credit)
+  openingBalance?: number;
+  legacyBalance?: number;
+  currentBalance?: number;
   creditLimit?: number; // Maximum debt allowed
   taxId?: string; // For companies
   notes?: string;
   createdAt: string;
+}
+
+export type CustomerLedgerEntryType = 'OPENING' | 'SALE' | 'PAYMENT' | 'RETURN' | 'ADJUSTMENT';
+
+export interface CustomerLedgerEntry {
+  id?: string;
+  transactionNo: string;
+  customerId: string;
+  date: string; // YYYY-MM-DD
+  type: CustomerLedgerEntryType;
+  amount: number;
+  direction: 'in' | 'out'; // 'in' increases receivable, 'out' decreases receivable
+  referenceId?: string;
+  description: string;
+  createdBy: string;
+  createdAt?: string; // ISO string
 }
 
 export interface CustomerPayment {
@@ -1115,4 +1196,82 @@ export interface DeliveryDocument {
   status: 'جزئي' | 'مكتمل';
   createdBy: string;
   createdAt: any;
+}
+
+export type DocumentStatus = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'POSTED' | 'CLOSED' | 'CANCELLED' | 'REVERSAL';
+
+export interface AccountingDocument {
+  id: string;
+  documentNo: string;
+  type: 'INVOICE' | 'RECEIPT' | 'PAYMENT_VOUCHER' | 'JOURNAL_VOUCHER';
+  date: string;
+  amount: number;
+  sourceEntityId: string;
+  sourceEntityType: string;
+  journalEntryId?: string;
+  status: DocumentStatus;
+}
+
+export interface Account {
+  id: string;
+  code: string; // e.g., 1001, 2002
+  name: string;
+  type: 'ASSET' | 'LIABILITY' | 'EQUITY' | 'REVENUE' | 'EXPENSE';
+  parentId?: string; // For hierarchy
+  isActive: boolean;
+}
+
+export interface JournalEntry {
+  id: string;
+  transactionNo: string;
+  date: string;
+  description: string;
+  type: 'OPENING' | 'SALES' | 'PURCHASE' | 'PAYMENT' | 'ADJUSTMENT' | 'TRANSFER';
+  referenceId?: string; // Link to other entities like SalesOrder, Purchase
+  createdBy: string;
+  createdAt: string;
+  status: DocumentStatus;
+  isPosted: boolean;
+}
+
+export interface JournalLine {
+  id: string;
+  entryId: string;
+  accountId: string;
+  debit: number;
+  credit: number;
+  description?: string;
+  costCenterId?: string;
+}
+
+export interface FiscalPeriod {
+  id: string;
+  name: string; // e.g., "Q1 2026"
+  startDate: string;
+  endDate: string;
+  status: 'OPEN' | 'CLOSED';
+}
+
+export interface AuditLog {
+  id: string;
+  userId: string;
+  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'POST' | 'CANCEL' | 'REVERSE';
+  entity: string;
+  entityId: string;
+  before?: any;
+  after?: any;
+  timestamp: string;
+  reason?: string;
+  reference?: string;
+}
+
+export interface AIWorkflowDraft {
+  id: string;
+  originalMessage: string;
+  suggestedTransaction: any;
+  confidenceScore: number;
+  status: 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
+  reason?: string;
+  createdAt: string;
+  approvedBy?: string;
 }

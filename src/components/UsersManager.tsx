@@ -286,6 +286,15 @@ export function UsersManager() {
       const permissions = getActivePermissions(selectedTemplate);
 
       const isEmail = uid.includes('@');
+      const roleMap: Record<string, any> = {
+        storekeeper: 'inventory',
+        production_mgr: 'production',
+        accountant: 'accountant',
+        hr_mgr: 'hr',
+        sales_officer: 'sales',
+        viewer: 'reports'
+      };
+      const assignedRole = roleMap[selectedTemplate] || 'worker';
 
       // Create profile
       const newProfile: UserProfile = {
@@ -294,6 +303,7 @@ export function UsersManager() {
         phone: isEmail ? '' : uid,
         password: cleanPassword, // Optional if they choose to log in with Google
         name: newUserName.trim(),
+        role: assignedRole,
         isAdmin: false,
         permissions
       };
